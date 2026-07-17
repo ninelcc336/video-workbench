@@ -3,12 +3,16 @@ import type { EditorCommand } from "../../domain/editor/commands";
 import type { EditorStore } from "../../domain/editor/editor-store";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
+import { applyPreset, createPreset, type Preset } from "../../domain/assets/preset-model";
+import { applyVideoTemplate, createVideoTemplate, type VideoTemplate } from "../../domain/assets/video-template-model";
 import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
 import type { MediaSources } from "../../remotion/media";
 import type { ExportSettings } from "../../domain/project/model";
 import { createAutosaveController, SaveIndicator, useAutosaveState } from "./SaveIndicator";
 import { ExportDialog } from "./ExportDialog";
 import { RenderStatus } from "./RenderStatus";
+import { PresetDialog } from "./PresetDialog";
+import { VideoTemplateDialog } from "./VideoTemplateDialog";
 import { MediaBin } from "./MediaBin";
 import { PreviewCanvas } from "./PreviewCanvas";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -44,6 +48,10 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [notice, setNotice] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [renderSnapshot, setRenderSnapshot] = useState<import("../../server/render/render-job").RenderJobSnapshot | null>(null);
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [videoTemplateOpen, setVideoTemplateOpen] = useState(false);
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [videoTemplates, setVideoTemplates] = useState<VideoTemplate[]>([]);
 
   useEffect(() => store.subscribe((snapshot) => {
     setProject(snapshot);
@@ -60,6 +68,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   };
 
   const selectedEffectClip = getClip(project, selectedClipId);
+  const selectedTemplateName = selectedEffectClip ? getTemplate(selectedEffectClip.templateId, selectedEffectClip.templateVersion).name : undefined;
 
   const addTemplate = (templateId: string) => {
     const template = getTemplate(templateId);
@@ -144,11 +153,24 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     void poll();
   };
 
+  const savePreset = (name: string) => {
+    if (!selectedEffectClip) return;
+    const preset = createPreset(createId("preset"), selectedEffectClip.templateId, selectedEffectClip.templateVersion, name, selectedEffectClip.params);
+    setPresets((current) => [...current, preset]);
+    setPresetOpen(false);
+  };
+
+  const saveVideoTemplate = (name: string) => {
+    const template = createVideoTemplate(createId("video-template"), name, project);
+    setVideoTemplates((current) => [...current, template]);
+    setVideoTemplateOpen(false);
+  };
+
   return (
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={() => store.undo()} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><SaveIndicator state={autosaveState} /><button className="export-button" onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={() => store.undo()} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button className="export-button" onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
       </header>
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <div className="editor-main-grid">
@@ -159,6 +181,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={setCurrentFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />
+      <PresetDialog onApply={(preset) => { if (selectedEffectClip) applyPreset(store, preset, selectedEffectClip.id); }} onClose={() => setPresetOpen(false)} onSave={savePreset} open={presetOpen} presets={presets} templateName={selectedTemplateName} />
+      <VideoTemplateDialog effectCount={project.effectClips.length} onApply={(template) => { applyVideoTemplate(store, template, currentFrame); setVideoTemplateOpen(false); }} onClose={() => setVideoTemplateOpen(false)} onSave={saveVideoTemplate} open={videoTemplateOpen} template={videoTemplates.at(-1)} />
     </main>
   );
 }
