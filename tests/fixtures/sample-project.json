@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "settings": { "width": 1080, "height": 1920, "fps": 30 },
+  "videoClips": [],
+  "effectClips": [],
+  "export": { "format": "mp4", "width": 1080, "height": 1920, "fps": 30 }
+}

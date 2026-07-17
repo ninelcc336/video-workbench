@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "tsx src/server/index.ts",
-    "test": "vitest run",
-    "build": "tsc --noEmit && vite build"
+    "dev:all": "concurrently -k \"npm run dev:server\" \"npm run dev -- --host 127.0.0.1\"",
+    "test": "vitest run src",
+    "build": "tsc --noEmit && vite build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@remotion/player": "latest",
@@ -19,6 +21,7 @@
     "zod": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/express": "latest",
@@ -26,6 +29,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "concurrently": "^10.0.3",
     "jsdom": "^29.1.1",
     "tsx": "latest",
     "typescript": "latest",

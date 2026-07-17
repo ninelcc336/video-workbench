@@ -17,4 +17,8 @@ app.use("/api/workspace", createWorkspaceRouter(workspace));
 app.use(createRenderRouter());
 
 await workspace.createWorkspace();
-app.listen(port, () => console.log(`本地视频特效服务已启动：http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`本地视频特效服务已启动：http://localhost:${port}`));
+
+// 中文注释：保持 CLI 进程存活，直到 HTTP 服务被外部关闭。
+const keepAlive = setInterval(() => undefined, 2 ** 31 - 1);
+server.once("close", () => clearInterval(keepAlive));
