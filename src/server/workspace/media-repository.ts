@@ -111,6 +111,18 @@ export class MediaRepository {
     return (await this.findMedia(mediaId)) !== null;
   }
 
+  /** 中文注释：服务端渲染和媒体下载都通过元数据解析真实文件，禁止把浏览器临时 URL 当作素材引用。 */
+  async getMediaPath(mediaId: string): Promise<string | null> {
+    const asset = await this.findMedia(mediaId);
+    if (!asset) return null;
+    return mediaAssetPath(this.paths, mediaId, asset.fileName.slice(mediaId.length));
+  }
+
+  /** 中文注释：向工作区路由暴露资产元数据，读取项目时可据此判断素材是否缺失。 */
+  async getMediaAsset(mediaId: string): Promise<MediaAsset | null> {
+    return this.findMedia(mediaId);
+  }
+
   async findMissingMediaIds(mediaIds: string[]): Promise<string[]> {
     const missing: string[] = [];
     for (const mediaId of [...new Set(mediaIds)]) {

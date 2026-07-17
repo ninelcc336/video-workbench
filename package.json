@@ -14,7 +14,9 @@
   "dependencies": {
     "@remotion/player": "latest",
     "@remotion/renderer": "latest",
+    "@types/multer": "^2.2.0",
     "express": "latest",
+    "multer": "^2.2.0",
     "react": "latest",
     "react-dom": "latest",
     "remotion": "latest",

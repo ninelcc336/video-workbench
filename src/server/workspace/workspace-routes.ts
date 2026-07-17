@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import type { EditProject } from "../../domain/project/model";
 import { WorkspaceAdapter, WorkspaceError } from "./workspace-adapter";
 
@@ -20,6 +21,8 @@ function routeParam(value: string | string[]): string {
 /** 中文注释：路由只做 HTTP 参数解包和错误映射，不复制仓储或素材业务逻辑。 */
 export function createWorkspaceRouter(adapter: WorkspaceAdapter): Router {
   const router = Router();
+  // 中文注释：先把上传内容放进内存，再由工作区适配器复制到 media，避免 Multer 自己决定持久化路径。
+  const upload = multer({ storage: multer.memoryStorage() });
 
   router.post("/open", async (request: Request, response: Response) => {
     try {
@@ -57,10 +60,33 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter): Router {
     }
   });
 
-  router.post("/media", async (request: Request, response: Response) => {
+  router.post("/media", upload.single("file"), async (request: Request, response: Response) => {
     try {
-      const asset = await adapter.importMedia(request.body);
+      const uploadedFile = request.file;
+      if (!uploadedFile) {
+        response.status(400).json({ code: "invalid_media", message: "请选择要导入的视频文件" });
+        return;
+      }
+      const asset = await adapter.importMedia({
+        buffer: uploadedFile.buffer,
+        mimeType: uploadedFile.mimetype,
+        originalName: uploadedFile.originalname,
+        size: uploadedFile.size,
+      });
       response.status(201).json(asset);
+    } catch (error) {
+      sendWorkspaceError(response, error);
+    }
+  });
+
+  router.get("/media/:mediaId", async (request: Request, response: Response) => {
+    try {
+      const mediaPath = await adapter.getMediaPath(routeParam(request.params.mediaId));
+      if (!mediaPath) {
+        response.status(404).json({ code: "media_not_found", message: "找不到视频素材" });
+        return;
+      }
+      response.sendFile(mediaPath);
     } catch (error) {
       sendWorkspaceError(response, error);
     }

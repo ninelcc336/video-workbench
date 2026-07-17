@@ -66,6 +66,21 @@ export class WorkspaceAdapter {
     return this.mediaRepository.importMedia(file);
   }
 
+  /** 中文注释：稳定媒体地址只由服务端根据素材 ID 解析，前端不需要知道工作区绝对路径。 */
+  async getMediaPath(mediaId: string): Promise<string | null> {
+    return this.mediaRepository.getMediaPath(mediaId);
+  }
+
+  /** 中文注释：渲染适配器使用真实本地路径，浏览器预览则使用工作区 HTTP 地址。 */
+  async getMediaSources(mediaIds: string[]): Promise<Record<string, string>> {
+    const sources: Record<string, string> = {};
+    for (const mediaId of [...new Set(mediaIds)]) {
+      const path = await this.getMediaPath(mediaId);
+      if (path) sources[mediaId] = path;
+    }
+    return sources;
+  }
+
   async listProjects(): Promise<ProjectSummary[]> {
     return this.projectRepository.listProjects();
   }
