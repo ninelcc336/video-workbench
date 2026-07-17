@@ -1,0 +1,85 @@
+import type { EditProject } from "../../domain/project/model";
+import { MediaRepository, type MediaAsset, type MediaImportFile } from "./media-repository";
+import { ProjectRepository, type ProjectSummary } from "./project-repository";
+import {
+  ensureWorkspaceDirectories,
+  getWorkspacePaths,
+  WorkspaceError,
+  type WorkspacePaths,
+} from "./workspace-paths";
+
+export { WorkspaceError } from "./workspace-paths";
+export type { MediaAsset, MediaImportFile } from "./media-repository";
+export type { ProjectSummary } from "./project-repository";
+
+/** 中文注释：适配器把编辑器看到的工作区能力收拢起来，未来可替换为云端实现。 */
+export class WorkspaceAdapter {
+  private rootPath: string;
+  private paths: WorkspacePaths;
+  private projectRepository: ProjectRepository;
+  private mediaRepository: MediaRepository;
+
+  constructor(rootPathOrPaths: string | WorkspacePaths) {
+    this.rootPath = typeof rootPathOrPaths === "string" ? rootPathOrPaths : rootPathOrPaths.root;
+    this.paths = typeof rootPathOrPaths === "string" ? getWorkspacePaths(rootPathOrPaths) : rootPathOrPaths;
+    this.projectRepository = new ProjectRepository(this.paths);
+    this.mediaRepository = new MediaRepository(this.paths);
+  }
+
+  async createWorkspace(rootPath = this.rootPath): Promise<void> {
+    this.rootPath = rootPath;
+    this.paths = getWorkspacePaths(rootPath);
+    await ensureWorkspaceDirectories(this.paths);
+    this.projectRepository = new ProjectRepository(this.paths);
+    this.mediaRepository = new MediaRepository(this.paths);
+  }
+
+  async saveProject(project: EditProject, projectId?: string): Promise<void>;
+  async saveProject(projectId: string, project: EditProject): Promise<void>;
+  async saveProject(
+    projectOrId: EditProject | string,
+    projectOrIdOrId?: EditProject | string,
+  ): Promise<void> {
+    if (typeof projectOrId === "string") {
+      await this.projectRepository.saveProject(projectOrId, projectOrIdOrId as EditProject);
+      return;
+    }
+    await this.projectRepository.saveProject(projectOrId, projectOrIdOrId as string | undefined);
+  }
+
+  async loadProject(projectId: string): Promise<EditProject> {
+    const project = await this.projectRepository.loadProject(projectId);
+    const missingMediaIds = await this.mediaRepository.findMissingMediaIds(
+      project.videoClips.map((clip) => clip.mediaId),
+    );
+    if (missingMediaIds.length > 0) {
+      throw new WorkspaceError(
+        "missing_media",
+        `编辑项目“${projectId}”缺少素材：${missingMediaIds.join("、")}`,
+        { mediaIds: missingMediaIds },
+      );
+    }
+    return project;
+  }
+
+  async importMedia(file: MediaImportFile): Promise<MediaAsset> {
+    return this.mediaRepository.importMedia(file);
+  }
+
+  async listProjects(): Promise<ProjectSummary[]> {
+    return this.projectRepository.listProjects();
+  }
+
+  getPaths(): WorkspacePaths {
+    return this.paths;
+  }
+}
+
+export function createWorkspaceAdapter(rootPath: string): WorkspaceAdapter {
+  return new WorkspaceAdapter(rootPath);
+}
+
+/** 中文注释：提供计划中约定的独立工作区初始化入口，实际能力仍由同一个适配器承载。 */
+export async function createWorkspace(rootPath: string): Promise<void> {
+  await createWorkspaceAdapter(rootPath).createWorkspace();
+}
