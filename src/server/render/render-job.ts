@@ -1,6 +1,7 @@
 import type { EditProject } from "../../domain/project/model";
 import type { MediaSources } from "../../remotion/media";
 import { renderProject as defaultRenderProject, type RenderAdapter, type RenderResult } from "./render-adapter";
+import type { RemotionBundleFunction } from "./remotion-bundler";
 
 export type RenderJobStatus = "preparing" | "rendering" | "completed" | "failed" | "cancelled";
 
@@ -23,7 +24,7 @@ export function createRenderJob(
   options: {
     outputPath: string;
     renderProject?: RenderAdapter;
-    renderOptions?: { mediaSources?: MediaSources; serveUrl?: string };
+    renderOptions?: { mediaSources?: MediaSources; serveUrl?: string; bundle?: RemotionBundleFunction };
   },
 ): RenderJob {
   const snapshot: RenderJobSnapshot = {

@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@remotion/bundler": "^4.0.490",
     "@remotion/player": "latest",
     "@remotion/renderer": "latest",
     "@types/multer": "^2.2.0",

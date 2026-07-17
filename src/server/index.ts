@@ -14,7 +14,7 @@ app.get("/api/health", (_request, response) => {
   response.json(getHealthStatus());
 });
 app.use("/api/workspace", createWorkspaceRouter(workspace));
-app.use(createRenderRouter());
+app.use(createRenderRouter({ workspace }));
 
 await workspace.createWorkspace();
 const server = app.listen(port, () => console.log(`本地视频特效服务已启动：http://localhost:${port}`));

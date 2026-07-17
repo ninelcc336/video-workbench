@@ -3,6 +3,7 @@ import type { EditProject } from "../../domain/project/model";
 import { getCompositionDurationInFrames } from "../../remotion/EditorComposition";
 import { getCompositionMediaSources } from "../../remotion/EditorComposition";
 import type { MediaSources } from "../../remotion/media";
+import { getRemotionServeUrl, type RemotionBundleFunction } from "./remotion-bundler";
 
 export type RenderResult = {
   outputPath: string;
@@ -17,15 +18,12 @@ export type RenderAdapter = (
     cancelSignal: () => boolean;
     mediaSources?: MediaSources;
     serveUrl?: string;
+    bundle?: RemotionBundleFunction;
   },
 ) => Promise<RenderResult>;
 
 export const renderProject: RenderAdapter = async (project, outputPath, options) => {
-  const serveUrl = options.serveUrl ?? process.env.REMOTION_SERVE_URL;
-
-  if (!serveUrl) {
-    throw new Error("未配置 Remotion 服务地址，无法开始视频渲染");
-  }
+  const serveUrl = options.serveUrl ?? process.env.REMOTION_SERVE_URL ?? await getRemotionServeUrl(options.bundle);
 
   const mediaSources = options.mediaSources ?? {};
   getCompositionMediaSources(project, mediaSources);
