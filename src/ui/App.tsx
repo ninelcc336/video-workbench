@@ -1,8 +1,8 @@
+import { createEditorStore } from "../domain/editor/editor-store";
+import { createEmptyProject } from "../domain/project/factories";
+import { EditorPage } from "./editor/EditorPage";
+
+/** 中文注释：App 只组装本地空项目和编辑器页面，后续可在这里接入工作区打开流程。 */
 export function App() {
-  return (
-    <main>
-      <h1>本地视频特效编辑器</h1>
-      <p>本地工作区未打开</p>
-    </main>
-  );
+  return <EditorPage store={createEditorStore(createEmptyProject())} />;
 }
