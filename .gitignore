@@ -3,4 +3,5 @@ dist/
 .superpowers/
 renders/
 workspace/
+test-results/
 *.local
