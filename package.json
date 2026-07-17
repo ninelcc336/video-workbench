@@ -1,0 +1,32 @@
+{
+  "name": "local-video-effect-editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "tsx src/server/index.ts",
+    "test": "vitest run",
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@remotion/player": "latest",
+    "@remotion/renderer": "latest",
+    "express": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "remotion": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}
