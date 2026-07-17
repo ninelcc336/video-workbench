@@ -12,6 +12,11 @@ export { WorkspaceError } from "./workspace-paths";
 export type { MediaAsset, MediaImportFile } from "./media-repository";
 export type { ProjectSummary } from "./project-repository";
 
+export type ProjectLoadResult = {
+  project: EditProject;
+  missingMediaIds: string[];
+};
+
 /** 中文注释：适配器把编辑器看到的工作区能力收拢起来，未来可替换为云端实现。 */
 export class WorkspaceAdapter {
   private rootPath: string;
@@ -48,18 +53,16 @@ export class WorkspaceAdapter {
   }
 
   async loadProject(projectId: string): Promise<EditProject> {
+    return this.projectRepository.loadProject(projectId);
+  }
+
+  /** 中文注释：缺失素材是可恢复的项目状态，打开时保留项目而不是回退成空项目。 */
+  async loadProjectWithMediaStatus(projectId: string): Promise<ProjectLoadResult> {
     const project = await this.projectRepository.loadProject(projectId);
     const missingMediaIds = await this.mediaRepository.findMissingMediaIds(
       project.videoClips.map((clip) => clip.mediaId),
     );
-    if (missingMediaIds.length > 0) {
-      throw new WorkspaceError(
-        "missing_media",
-        `编辑项目“${projectId}”缺少素材：${missingMediaIds.join("、")}`,
-        { mediaIds: missingMediaIds },
-      );
-    }
-    return project;
+    return { project, missingMediaIds };
   }
 
   async importMedia(file: MediaImportFile): Promise<MediaAsset> {

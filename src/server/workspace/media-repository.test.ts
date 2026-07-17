@@ -77,9 +77,10 @@ describe("素材仓储", () => {
     await adapter.saveProject(project, "missing-media");
     await unlink(join(root, asset.relativePath));
 
-    await expect(adapter.loadProject("missing-media")).rejects.toMatchObject({
-      code: "missing_media",
-      message: expect.stringContaining(asset.id),
+    await expect(adapter.loadProject("missing-media")).resolves.toEqual(project);
+    await expect(adapter.loadProjectWithMediaStatus("missing-media")).resolves.toMatchObject({
+      project,
+      missingMediaIds: [asset.id],
     });
   });
 });

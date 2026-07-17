@@ -45,7 +45,14 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter): Router {
 
   router.get("/projects/:projectId", async (request: Request, response: Response) => {
     try {
-      response.json(await adapter.loadProject(routeParam(request.params.projectId)));
+      const result = await adapter.loadProjectWithMediaStatus(routeParam(request.params.projectId));
+      const mediaSources = Object.fromEntries(
+        result.project.videoClips.map((clip) => [
+          clip.mediaId,
+          `/api/workspace/media/${encodeURIComponent(clip.mediaId)}`,
+        ]),
+      );
+      response.json({ ...result, mediaSources });
     } catch (error) {
       sendWorkspaceError(response, error);
     }
