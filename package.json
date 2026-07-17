@@ -8,6 +8,7 @@
     "dev:server": "tsx src/server/index.ts",
     "dev:all": "concurrently -k \"npm run dev:server\" \"npm run dev -- --host 127.0.0.1\"",
     "test": "vitest run src",
+    "test:render-smoke": "tsx scripts/render-smoke.ts",
     "build": "tsc --noEmit && vite build",
     "test:e2e": "playwright test"
   },
@@ -35,7 +36,7 @@
     "concurrently": "^10.0.3",
     "jsdom": "^29.1.1",
     "tsx": "latest",
-    "typescript": "latest",
+    "typescript": "^5.9.3",
     "vite": "latest",
     "vitest": "latest"
   }

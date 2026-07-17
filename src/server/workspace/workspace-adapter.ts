@@ -1,4 +1,5 @@
 import type { EditProject } from "../../domain/project/model";
+import { pathToFileURL } from "node:url";
 import { MediaRepository, type MediaAsset, type MediaImportFile } from "./media-repository";
 import { ProjectRepository, type ProjectSummary } from "./project-repository";
 import {
@@ -79,7 +80,8 @@ export class WorkspaceAdapter {
     const sources: Record<string, string> = {};
     for (const mediaId of [...new Set(mediaIds)]) {
       const path = await this.getMediaPath(mediaId);
-      if (path) sources[mediaId] = path;
+      // 中文注释：Remotion 在 Chromium 子进程中读取素材，使用 file URL 可避免 Windows 反斜杠被当成转义字符。
+      if (path) sources[mediaId] = pathToFileURL(path).href;
     }
     return sources;
   }

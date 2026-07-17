@@ -40,16 +40,19 @@ describe("Remotion 渲染适配器", () => {
       cancelSignal: () => false,
       mediaSources,
       bundle,
+      timeoutInMilliseconds: 1234,
     });
 
     expect(bundle).toHaveBeenCalledTimes(1);
     expect(selectComposition).toHaveBeenCalledWith(expect.objectContaining({
       serveUrl: "file:///bundles/editor",
       inputProps: { project, mediaSources },
+      timeoutInMilliseconds: 1234,
     }));
     expect(renderMedia).toHaveBeenCalledWith(expect.objectContaining({
       serveUrl: "file:///bundles/editor",
       inputProps: { project, mediaSources },
+      timeoutInMilliseconds: 1234,
     }));
   });
 });

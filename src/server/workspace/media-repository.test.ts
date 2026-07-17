@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import { createWorkspaceAdapter } from "./workspace-adapter";
@@ -81,6 +82,17 @@ describe("素材仓储", () => {
     await expect(adapter.loadProjectWithMediaStatus("missing-media")).resolves.toMatchObject({
       project,
       missingMediaIds: [asset.id],
+    });
+  });
+
+  it("为 Remotion 返回跨进程可读取的 file URL", async () => {
+    const { adapter, root } = await createTestAdapter();
+    const sourcePath = join(root, "source.mp4");
+    await writeFile(sourcePath, "real media bytes");
+    const asset = await adapter.importMedia({ path: sourcePath, originalName: "source.mp4", mimeType: "video/mp4" });
+
+    await expect(adapter.getMediaSources([asset.id])).resolves.toEqual({
+      [asset.id]: pathToFileURL(join(root, asset.relativePath)).href,
     });
   });
 });

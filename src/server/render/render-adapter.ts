@@ -19,6 +19,7 @@ export type RenderAdapter = (
     mediaSources?: MediaSources;
     serveUrl?: string;
     bundle?: RemotionBundleFunction;
+    timeoutInMilliseconds?: number;
   },
 ) => Promise<RenderResult>;
 
@@ -31,6 +32,7 @@ export const renderProject: RenderAdapter = async (project, outputPath, options)
   const composition = await selectComposition({
     id: "Editor",
     inputProps,
+    timeoutInMilliseconds: options.timeoutInMilliseconds,
     serveUrl,
   });
 
@@ -45,6 +47,7 @@ export const renderProject: RenderAdapter = async (project, outputPath, options)
     outputLocation: outputPath,
     overwrite: true,
     serveUrl,
+    timeoutInMilliseconds: options.timeoutInMilliseconds,
   });
 
   return { outputPath, contentType: "video/mp4" };

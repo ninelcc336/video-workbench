@@ -1,0 +1,30 @@
+import { createEmptyProject } from "../../domain/project/factories";
+import type { EditProject } from "../../domain/project/model";
+import { renderProject, type RenderResult } from "./render-adapter";
+
+/** 中文注释：冒烟项目保持最小尺寸和一秒时长，只验证真实媒体能走完本地导出链路。 */
+export function createSmokeProject(mediaId: string, audioEnabled = true): EditProject {
+  const project = createEmptyProject({ width: 64, height: 64, fps: 30 });
+  project.videoClips = [
+    {
+      id: "smoke-video-clip",
+      mediaId,
+      fromFrame: 0,
+      sourceStartFrame: 0,
+      durationInFrames: 30,
+      audioEnabled,
+    },
+  ];
+  return project;
+}
+
+/** 中文注释：命令行冒烟只传真实文件路径，适配器内部负责自动 bundle 和 Remotion 渲染。 */
+export function renderSmokeMedia(inputPath: string, outputPath: string, audioEnabled = true): Promise<RenderResult> {
+  const project = createSmokeProject("smoke-media", audioEnabled);
+  return renderProject(project, outputPath, {
+    cancelSignal: () => false,
+    mediaSources: { "smoke-media": inputPath },
+    // 中文注释：冒烟失败时在 15 秒内返回，避免 Chromium 环境异常让 CI 无限等待。
+    timeoutInMilliseconds: 15_000,
+  });
+}

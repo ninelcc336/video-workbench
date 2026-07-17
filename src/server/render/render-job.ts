@@ -24,7 +24,7 @@ export function createRenderJob(
   options: {
     outputPath: string;
     renderProject?: RenderAdapter;
-    renderOptions?: { mediaSources?: MediaSources; serveUrl?: string; bundle?: RemotionBundleFunction };
+    renderOptions?: { mediaSources?: MediaSources; serveUrl?: string; bundle?: RemotionBundleFunction; timeoutInMilliseconds?: number };
   },
 ): RenderJob {
   const snapshot: RenderJobSnapshot = {
