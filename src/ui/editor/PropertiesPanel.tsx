@@ -6,16 +6,18 @@ import type { ParameterDefinition } from "../../domain/templates/types";
 export type PropertiesPanelProps = {
   project: EditProject;
   selectedClip: EffectClip | null;
+  /** 中文注释：与画布共享的参数快照；未提供时回退到选中片段快照。 */
+  paramsSnapshot?: Record<string, unknown>;
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
 };
 
 function updateObjectParam(
-  selectedClip: EffectClip,
+  values: Record<string, unknown>,
   key: string,
   field: string,
   value: number,
 ): Record<string, unknown> {
-  const current = selectedClip.params[key];
+  const current = values[key];
   const objectValue = current && typeof current === "object" ? current : {};
   return {
     [key]: { ...(objectValue as Record<string, unknown>), [field]: value },
@@ -24,12 +26,10 @@ function updateObjectParam(
 
 function ParameterControl({
   definition,
-  selectedClip,
   values,
   onChange,
 }: {
   definition: ParameterDefinition;
-  selectedClip: EffectClip;
   values: Record<string, unknown>;
   onChange: (params: Record<string, unknown>) => void;
 }) {
@@ -63,7 +63,7 @@ function ParameterControl({
               aria-label={`${definition.label}${firstLabel}`}
               max={1}
               min={0}
-              onChange={(event) => onChange(updateObjectParam(selectedClip, definition.key, firstKey, Number(event.target.value)))}
+              onChange={(event) => onChange(updateObjectParam(values, definition.key, firstKey, Number(event.target.value)))}
               step={0.01}
               type="number"
               value={Number(objectValue[firstKey as keyof typeof objectValue] ?? 0)}
@@ -75,7 +75,7 @@ function ParameterControl({
               aria-label={`${definition.label}${secondLabel}`}
               max={1}
               min={0}
-              onChange={(event) => onChange(updateObjectParam(selectedClip, definition.key, secondKey, Number(event.target.value)))}
+              onChange={(event) => onChange(updateObjectParam(values, definition.key, secondKey, Number(event.target.value)))}
               step={0.01}
               type="number"
               value={Number(objectValue[secondKey as keyof typeof objectValue] ?? 0)}
@@ -122,7 +122,7 @@ function ParameterControl({
 }
 
 /** 中文注释：属性面板根据模板声明生成控件，改动通过回调交给编辑器命令层。 */
-export function PropertiesPanel({ selectedClip, onChangeParams }: PropertiesPanelProps) {
+export function PropertiesPanel({ selectedClip, paramsSnapshot, onChangeParams }: PropertiesPanelProps) {
   if (!selectedClip) {
     return (
       <aside aria-label="特效参数面板" className="panel properties-panel">
@@ -138,7 +138,7 @@ export function PropertiesPanel({ selectedClip, onChangeParams }: PropertiesPane
   } catch {
     return <aside className="panel properties-panel"><div className="panel-heading"><span className="eyebrow">Inspector</span><h2>特效参数</h2></div><p className="error-copy">找不到这个特效模板，请重新选择。</p></aside>;
   }
-  const values = normalizeParams(template, selectedClip.params);
+  const values = normalizeParams(template, paramsSnapshot ?? selectedClip.params);
   const change = (params: Record<string, unknown>) => onChangeParams?.(selectedClip.id, params);
 
   return (
@@ -150,7 +150,7 @@ export function PropertiesPanel({ selectedClip, onChangeParams }: PropertiesPane
       </div>
       <div className="properties-form">
         {template.parameters.map((definition) => (
-          <ParameterControl definition={definition} key={definition.key} onChange={change} selectedClip={selectedClip} values={values} />
+          <ParameterControl definition={definition} key={definition.key} onChange={change} values={values} />
         ))}
       </div>
     </aside>

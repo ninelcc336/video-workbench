@@ -1,9 +1,14 @@
 import { useMemo, useState } from "react";
-import { listTemplates } from "../../domain/templates/registry";
+import { getTemplate, listTemplates } from "../../domain/templates/registry";
 import type { TemplateCategory } from "../../domain/templates/types";
+import type { TemplateDefinition } from "../../domain/templates/types";
+import { TemplateCard } from "./TemplateCard";
 
 export type TemplateLibraryProps = {
   onAddTemplate?: (templateId: string) => void;
+  /** 中文注释：播放头添加作为拖放之外的辅助入口，帧值由页面快照提供。 */
+  currentFrame?: number;
+  onAddTemplateAtFrame?: (template: TemplateDefinition, frame: number) => void;
 };
 
 const categoryLabels: Record<"all" | TemplateCategory, string> = {
@@ -13,8 +18,8 @@ const categoryLabels: Record<"all" | TemplateCategory, string> = {
   transition: "片段转场",
 };
 
-/** 中文注释：首版用按钮添加模板，拖放属于后续任务；用户先通过动效名称和分类发现模板。 */
-export function TemplateLibrary({ onAddTemplate }: TemplateLibraryProps) {
+/** 中文注释：模板库负责筛选和发现，卡片负责拖放；点击添加时优先使用当前播放头。 */
+export function TemplateLibrary({ onAddTemplate, currentFrame = 0, onAddTemplateAtFrame }: TemplateLibraryProps) {
   const [category, setCategory] = useState<"all" | TemplateCategory>("all");
   const templates = useMemo(() => listTemplates(category === "all" ? undefined : category), [category]);
   return (
@@ -25,13 +30,21 @@ export function TemplateLibrary({ onAddTemplate }: TemplateLibraryProps) {
           <button aria-selected={category === item} className={category === item ? "active" : ""} key={item} onClick={() => setCategory(item)} role="tab" type="button">{categoryLabels[item]}</button>
         ))}
       </div>
+      <p className="muted-copy">拖动卡片到时间轴，或在播放头位置点击添加。</p>
       <div className="template-list">
-        {templates.map((template, index) => (
-          <article className="template-card" key={`${template.id}@${template.version}`}>
-            <div className={`template-card__preview template-card__preview--${index % 3}`}><span>{template.category === "transition" ? "↗" : template.category === "decorative-animation" ? "✦" : "Aa"}</span></div>
-            <div className="template-card__content"><div><strong>{template.name}</strong><p>{template.description}</p></div><button aria-label={`添加${template.name}`} onClick={() => onAddTemplate?.(template.id)} type="button">添加</button></div>
-          </article>
-        ))}
+        {templates.map((summary) => {
+          const template = getTemplate(summary.id, summary.version);
+          return (
+            <TemplateCard
+              key={`${template.id}@${template.version}`}
+              onAddTemplate={(templateId) => {
+                if (onAddTemplateAtFrame) onAddTemplateAtFrame(getTemplate(templateId), Math.max(0, Math.round(currentFrame)));
+                else onAddTemplate?.(templateId);
+              }}
+              template={template}
+            />
+          );
+        })}
       </div>
     </section>
   );

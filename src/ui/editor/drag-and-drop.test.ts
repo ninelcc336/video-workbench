@@ -1,0 +1,59 @@
+// @vitest-environment jsdom
+
+import { describe, expect, it } from "vitest";
+import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
+import {
+  createEffectClipFromTemplate,
+  getDropFrame,
+  readTemplateDragData,
+  writeTemplateDragData,
+} from "./drag-and-drop";
+
+describe("模板拖放辅助函数", () => {
+  it("把放置位置吸附为非负整数帧，并使用模板默认值", () => {
+    const template = getTemplate("card-overlay", 1);
+    const clip = createEffectClipFromTemplate(template, -2.4);
+
+    expect(clip.fromFrame).toBe(0);
+    expect(clip.durationInFrames).toBe(template.defaultDurationInFrames);
+    expect(clip.params).toEqual(getTemplateDefaultParams(template));
+    expect(clip.templateId).toBe(template.id);
+    expect(clip.templateVersion).toBe(template.version);
+    expect(clip.trackId).toBe("effects-1");
+  });
+
+  it("将拖放数据往返为模板身份", () => {
+    const template = getTemplate("bubble-decoration", 1);
+    const values = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: (type: string, value: string) => values.set(type, value),
+      getData: (type: string) => values.get(type) ?? "",
+    } as unknown as DataTransfer;
+
+    writeTemplateDragData(dataTransfer, template);
+
+    expect(readTemplateDragData(dataTransfer)).toEqual({
+      templateId: template.id,
+      templateVersion: template.version,
+    });
+  });
+
+  it("按时间轴元素左边界把鼠标位置换算为非负整数帧", () => {
+    const timeline = document.createElement("div");
+    timeline.getBoundingClientRect = () => ({
+      bottom: 100,
+      height: 40,
+      left: 100,
+      right: 700,
+      top: 60,
+      width: 600,
+      x: 100,
+      y: 60,
+      toJSON: () => ({}),
+    });
+
+    expect(getDropFrame({ clientX: 157 } as DragEvent, timeline, 6)).toBe(10);
+    expect(getDropFrame({ clientX: 40 } as DragEvent, timeline, 6)).toBe(0);
+  });
+});
