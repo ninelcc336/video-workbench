@@ -38,13 +38,13 @@ export class WorkspaceAdapter {
   async saveProject(projectId: string, project: EditProject): Promise<void>;
   async saveProject(
     projectOrId: EditProject | string,
-    projectOrIdOrId?: EditProject | string,
+    projectOrIdValue?: EditProject | string,
   ): Promise<void> {
     if (typeof projectOrId === "string") {
-      await this.projectRepository.saveProject(projectOrId, projectOrIdOrId as EditProject);
+      await this.projectRepository.saveProject(projectOrId, projectOrIdValue as EditProject);
       return;
     }
-    await this.projectRepository.saveProject(projectOrId, projectOrIdOrId as string | undefined);
+    await this.projectRepository.saveProject(projectOrId, projectOrIdValue as string | undefined);
   }
 
   async loadProject(projectId: string): Promise<EditProject> {
