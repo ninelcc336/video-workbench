@@ -3,6 +3,7 @@ import type { EditProject } from "../../domain/project/model";
 import type { MediaSources } from "../../remotion/media";
 import { createRenderJob, type RenderJob } from "./render-job";
 
+// 中文注释：路由只编排任务生命周期，不把 Remotion 细节暴露给浏览器。
 export function createRenderRouter(): Router {
   const router = Router();
   const jobs = new Map<string, RenderJob>();
@@ -14,7 +15,13 @@ export function createRenderRouter(): Router {
       outputPath: string;
       mediaSources?: MediaSources;
     };
-    const job = createRenderJob(body.project, { outputPath: body.outputPath });
+    const job = createRenderJob(body.project, {
+      outputPath: body.outputPath,
+      renderOptions: {
+        mediaSources: body.mediaSources,
+        serveUrl: process.env.REMOTION_SERVE_URL,
+      },
+    });
     jobs.set(jobId, job);
     void job.start();
     response.status(202).json({ jobId, snapshot: job.getSnapshot() });

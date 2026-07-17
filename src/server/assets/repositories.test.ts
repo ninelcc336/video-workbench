@@ -71,3 +71,4 @@ describe("个人资产仓储", () => {
     expect(JSON.stringify(JSON.parse(raw))).not.toContain("filePath");
   });
 });
+// 中文注释：验证个人资产仓储的文件读写边界。

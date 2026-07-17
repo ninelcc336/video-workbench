@@ -77,3 +77,4 @@ describe("视频模板模型", () => {
     expect(store.getSnapshot().effectClips).toEqual([]);
   });
 });
+// 中文注释：测试视频模板只保存特效时间轴布局。

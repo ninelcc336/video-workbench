@@ -5,6 +5,7 @@ import { getTemplate, normalizeParams } from "../domain/templates/registry";
 import type { TemplateDefinition } from "../domain/templates/types";
 import { assertMediaSource, type MediaSources } from "./media";
 
+// 中文注释：预览和导出都通过这个组合消费同一份编辑项目快照。
 export type EditorCompositionProps = {
   project: EditProject;
   mediaSources: MediaSources;

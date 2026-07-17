@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+// 中文注释：浏览器验收覆盖新手从打开编辑器到添加模板和进入导出的主路径。
 test("剪辑小白可以打开编辑器并添加模板", async ({ page }) => {
   await page.goto("/");
 

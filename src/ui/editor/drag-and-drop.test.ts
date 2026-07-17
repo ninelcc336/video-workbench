@@ -57,3 +57,4 @@ describe("模板拖放辅助函数", () => {
     expect(getDropFrame({ clientX: 40 } as DragEvent, timeline, 6)).toBe(0);
   });
 });
+// 中文注释：验证模板拖放数据和帧位置换算。

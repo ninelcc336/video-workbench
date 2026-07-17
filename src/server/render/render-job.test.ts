@@ -102,3 +102,4 @@ describe("本地渲染任务", () => {
     expect(job.getSnapshot().project.settings.width).toBe(1080);
   });
 });
+// 中文注释：验证渲染任务状态机和错误转换。

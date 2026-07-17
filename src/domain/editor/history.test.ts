@@ -69,3 +69,4 @@ describe("编辑历史公共接口", () => {
     expect(history.getSnapshot().settings.width).toBe(1920);
   });
 });
+// 中文注释：验证撤销重做历史的外部行为。

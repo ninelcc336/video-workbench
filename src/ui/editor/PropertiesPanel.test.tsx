@@ -70,3 +70,4 @@ describe("特效参数面板", () => {
     expect(screen.getByText("选择一个特效片段开始调整")).toBeTruthy();
   });
 });
+// 中文注释：验证参数面板通过回调修改模板参数。

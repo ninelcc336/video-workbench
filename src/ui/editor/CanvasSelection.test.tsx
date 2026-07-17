@@ -102,3 +102,4 @@ describe("画布特效选区", () => {
     expect(lastParams.position).toEqual({ x: 0.65, y: 0.7 });
   });
 });
+// 中文注释：验证画布选区的边界限制和参数回调。

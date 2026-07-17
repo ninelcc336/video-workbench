@@ -111,3 +111,4 @@ describe("基础时间轴", () => {
     expect(onDeleteClip).toHaveBeenCalledWith("effect-1", "effect");
   });
 });
+// 中文注释：验证时间轴显示和片段操作事件。

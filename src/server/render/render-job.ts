@@ -1,4 +1,5 @@
 import type { EditProject } from "../../domain/project/model";
+import type { MediaSources } from "../../remotion/media";
 import { renderProject as defaultRenderProject, type RenderAdapter, type RenderResult } from "./render-adapter";
 
 export type RenderJobStatus = "preparing" | "rendering" | "completed" | "failed" | "cancelled";
@@ -16,9 +17,14 @@ export type RenderJob = {
   cancel(): void;
 };
 
+// 中文注释：渲染任务隔离项目快照和取消状态，外部只能通过这个小接口观察任务。
 export function createRenderJob(
   project: EditProject,
-  options: { outputPath: string; renderProject?: RenderAdapter },
+  options: {
+    outputPath: string;
+    renderProject?: RenderAdapter;
+    renderOptions?: { mediaSources?: MediaSources; serveUrl?: string };
+  },
 ): RenderJob {
   const snapshot: RenderJobSnapshot = {
     project: structuredClone(project),
@@ -42,7 +48,7 @@ export function createRenderJob(
         const renderResult: RenderResult = await (options.renderProject ?? defaultRenderProject)(
           snapshot.project,
           snapshot.outputPath,
-          { cancelSignal: () => cancelled },
+          { ...options.renderOptions, cancelSignal: () => cancelled },
         );
 
         if (cancelled) {

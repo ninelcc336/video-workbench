@@ -75,3 +75,4 @@ describe("本地工作区适配器", () => {
     ).rejects.toMatchObject({ code: "unsafe_path" });
   });
 });
+// 中文注释：验证本地工作区适配器公开接口。
