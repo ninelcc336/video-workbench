@@ -18,11 +18,13 @@ import { PreviewCanvas } from "./PreviewCanvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { TemplateLibrary } from "./TemplateLibrary";
 import { Timeline, type ClipKind } from "./Timeline";
+import { importMediaFile } from "./media-import";
 import "./editor.css";
 
 export type EditorPageProps = {
   store?: EditorStore;
   mediaSources?: MediaSources;
+  missingMediaIds?: string[];
   onSaveProject?: (project: EditProject) => Promise<void>;
 };
 
@@ -37,7 +39,7 @@ function getClip(project: EditProject, id: string | null): EffectClip | null {
 }
 
 /** 中文注释：页面层把时间轴事件翻译成 EditorStore 公共命令，组件自身不直接修改项目数组。 */
-export function EditorPage({ store: providedStore, mediaSources: initialMediaSources = {}, onSaveProject }: EditorPageProps) {
+export function EditorPage({ store: providedStore, mediaSources: initialMediaSources = {}, missingMediaIds: initialMissingMediaIds = [], onSaveProject }: EditorPageProps) {
   const store = useMemo(() => providedStore ?? createEditorStoreForPage(), [providedStore]);
   const autosave = useMemo(() => createAutosaveController(onSaveProject ?? (async () => undefined)), [onSaveProject]);
   const autosaveState = useAutosaveState(autosave);
@@ -45,6 +47,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [mediaSources, setMediaSources] = useState<MediaSources>(initialMediaSources);
+  const [missingMediaIds, setMissingMediaIds] = useState(initialMissingMediaIds);
   const [notice, setNotice] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [renderSnapshot, setRenderSnapshot] = useState<import("../../server/render/render-job").RenderJobSnapshot | null>(null);
@@ -99,20 +102,25 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setSelectedClipId(clip.id);
   };
 
-  const importMedia = (file: File) => {
-    const mediaId = createId("media");
-    const src = URL.createObjectURL(file);
-    const lastFrame = Math.max(0, ...project.videoClips.map((clip) => clip.fromFrame + clip.durationInFrames));
-    const clip: VideoClip = {
-      id: createId("video"),
-      mediaId,
-      fromFrame: lastFrame,
-      sourceStartFrame: 0,
-      durationInFrames: project.settings.fps * 5,
-      audioEnabled: true,
-    };
-    setMediaSources((current) => ({ ...current, [mediaId]: src }));
-    dispatch({ type: "add-video-clip", clip });
+  const importMedia = async (file: File) => {
+    try {
+      const asset = await importMediaFile(file);
+      const lastFrame = Math.max(0, ...project.videoClips.map((clip) => clip.fromFrame + clip.durationInFrames));
+      const clip: VideoClip = {
+        id: createId("video"),
+        mediaId: asset.id,
+        fromFrame: lastFrame,
+        sourceStartFrame: 0,
+        durationInFrames: project.settings.fps * 5,
+        audioEnabled: true,
+      };
+      // 中文注释：预览也使用工作区稳定地址，关闭页面后项目仍可由素材 ID 恢复。
+      setMediaSources((current) => ({ ...current, [asset.id]: `/api/workspace/media/${encodeURIComponent(asset.id)}` }));
+      setMissingMediaIds((current) => current.filter((mediaId) => mediaId !== asset.id));
+      dispatch({ type: "add-video-clip", clip });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "视频素材导入失败");
+    }
   };
 
   const selectClip = (clipId: string) => setSelectedClipId(clipId);
@@ -136,6 +144,10 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   };
 
   const submitExport = async (settings: ExportSettings) => {
+    if (missingMediaIds.length > 0) {
+      setNotice("当前项目存在缺失素材，修复后才能导出视频。");
+      return;
+    }
     setExportOpen(false);
     const response = await fetch("/api/render", {
       body: JSON.stringify({ project: { ...project, export: settings }, outputPath: "workspace/renders/latest.mp4", mediaSources }),
@@ -170,11 +182,11 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={() => store.undo()} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button className="export-button" onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={() => store.undo()} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
       </header>
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <div className="editor-main-grid">
-        <aside className="left-sidebar panel"><MediaBin onImportMedia={importMedia} project={project} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
+        <aside className="left-sidebar panel"><MediaBin missingMediaIds={missingMediaIds} onImportMedia={importMedia} project={project} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} project={project} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} project={project} selectedClip={selectedEffectClip} />
       </div>

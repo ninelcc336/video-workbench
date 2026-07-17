@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createWorkspaceAdapter, type WorkspaceAdapter } from "./workspace-adapter";
 import { createWorkspaceRouter } from "./workspace-routes";
+import { createEmptyProject } from "../../domain/project/factories";
 
 const temporaryRoots: string[] = [];
 const servers: Server[] = [];
@@ -45,5 +46,26 @@ describe("工作区 HTTP 素材接口", () => {
     const mediaResponse = await fetch(`${baseUrl}/media/${asset.id}`);
     expect(mediaResponse.status).toBe(200);
     await expect(mediaResponse.text()).resolves.toBe("真实视频字节");
+  });
+
+  it("重新打开缺失素材的项目时返回项目和缺失状态，而不是让页面崩溃", async () => {
+    const { adapter, baseUrl } = await startWorkspaceServer();
+    const project = createEmptyProject();
+    project.videoClips.push({
+      id: "video-1",
+      mediaId: "missing-media",
+      fromFrame: 0,
+      sourceStartFrame: 0,
+      durationInFrames: 30,
+      audioEnabled: true,
+    });
+    await adapter.saveProject(project, "recoverable-project");
+
+    const response = await fetch(`${baseUrl}/projects/recoverable-project`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      project,
+      missingMediaIds: ["missing-media"],
+    });
   });
 });
