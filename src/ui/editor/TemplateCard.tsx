@@ -6,7 +6,6 @@ import { writeTemplateDragData } from "./drag-and-drop";
 export type TemplateCardProps = {
   template: TemplateDefinition;
   onAddTemplate?: (templateId: string) => void;
-  onPreview?: (template: TemplateDefinition) => void;
 };
 
 const categoryLabels: Record<TemplateCategory, string> = {
@@ -16,17 +15,16 @@ const categoryLabels: Record<TemplateCategory, string> = {
 };
 
 /** 中文注释：模板卡片用模板自身的 Remotion 渲染函数做短预览，避免维护第二套视觉实现。 */
-export function TemplateCard({ template, onAddTemplate, onPreview }: TemplateCardProps) {
-  const [previewing, setPreviewing] = useState(false);
+export function TemplateCard({ template, onAddTemplate }: TemplateCardProps) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
-    if (!previewing) return;
+    // 中文注释：缩略图持续自动播放，保留动效发现能力，不再依赖独立预览按钮。
     const timer = window.setInterval(() => {
       setFrame((current) => (current + 1) % Math.max(1, template.defaultDurationInFrames));
     }, 50);
     return () => window.clearInterval(timer);
-  }, [previewing, template.defaultDurationInFrames]);
+  }, [template.defaultDurationInFrames]);
 
   const preview = template.render({
     frame,
@@ -54,14 +52,6 @@ export function TemplateCard({ template, onAddTemplate, onPreview }: TemplateCar
           <p>{categoryLabels[template.category]} · {template.description}</p>
         </div>
         <div style={{ display: "flex", gap: 5 }}>
-          <button
-            aria-label={`${previewing ? "停止" : "预览"}${template.name}`}
-            onClick={() => {
-              setPreviewing((current) => !current);
-              onPreview?.(template);
-            }}
-            type="button"
-          >{previewing ? "停止" : "预览"}</button>
           <button aria-label={`添加${template.name}`} onClick={() => onAddTemplate?.(template.id)} type="button">添加</button>
         </div>
       </div>
