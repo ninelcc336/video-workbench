@@ -20,7 +20,7 @@ vi.mock("@remotion/player", async () => {
       mockPlayer.lastInputProps = props.inputProps;
       React.useImperativeHandle(ref, () => mockPlayer);
       return React.createElement("div", {
-        "data-controls": String(props.controls),
+        "data-controls": String(Boolean(props.controls)),
         "data-initial-frame": String(props.initialFrame),
         "data-testid": "mock-player",
       });
@@ -47,10 +47,10 @@ function createProject() {
 }
 
 describe("实时预览播放同步", () => {
-  it("把播放控制打开，并以当前帧初始化 Player", () => {
+  it("关闭 Player 默认控制栏，并以当前帧初始化 Player", () => {
     render(<PreviewPlayer currentFrame={12} mediaSources={{ "media-1": "file:///media-1.mp4" }} project={createProject()} />);
 
-    expect(screen.getByTestId("mock-player").getAttribute("data-controls")).toBe("true");
+    expect(screen.getByTestId("mock-player").getAttribute("data-controls")).toBe("false");
     expect(screen.getByTestId("mock-player").getAttribute("data-initial-frame")).toBe("12");
   });
 

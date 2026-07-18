@@ -1,11 +1,14 @@
 import { Player } from "@remotion/player";
 import type { PlayerRef } from "@remotion/player";
 import { useEffect, useMemo, useRef } from "react";
+import type { RefObject } from "react";
 import { EditorComposition, getCompositionDurationInFrames, type EditorCompositionProps } from "../../remotion/EditorComposition";
 
 export type PreviewPlayerProps = EditorCompositionProps & {
   currentFrame?: number;
   onFrameChange?: (frame: number) => void;
+  /** 中文注释：由工作区控制栏和画布共享同一个 Player 引用，避免复制播放状态。 */
+  playerRef?: RefObject<PlayerRef | null>;
 };
 
 /** 中文注释：Remotion 的合法帧范围是 0 到 duration - 1，所有外部定位先经过同一处裁剪。 */
@@ -23,8 +26,11 @@ export function PreviewPlayer({
   mediaSources,
   currentFrame = 0,
   onFrameChange,
+  playerRef: providedPlayerRef,
 }: PreviewPlayerProps) {
-  const playerRef = useRef<PlayerRef>(null);
+  const fallbackPlayerRef = useRef<PlayerRef>(null);
+  // 中文注释：独立控制栏传入引用时优先复用；单独使用组件时仍保留内部引用。
+  const playerRef = providedPlayerRef ?? fallbackPlayerRef;
   const durationInFrames = getCompositionDurationInFrames(project);
   const safeCurrentFrame = clampPreviewFrame(currentFrame, durationInFrames);
   // 中文注释：播放头变化不应重建项目输入；参数命令产生新项目快照时才让 Player 更新视觉输入。
@@ -61,7 +67,6 @@ export function PreviewPlayer({
       component={EditorComposition}
       compositionHeight={project.settings.height}
       compositionWidth={project.settings.width}
-      controls
       durationInFrames={durationInFrames}
       fps={project.settings.fps}
       inputProps={inputProps}

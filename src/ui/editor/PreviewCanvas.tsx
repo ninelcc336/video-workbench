@@ -1,9 +1,12 @@
 import type { EditProject, EffectClip } from "../../domain/project/model";
 import { PreviewPlayer } from "../preview/PreviewPlayer";
+import { PreviewControls } from "../preview/PreviewControls";
 import type { MediaSources } from "../../remotion/media";
+import { getCompositionDurationInFrames } from "../../remotion/EditorComposition";
 import { CanvasSelection } from "./CanvasSelection";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
+import type { PlayerRef } from "@remotion/player";
 
 export type PreviewCanvasProps = {
   project: EditProject;
@@ -125,7 +128,10 @@ export function PreviewCanvas({
 }: PreviewCanvasProps) {
   const hasContent = project.videoClips.length > 0 || project.effectClips.length > 0;
   const orientation = getPreviewOrientation(project.settings);
+  const durationInFrames = getCompositionDurationInFrames(project);
   const stageRef = useRef<HTMLDivElement>(null);
+  // 中文注释：画布和工作区控制栏共同操纵同一个 Remotion Player 实例。
+  const playerRef = useRef<PlayerRef>(null);
   const stageSize = usePreviewStageSize(stageRef);
   const deviceSize = stageSize
     ? getContainSize(
@@ -150,6 +156,7 @@ export function PreviewCanvas({
               currentFrame={currentFrame}
               mediaSources={mediaSources}
               onFrameChange={onFrameChange}
+              playerRef={playerRef}
               project={project}
             />
             <CanvasSelection
@@ -162,6 +169,13 @@ export function PreviewCanvas({
         </div>
         {!hasContent && <div className="preview-empty"><span>◌</span><strong>你的画面会出现在这里</strong><p>从左侧导入视频或添加一个特效模板</p></div>}
       </div>
+      <PreviewControls
+        currentFrame={currentFrame}
+        durationInFrames={durationInFrames}
+        fps={project.settings.fps}
+        onFrameChange={onFrameChange}
+        playerRef={playerRef}
+      />
     </section>
   );
 }
