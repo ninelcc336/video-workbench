@@ -144,20 +144,22 @@ export function PreviewCanvas({
         <span className="frame-readout">帧 {currentFrame} / {project.settings.fps}fps</span>
       </div>
       <div className="preview-stage" ref={stageRef}>
-      <div className="preview-device" style={getPreviewDeviceStyle(project, deviceSize)}>
-        <PreviewPlayer
-          currentFrame={currentFrame}
-          mediaSources={mediaSources}
-          onFrameChange={onFrameChange}
-          project={project}
-        />
-        <CanvasSelection
-          onChangeParams={onChangeParams}
-          paramsSnapshot={paramsSnapshot}
-          project={project}
-          selectedClip={selectedClip}
-        />
-      </div>
+        <div className="preview-device">
+          <div className="preview-device__canvas" style={getPreviewDeviceStyle(project, deviceSize)}>
+            <PreviewPlayer
+              currentFrame={currentFrame}
+              mediaSources={mediaSources}
+              onFrameChange={onFrameChange}
+              project={project}
+            />
+            <CanvasSelection
+              onChangeParams={onChangeParams}
+              paramsSnapshot={paramsSnapshot}
+              project={project}
+              selectedClip={selectedClip}
+            />
+          </div>
+        </div>
         {!hasContent && <div className="preview-empty"><span>◌</span><strong>你的画面会出现在这里</strong><p>从左侧导入视频或添加一个特效模板</p></div>}
       </div>
     </section>

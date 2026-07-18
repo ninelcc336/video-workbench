@@ -36,6 +36,7 @@ test("横屏项目保持画布方向且页面溢出由时间轴容器承接", as
   await expect(page.getByLabel("画布方向：横屏")).toBeVisible();
   const metrics = await page.evaluate(() => {
     const preview = document.querySelector(".preview-device")?.getBoundingClientRect();
+    const canvas = document.querySelector(".preview-device__canvas")?.getBoundingClientRect();
     const timeline = document.querySelector(".timeline-scroll");
     const timelineStyle = timeline ? getComputedStyle(timeline) : null;
     return {
@@ -43,6 +44,8 @@ test("横屏项目保持画布方向且页面溢出由时间轴容器承接", as
       documentWidth: document.documentElement.scrollWidth,
       innerHeight: window.innerHeight,
       innerWidth: window.innerWidth,
+      canvasHeight: canvas?.height ?? 0,
+      canvasWidth: canvas?.width ?? 0,
       stageHeight: document.querySelector(".preview-stage")?.getBoundingClientRect().height ?? 0,
       stageWidth: document.querySelector(".preview-stage")?.getBoundingClientRect().width ?? 0,
       previewHeight: preview?.height ?? 0,
@@ -57,6 +60,9 @@ test("横屏项目保持画布方向且页面溢出由时间轴容器承接", as
   expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.innerHeight);
   expect(metrics.previewWidth).toBeGreaterThan(metrics.previewHeight);
   expect(metrics.previewWidth * metrics.previewHeight).toBeGreaterThan(
+    metrics.stageWidth * metrics.stageHeight * 0.8,
+  );
+  expect(metrics.canvasWidth * metrics.canvasHeight).toBeGreaterThan(
     metrics.stageWidth * metrics.stageHeight * 0.8,
   );
   expect(metrics.timelineOverflowX).toBe("auto");
