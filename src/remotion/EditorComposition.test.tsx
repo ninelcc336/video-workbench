@@ -104,4 +104,21 @@ describe("共享 Remotion 编辑组合", () => {
       );
     }
   });
+
+  it("视频层在预览画布内尽量铺满且保持比例", () => {
+    const element = EditorComposition({
+      project: createProject(),
+      mediaSources: { "media-1": "file:///media-1.mp4" },
+    });
+    const rootChildren = (element as React.ReactElement<{ children: React.ReactElement[] }>).props.children;
+    const videoSequence = (rootChildren[0] as unknown as Array<React.ReactElement<{
+      children: React.ReactElement<{ style: Record<string, unknown> }>;
+    }>>)[0];
+    const video = videoSequence.props.children as React.ReactElement<{ style: Record<string, unknown> }>;
+
+    expect(video.props.style).toMatchObject({
+      objectFit: "cover",
+      objectPosition: "center",
+    });
+  });
 });

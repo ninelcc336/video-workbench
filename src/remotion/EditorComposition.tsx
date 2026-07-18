@@ -93,7 +93,8 @@ export function EditorComposition({ project, mediaSources }: EditorCompositionPr
               muted={!clip.audioEnabled}
               startFrom={clip.sourceStartFrame}
               src={source.src}
-              style={{ height: "100%", objectFit: "contain", width: "100%" }}
+              // 中文注释：预览画布优先保证主体可读，cover 保持比例并裁掉超出画布的边缘留白。
+              style={{ height: "100%", objectFit: "cover", objectPosition: "center", width: "100%" }}
             />
           </Sequence>
         );
