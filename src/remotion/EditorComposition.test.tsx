@@ -117,8 +117,7 @@ describe("共享 Remotion 编辑组合", () => {
     const video = videoSequence.props.children as React.ReactElement<{ style: Record<string, unknown> }>;
 
     expect(video.props.style).toMatchObject({
-      objectFit: "cover",
-      objectPosition: "center",
+      objectFit: "contain",
     });
   });
 });

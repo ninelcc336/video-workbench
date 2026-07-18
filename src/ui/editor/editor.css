@@ -65,7 +65,7 @@ button { cursor: pointer; }
 .preview-panel__toolbar { justify-content: space-between; padding: 18px 22px 10px; }
 .preview-orientation { margin-left: auto; border: 1px solid #3d493e; border-radius: 999px; padding: 3px 7px; color: #c7d27a; font-size: 9px; letter-spacing: .08em; }
 .frame-readout { color: #778078; font-family: ui-monospace, monospace; font-size: 10px; }
-.preview-stage { position: relative; display: grid; min-height: 0; flex: 1; place-items: center; overflow: hidden; padding: 14px 24px 25px; background: radial-gradient(circle at 50% 40%, #252c26 0, #111312 52%); }
+.preview-stage { position: relative; display: grid; min-height: 0; flex: 1; place-items: center; overflow: hidden; padding: 8px; background: radial-gradient(circle at 50% 40%, #252c26 0, #111312 52%); }
 /* 中文注释：未完成首次测量前提供安全回退，实际宽高由项目比例和容器尺寸共同决定。 */
 .preview-device { position: relative; width: auto; height: min(65vh, 500px); max-width: 100%; max-height: 100%; overflow: hidden; border: 7px solid #272c29; border-radius: 15px; background: #060706; box-shadow: 0 25px 70px #000a, 0 0 0 1px #444c45; }
 .preview-device > div { height: 100% !important; }

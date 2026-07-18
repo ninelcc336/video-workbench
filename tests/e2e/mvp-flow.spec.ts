@@ -43,6 +43,8 @@ test("横屏项目保持画布方向且页面溢出由时间轴容器承接", as
       documentWidth: document.documentElement.scrollWidth,
       innerHeight: window.innerHeight,
       innerWidth: window.innerWidth,
+      stageHeight: document.querySelector(".preview-stage")?.getBoundingClientRect().height ?? 0,
+      stageWidth: document.querySelector(".preview-stage")?.getBoundingClientRect().width ?? 0,
       previewHeight: preview?.height ?? 0,
       previewWidth: preview?.width ?? 0,
       timelineOverflowX: timelineStyle?.overflowX,
@@ -54,6 +56,9 @@ test("横屏项目保持画布方向且页面溢出由时间轴容器承接", as
   expect(metrics.documentWidth).toBeLessThanOrEqual(metrics.innerWidth);
   expect(metrics.documentHeight).toBeLessThanOrEqual(metrics.innerHeight);
   expect(metrics.previewWidth).toBeGreaterThan(metrics.previewHeight);
+  expect(metrics.previewWidth * metrics.previewHeight).toBeGreaterThan(
+    metrics.stageWidth * metrics.stageHeight * 0.8,
+  );
   expect(metrics.timelineOverflowX).toBe("auto");
   expect(metrics.timelineOverflowY).toBe("auto");
 });
