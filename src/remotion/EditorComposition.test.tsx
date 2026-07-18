@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createEmptyProject } from "../domain/project/factories";
 import type { EditProject } from "../domain/project/model";
 import { getTemplate, getTemplateDefaultParams } from "../domain/templates/registry";
-import { EditorComposition, getCompositionDurationInFrames, getCompositionMediaSources } from "./EditorComposition";
+import {
+  EditorComposition,
+  getCompositionDurationInFrames,
+  getCompositionMediaSources,
+  getEffectLayerRenderProps,
+} from "./EditorComposition";
 
 function createProject(): EditProject {
   const project = createEmptyProject();
@@ -66,6 +72,36 @@ describe("共享 Remotion 编辑组合", () => {
     });
 
     expect(element).toBeTruthy();
-    expect((element as React.ReactElement<{ children: unknown[] }>).props.children).toHaveLength(2);
+    const rootChildren = (element as React.ReactElement<{ children: React.ReactElement[] }>).props.children;
+    expect(rootChildren).toHaveLength(2);
+    const effectSequence = (rootChildren[1] as unknown as React.ReactElement<{ style: Record<string, unknown> }>[])[0];
+    expect(effectSequence.props.style).toMatchObject({ zIndex: 1 });
+  });
+
+  it("通过真实注册表为卡片和气泡生成有效特效渲染输入", () => {
+    const project = createProject();
+    const bubbleTemplate = getTemplate("bubble-decoration", 1);
+    const clips = [
+      project.effectClips[0],
+      {
+        id: "effect-bubble",
+        templateId: bubbleTemplate.id,
+        templateVersion: bubbleTemplate.version,
+        trackId: "effects-1",
+        fromFrame: 10,
+        durationInFrames: bubbleTemplate.defaultDurationInFrames,
+        params: getTemplateDefaultParams(bubbleTemplate),
+      },
+    ];
+
+    for (const clip of clips) {
+      const { template, renderProps } = getEffectLayerRenderProps(project, clip, 12);
+
+      // 中文注释：使用片段内第 12 帧验证入场和漂浮动画都能拿到有效局部帧。
+      expect(renderProps.frame).toBe(12);
+      expect(renderToStaticMarkup(template.render(renderProps))).toContain(
+        `data-template-id="${template.id}"`,
+      );
+    }
   });
 });
