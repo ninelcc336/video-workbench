@@ -1,6 +1,6 @@
 import { Player } from "@remotion/player";
 import type { PlayerRef } from "@remotion/player";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { EditorComposition, getCompositionDurationInFrames, type EditorCompositionProps } from "../../remotion/EditorComposition";
 
 export type PreviewPlayerProps = EditorCompositionProps & {
@@ -27,6 +27,8 @@ export function PreviewPlayer({
   const playerRef = useRef<PlayerRef>(null);
   const durationInFrames = getCompositionDurationInFrames(project);
   const safeCurrentFrame = clampPreviewFrame(currentFrame, durationInFrames);
+  // 中文注释：播放头变化不应重建项目输入；参数命令产生新项目快照时才让 Player 更新视觉输入。
+  const inputProps = useMemo(() => ({ project, mediaSources }), [mediaSources, project]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -62,7 +64,7 @@ export function PreviewPlayer({
       controls
       durationInFrames={durationInFrames}
       fps={project.settings.fps}
-      inputProps={{ project, mediaSources }}
+      inputProps={inputProps}
       initialFrame={safeCurrentFrame}
       ref={playerRef}
       style={{ height: "100%", width: "100%" }}

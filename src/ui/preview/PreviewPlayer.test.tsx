@@ -8,6 +8,7 @@ import { clampPreviewFrame, PreviewPlayer } from "./PreviewPlayer";
 const mockPlayer = vi.hoisted(() => ({
   addEventListener: vi.fn(),
   getCurrentFrame: vi.fn(() => 12),
+  lastInputProps: undefined as unknown,
   removeEventListener: vi.fn(),
   seekTo: vi.fn(),
 }));
@@ -15,7 +16,8 @@ const mockPlayer = vi.hoisted(() => ({
 vi.mock("@remotion/player", async () => {
   const React = await import("react");
   return {
-    Player: React.forwardRef((props: { controls?: boolean; initialFrame?: number }, ref) => {
+    Player: React.forwardRef((props: { controls?: boolean; initialFrame?: number; inputProps?: unknown }, ref) => {
+      mockPlayer.lastInputProps = props.inputProps;
       React.useImperativeHandle(ref, () => mockPlayer);
       return React.createElement("div", {
         "data-controls": String(props.controls),
@@ -82,5 +84,37 @@ describe("实时预览播放同步", () => {
   it("播放头不会被推进到项目时长之外", () => {
     expect(clampPreviewFrame(-2, 60)).toBe(0);
     expect(clampPreviewFrame(60, 60)).toBe(59);
+  });
+
+  it("播放头变化复用输入快照，参数快照变化则传入新值", () => {
+    const project = createProject();
+    const mediaSources = { "media-1": "file:///media-1.mp4" };
+    const { rerender } = render(
+      <PreviewPlayer currentFrame={12} mediaSources={mediaSources} project={project} />,
+    );
+    const firstInputProps = mockPlayer.lastInputProps;
+
+    rerender(
+      <PreviewPlayer currentFrame={18} mediaSources={mediaSources} project={project} />,
+    );
+    expect(mockPlayer.lastInputProps).toBe(firstInputProps);
+
+    const changedProject = {
+      ...project,
+      effectClips: [{
+        id: "effect-1",
+        templateId: "card-overlay",
+        templateVersion: 1,
+        trackId: "effects-1",
+        fromFrame: 0,
+        durationInFrames: 60,
+        params: { text: "新文字" },
+      }],
+    };
+    rerender(
+      <PreviewPlayer currentFrame={18} mediaSources={mediaSources} project={changedProject} />,
+    );
+    expect(mockPlayer.lastInputProps).not.toBe(firstInputProps);
+    expect((mockPlayer.lastInputProps as { project: typeof changedProject }).project).toBe(changedProject);
   });
 });
