@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EditorCommand } from "../../domain/editor/commands";
 import type { EditorStore } from "../../domain/editor/editor-store";
 import { createEmptyProject } from "../../domain/project/factories";
@@ -58,6 +58,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [videoTemplateOpen, setVideoTemplateOpen] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [videoTemplates, setVideoTemplates] = useState<VideoTemplate[]>([]);
+  // 中文注释：只记录最近一次重置前的播放头，以便紧接着撤销重置时恢复用户正在查看的位置。
+  const frameBeforeProjectReset = useRef<number | null>(null);
 
   useEffect(() => store.subscribe((snapshot) => {
     setProject(snapshot);
@@ -71,6 +73,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
 
   const dispatch = (command: EditorCommand) => {
     try {
+      // 中文注释：重置后的其他编辑操作会改变历史栈，不能再把其撤销误判为撤销重置。
+      if (command.type !== "reset-project") frameBeforeProjectReset.current = null;
       store.dispatch(command);
       setNotice(null);
     } catch (error) {
@@ -139,6 +143,25 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setCurrentFrame(clampPreviewFrame(frame, getCompositionDurationInFrames(project)));
   };
 
+  const resetProject = () => {
+    if (!window.confirm("确定重置编辑项目吗？时间轴和画布设置将恢复初始状态，本地视频文件不会删除。")) return;
+    // 中文注释：项目快照通过 Store 重置并进入撤销历史；页面级临时选区和播放状态同步归零。
+    frameBeforeProjectReset.current = currentFrame;
+    dispatch({ type: "reset-project" });
+    setCurrentFrame(0);
+    setSelectedClipId(null);
+    setRenderSnapshot(null);
+  };
+
+  const undo = () => {
+    const frame = frameBeforeProjectReset.current;
+    store.undo();
+    if (frame === null) return;
+    // 中文注释：撤销重置后按已恢复的项目时长校正播放头，继续保持时间轴与 Remotion Player 同步。
+    setCurrentFrame(clampPreviewFrame(frame, getCompositionDurationInFrames(store.getSnapshot())));
+    frameBeforeProjectReset.current = null;
+  };
+
   const moveClip = (clipId: string, kind: ClipKind, fromFrame: number) => {
     dispatch(kind === "video" ? { type: "move-video-clip", clipId, fromFrame } : { type: "move-effect-clip", clipId, fromFrame });
   };
@@ -196,7 +219,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={() => store.undo()} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={resetProject} title="重置项目" type="button">↺</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
       </header>
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <div className="editor-main-grid">

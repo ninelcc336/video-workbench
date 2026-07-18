@@ -1,4 +1,5 @@
 import { validateProject } from "../project/validation";
+import { createEmptyProject } from "../project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../project/model";
 
 /** 中文注释：视频尺寸只用于导入瞬间判断素材方向，不写入编辑项目持久化快照。 */
@@ -9,6 +10,7 @@ export type VideoDimensions = {
 
 /** 中文注释：编辑器命令只描述用户意图，不携带文件系统或 UI 依赖。 */
 export type EditorCommand =
+  | { type: "reset-project" }
   | { type: "add-video-clip"; clip: VideoClip; sourceDimensions?: VideoDimensions }
   | { type: "move-video-clip"; clipId: string; fromFrame: number }
   | { type: "delete-video-clip"; clipId: string }
@@ -107,6 +109,10 @@ export function applyCommand(
   let nextProject: EditProject;
 
   switch (command.type) {
+    case "reset-project":
+      // 中文注释：重置只清空编辑项目快照，不删除本地工作区中已导入的媒体文件。
+      nextProject = createEmptyProject();
+      break;
     case "add-video-clip":
       // 中文注释：横屏匹配与新增首个视频片段属于同一用户操作，历史记录可整体撤销。
       const sourceDimensions = command.sourceDimensions;

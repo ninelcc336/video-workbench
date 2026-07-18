@@ -114,6 +114,21 @@ describe("命令式编辑器核心", () => {
     expect(store.getSnapshot().effectClips).toEqual([effectClip]);
   });
 
+  it("重置编辑项目会清空时间轴并恢复默认画布，且可通过撤销恢复", () => {
+    const store = createEditorStore(createEmptyProject({ width: 1920, height: 1080, fps: 30 }));
+    store.dispatch({ type: "add-video-clip", clip: videoClip });
+    store.dispatch({ type: "add-effect-clip", clip: effectClip });
+
+    store.dispatch({ type: "reset-project" });
+
+    expect(store.getSnapshot()).toEqual(createEmptyProject());
+
+    store.undo();
+    expect(store.getSnapshot().videoClips).toEqual([videoClip]);
+    expect(store.getSnapshot().effectClips).toEqual([effectClip]);
+    expect(store.getSnapshot().settings).toEqual({ width: 1920, height: 1080, fps: 30 });
+  });
+
   it("可以添加、移动、修改参数和删除特效片段", () => {
     const store = createStore();
 
