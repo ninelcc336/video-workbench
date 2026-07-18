@@ -126,7 +126,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       // 中文注释：预览也使用工作区稳定地址，关闭页面后项目仍可由素材 ID 恢复。
       setMediaSources((current) => ({ ...current, [asset.id]: `/api/workspace/media/${encodeURIComponent(asset.id)}` }));
       setMissingMediaIds((current) => current.filter((mediaId) => mediaId !== asset.id));
-      dispatch({ type: "add-video-clip", clip });
+      // 中文注释：素材原始尺寸随首次导入命令传入，由领域层安全决定是否匹配横屏编辑项目。
+      dispatch({ type: "add-video-clip", clip, sourceDimensions: { width: asset.width, height: asset.height } });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "视频素材导入失败");
     }

@@ -44,6 +44,76 @@ describe("命令式编辑器核心", () => {
     expect(store.getSnapshot().videoClips).toEqual([]);
   });
 
+  it("首个横屏视频片段会把空编辑项目切换为横屏画布和导出规格", () => {
+    const store = createStore();
+
+    store.dispatch({
+      type: "add-video-clip",
+      clip: videoClip,
+      sourceDimensions: { width: 1920, height: 1080 },
+    });
+
+    expect(store.getSnapshot().settings).toEqual({ width: 1920, height: 1080, fps: 30 });
+    expect(store.getSnapshot().export).toEqual({ format: "mp4", width: 1920, height: 1080, fps: 30 });
+  });
+
+  it.each([
+    ["4:3", { width: 1440, height: 1080 }, { width: 1920, height: 1440 }],
+    ["21:9", { width: 2560, height: 1080 }, { width: 1920, height: 810 }],
+  ])("首个%s横屏视频片段会保留素材比例创建画布和导出规格", (_ratio, sourceDimensions, expectedSettings) => {
+    const store = createStore();
+
+    store.dispatch({
+      type: "add-video-clip",
+      clip: videoClip,
+      sourceDimensions,
+    });
+
+    expect(store.getSnapshot().settings).toEqual({ ...expectedSettings, fps: 30 });
+    expect(store.getSnapshot().export).toEqual({ format: "mp4", ...expectedSettings, fps: 30 });
+  });
+
+  it.each([
+    ["竖屏", { width: 1080, height: 1920 }],
+    ["方形", { width: 1080, height: 1080 }],
+  ])("首个%s视频片段保留默认项目规格", (_orientation, sourceDimensions) => {
+    const store = createStore();
+
+    store.dispatch({ type: "add-video-clip", clip: videoClip, sourceDimensions });
+
+    expect(store.getSnapshot().settings).toEqual({ width: 1080, height: 1920, fps: 30 });
+    expect(store.getSnapshot().export).toEqual({ format: "mp4", width: 1080, height: 1920, fps: 30 });
+  });
+
+  it("主视频轨道已有视频片段时导入横屏视频不会重写既有项目规格", () => {
+    const store = createStore();
+    store.dispatch({ type: "add-video-clip", clip: { ...videoClip, id: "existing-video" } });
+
+    store.dispatch({
+      type: "add-video-clip",
+      clip: { ...videoClip, id: "imported-video", fromFrame: 30 },
+      sourceDimensions: { width: 1920, height: 1080 },
+    });
+
+    expect(store.getSnapshot().settings).toEqual({ width: 1080, height: 1920, fps: 30 });
+    expect(store.getSnapshot().export).toEqual({ format: "mp4", width: 1080, height: 1920, fps: 30 });
+  });
+
+  it("主视频轨道为空时导入横屏视频会忽略已有特效并重新匹配画布", () => {
+    const store = createStore();
+    store.dispatch({ type: "add-effect-clip", clip: effectClip });
+
+    store.dispatch({
+      type: "add-video-clip",
+      clip: videoClip,
+      sourceDimensions: { width: 1920, height: 1080 },
+    });
+
+    expect(store.getSnapshot().settings).toEqual({ width: 1920, height: 1080, fps: 30 });
+    expect(store.getSnapshot().export).toEqual({ format: "mp4", width: 1920, height: 1080, fps: 30 });
+    expect(store.getSnapshot().effectClips).toEqual([effectClip]);
+  });
+
   it("可以添加、移动、修改参数和删除特效片段", () => {
     const store = createStore();
 

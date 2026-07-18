@@ -31,7 +31,7 @@ afterEach(async () => {
 
 describe("Remotion 渲染适配器", () => {
   it("没有环境变量时自动 bundle，并将真实媒体路径传入选择组合和渲染", async () => {
-    const project = createEmptyProject();
+    const project = createEmptyProject({ width: 1920, height: 1080, fps: 30 });
     project.videoClips.push({
       id: "video-1",
       mediaId: "media-1",
@@ -64,11 +64,15 @@ describe("Remotion 渲染适配器", () => {
       timeoutInMilliseconds: 1234,
     }));
     const selectedCall = (selectComposition as unknown as { mock: { calls: unknown[][] } }).mock.calls[0] as [{ inputProps: { project: unknown; mediaSources: Record<string, string> } }];
-    const renderedCall = (renderMedia as unknown as { mock: { calls: unknown[][] } }).mock.calls[0] as [{ inputProps: { project: unknown; mediaSources: Record<string, string> } }];
+    const renderedCall = (renderMedia as unknown as { mock: { calls: unknown[][] } }).mock.calls[0] as [{
+      inputProps: { project: unknown; mediaSources: Record<string, string> };
+      composition: { width: number; height: number; fps: number };
+    }];
     const selectedInputProps = selectedCall[0].inputProps;
     const renderedInputProps = renderedCall[0].inputProps;
     expect(selectedInputProps.project).toEqual(project);
     expect(selectedInputProps.mediaSources["media-1"]).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/media\//);
     expect(renderedInputProps).toEqual(selectedInputProps);
+    expect(renderedCall[0].composition).toMatchObject({ width: 1920, height: 1080, fps: 30 });
   });
 });

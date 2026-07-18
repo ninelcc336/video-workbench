@@ -29,6 +29,13 @@ describe("预览画布尺寸", () => {
     expect(getPreviewDeviceStyle(project).aspectRatio).toBe("1920 / 1080");
   });
 
+  it("预览外壳保留非 16:9 横屏编辑项目的比例", () => {
+    const project = createEmptyProject();
+    project.settings = { width: 1920, height: 1440, fps: 30 };
+
+    expect(getPreviewDeviceStyle(project).aspectRatio).toBe("1920 / 1440");
+  });
+
   it("明确区分横屏、竖屏和方形项目", () => {
     expect(getPreviewOrientation({ width: 1920, height: 1080 })).toBe("横屏");
     expect(getPreviewOrientation({ width: 1080, height: 1920 })).toBe("竖屏");

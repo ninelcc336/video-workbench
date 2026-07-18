@@ -25,6 +25,17 @@ const renderStatusLabels: Record<RenderJobStatus, string> = {
   cancelled: "已取消",
 };
 
+/** 中文注释：非标准项目比例需要作为对话框的当前项目选项保留，不能强行映射到标准预设。 */
+type ExportDialogPresetName = ExportPresetName | "project";
+
+/** 中文注释：对话框打开时从项目导出规格还原预设，避免 UI 覆盖已匹配的横屏项目。 */
+function getExportPresetName(project: EditProject): ExportDialogPresetName {
+  const preset = Object.entries(EXPORT_PRESETS).find(([, dimensions]) => (
+    dimensions.width === project.export.width && dimensions.height === project.export.height
+  ));
+  return preset ? preset[0] as ExportPresetName : "project";
+}
+
 /** 中文注释：导出对话框只提交规格，实际渲染沿用既有 /api/render 路由。 */
 export function ExportDialog({
   open,
@@ -48,8 +59,9 @@ function ExportDialogContent({
   onSubmit,
   onClose,
 }: Omit<ExportDialogProps, "open">) {
-  const [selectedPreset, setSelectedPreset] = useState<ExportPresetName>("vertical");
-  const submit = () => onSubmit(buildExportSettings(selectedPreset, project));
+  const [selectedPreset, setSelectedPreset] = useState<ExportDialogPresetName>(() => getExportPresetName(project));
+  // 中文注释：非标准比例没有对应预设时，提交项目自身规格，避免自动横屏比例被导出表单覆盖。
+  const submit = () => onSubmit(selectedPreset === "project" ? project.export : buildExportSettings(selectedPreset, project));
 
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
@@ -59,8 +71,9 @@ function ExportDialogContent({
         <select
           value={selectedPreset}
           aria-label="画面规格"
-          onChange={(event) => setSelectedPreset(event.target.value as ExportPresetName)}
+          onChange={(event) => setSelectedPreset(event.target.value as ExportDialogPresetName)}
         >
+          {selectedPreset === "project" && <option value="project">当前项目（{project.export.width}×{project.export.height}）</option>}
           {Object.entries(EXPORT_PRESETS).map(([value, preset]) => (
             <option key={value} value={value}>{preset.label}</option>
           ))}

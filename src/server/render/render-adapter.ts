@@ -45,6 +45,10 @@ export const renderProject: RenderAdapter = async (project, outputPath, options)
       composition: {
         ...composition,
         durationInFrames: getCompositionDurationInFrames(project),
+        // 中文注释：注册组合只提供默认值，实际导出规格必须跟随编辑项目，才能与浏览器预览一致。
+        fps: project.settings.fps,
+        height: project.settings.height,
+        width: project.settings.width,
       },
       inputProps,
       outputLocation: outputPath,

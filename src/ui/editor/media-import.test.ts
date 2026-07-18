@@ -15,13 +15,21 @@ describe("浏览器素材导入", () => {
     });
 
     const file = new File(["真实视频字节"], "旅行片段.mp4", { type: "video/mp4" });
-    await expect(importMediaFile(file, fetcher)).resolves.toMatchObject({ id: "media-1" });
+    const readDimensions = vi.fn(async () => ({ width: 1920, height: 1080 }));
+    await expect(importMediaFile(file, fetcher, readDimensions)).resolves.toMatchObject({
+      id: "media-1",
+      width: 1920,
+      height: 1080,
+    });
+    expect(readDimensions).toHaveBeenCalledWith(file);
     expect(fetcher).toHaveBeenCalledWith("/api/workspace/media", expect.any(Object));
   });
 
   it("服务端拒绝时返回中文错误且不产生临时素材引用", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ message: "文件格式不支持" }), { status: 400 }));
 
-    await expect(importMediaFile(new File(["x"], "bad.txt"), fetcher)).rejects.toThrow("文件格式不支持");
+    await expect(
+      importMediaFile(new File(["x"], "bad.txt"), fetcher, async () => ({ width: 1080, height: 1920 })),
+    ).rejects.toThrow("文件格式不支持");
   });
 });
