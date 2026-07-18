@@ -20,6 +20,16 @@ export type PreviewSize = {
   height: number;
 };
 
+export type PreviewOrientation = "横屏" | "竖屏" | "方形";
+
+/** 中文注释：方向标签跟随项目画布设置，横屏项目不会再被 UI 默认文案误导成竖屏。 */
+export function getPreviewOrientation(
+  settings: Pick<EditProject["settings"], "width" | "height">,
+): PreviewOrientation {
+  if (settings.width === settings.height) return "方形";
+  return settings.width > settings.height ? "横屏" : "竖屏";
+}
+
 /** 中文注释：按 contain 规则计算预览画布尺寸，确保始终完整显示且不改变项目比例。 */
 export function getContainSize(
   containerWidth: number,
@@ -114,6 +124,7 @@ export function PreviewCanvas({
   onFrameChange,
 }: PreviewCanvasProps) {
   const hasContent = project.videoClips.length > 0 || project.effectClips.length > 0;
+  const orientation = getPreviewOrientation(project.settings);
   const stageRef = useRef<HTMLDivElement>(null);
   const stageSize = usePreviewStageSize(stageRef);
   const deviceSize = stageSize
@@ -127,7 +138,11 @@ export function PreviewCanvas({
 
   return (
     <section aria-label="视频预览" className="preview-panel">
-      <div className="preview-panel__toolbar"><span className="eyebrow">实时预览</span><span className="frame-readout">帧 {currentFrame} / {project.settings.fps}fps</span></div>
+      <div className="preview-panel__toolbar">
+        <span className="eyebrow">实时预览</span>
+        <span aria-label={`画布方向：${orientation}`} className="preview-orientation">{orientation}</span>
+        <span className="frame-readout">帧 {currentFrame} / {project.settings.fps}fps</span>
+      </div>
       <div className="preview-stage" ref={stageRef}>
       <div className="preview-device" style={getPreviewDeviceStyle(project, deviceSize)}>
         <PreviewPlayer
