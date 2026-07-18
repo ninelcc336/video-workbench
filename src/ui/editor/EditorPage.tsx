@@ -8,6 +8,8 @@ import { applyVideoTemplate, createVideoTemplate, type VideoTemplate } from "../
 import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
 import type { MediaSources } from "../../remotion/media";
 import type { ExportSettings } from "../../domain/project/model";
+import { getCompositionDurationInFrames } from "../../remotion/EditorComposition";
+import { clampPreviewFrame } from "../preview/PreviewPlayer";
 import { createAutosaveController, SaveIndicator, useAutosaveState } from "./SaveIndicator";
 import { ExportDialog } from "./ExportDialog";
 import { RenderStatus } from "./RenderStatus";
@@ -60,6 +62,11 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setProject(snapshot);
     autosave.schedule(snapshot);
   }), [autosave, store]);
+
+  useEffect(() => {
+    // 中文注释：项目时长变化后同步收紧播放头，避免 Player 访问项目末尾之外的帧。
+    setCurrentFrame((frame) => clampPreviewFrame(frame, getCompositionDurationInFrames(project)));
+  }, [project]);
 
   const dispatch = (command: EditorCommand) => {
     try {
@@ -125,6 +132,10 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
 
   const selectClip = (clipId: string) => setSelectedClipId(clipId);
 
+  const seekFrame = (frame: number) => {
+    setCurrentFrame(clampPreviewFrame(frame, getCompositionDurationInFrames(project)));
+  };
+
   const moveClip = (clipId: string, kind: ClipKind, fromFrame: number) => {
     dispatch(kind === "video" ? { type: "move-video-clip", clipId, fromFrame } : { type: "move-effect-clip", clipId, fromFrame });
   };
@@ -187,10 +198,10 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <div className="editor-main-grid">
         <aside className="left-sidebar panel"><MediaBin missingMediaIds={missingMediaIds} onImportMedia={importMedia} project={project} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
-        <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} project={project} selectedClip={selectedEffectClip} />
+        <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} onFrameChange={seekFrame} project={project} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} project={project} selectedClip={selectedEffectClip} />
       </div>
-      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={setCurrentFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
+      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />
       <PresetDialog onApply={(preset) => { if (selectedEffectClip) applyPreset(store, preset, selectedEffectClip.id); }} onClose={() => setPresetOpen(false)} onSave={savePreset} open={presetOpen} presets={presets} templateName={selectedTemplateName} />

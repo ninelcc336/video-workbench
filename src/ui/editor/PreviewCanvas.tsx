@@ -12,6 +12,7 @@ export type PreviewCanvasProps = {
   selectedClip?: EffectClip | null;
   paramsSnapshot?: Record<string, unknown>;
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
+  onFrameChange?: (frame: number) => void;
 };
 
 export type PreviewSize = {
@@ -110,6 +111,7 @@ export function PreviewCanvas({
   selectedClip = null,
   paramsSnapshot,
   onChangeParams,
+  onFrameChange,
 }: PreviewCanvasProps) {
   const hasContent = project.videoClips.length > 0 || project.effectClips.length > 0;
   const stageRef = useRef<HTMLDivElement>(null);
@@ -128,7 +130,12 @@ export function PreviewCanvas({
       <div className="preview-panel__toolbar"><span className="eyebrow">实时预览</span><span className="frame-readout">帧 {currentFrame} / {project.settings.fps}fps</span></div>
       <div className="preview-stage" ref={stageRef}>
       <div className="preview-device" style={getPreviewDeviceStyle(project, deviceSize)}>
-        <PreviewPlayer mediaSources={mediaSources} project={project} />
+        <PreviewPlayer
+          currentFrame={currentFrame}
+          mediaSources={mediaSources}
+          onFrameChange={onFrameChange}
+          project={project}
+        />
         <CanvasSelection
           onChangeParams={onChangeParams}
           paramsSnapshot={paramsSnapshot}
