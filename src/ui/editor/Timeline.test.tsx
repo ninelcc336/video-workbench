@@ -43,7 +43,7 @@ describe("基础时间轴", () => {
     render(<Timeline project={createTimelineProject()} selectedClipId={null} />);
 
     expect(screen.getByText("主视频轨道")).toBeTruthy();
-    expect(screen.getByText("特效轨道")).toBeTruthy();
+    expect(screen.getByText("特效轨道 1")).toBeTruthy();
     expect(screen.getByText("弹入卡片")).toBeTruthy();
   });
 
@@ -132,7 +132,7 @@ describe("基础时间轴", () => {
       />,
     );
 
-    const effectTrack = screen.getByText("特效轨道").parentElement?.querySelector(".timeline-track__content") as HTMLElement;
+    const effectTrack = screen.getByText("特效轨道 1").parentElement?.querySelector(".timeline-track__content") as HTMLElement;
     expect(effectTrack).toBeTruthy();
     (effectTrack as HTMLElement).getBoundingClientRect = () => ({
       bottom: 100,
@@ -151,6 +151,22 @@ describe("基础时间轴", () => {
     fireEvent(effectTrack, dropEvent);
 
     expect(onDropTemplate).toHaveBeenCalledWith(template, 25);
+  });
+
+  it("重叠特效显示在可分别操作的多条轨道", () => {
+    const project = createTimelineProject();
+    project.effectClips.push({
+      ...project.effectClips[0],
+      id: "effect-2",
+      fromFrame: 50,
+      durationInFrames: 40,
+    });
+
+    render(<Timeline project={project} selectedClipId={null} />);
+
+    expect(screen.getByText("特效轨道 1")).toBeTruthy();
+    expect(screen.getByText("特效轨道 2")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /特效片段/ })).toHaveLength(2);
   });
 });
 // 中文注释：验证时间轴显示和片段操作事件。

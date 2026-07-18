@@ -21,6 +21,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { TemplateLibrary } from "./TemplateLibrary";
 import { Timeline, type ClipKind } from "./Timeline";
 import { importMediaFile } from "./media-import";
+import { getAvailableEffectTrackId } from "./effect-track-layout";
 import "./editor.css";
 
 export type EditorPageProps = {
@@ -86,7 +87,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       id: createId("effect"),
       templateId: template.id,
       templateVersion: template.version,
-      trackId: "effects-1",
+      trackId: getAvailableEffectTrackId(project.effectClips, currentFrame, template.defaultDurationInFrames),
       fromFrame: currentFrame,
       durationInFrames: template.defaultDurationInFrames,
       params: getTemplateDefaultParams(template),
@@ -96,12 +97,13 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   };
 
   const addTemplateAtFrame = (template: ReturnType<typeof getTemplate>, frame: number) => {
+    const fromFrame = Math.max(0, Math.round(frame));
     const clip: EffectClip = {
       id: createId("effect"),
       templateId: template.id,
       templateVersion: template.version,
-      trackId: "effects-1",
-      fromFrame: Math.max(0, Math.round(frame)),
+      trackId: getAvailableEffectTrackId(project.effectClips, fromFrame, template.defaultDurationInFrames),
+      fromFrame,
       durationInFrames: template.defaultDurationInFrames,
       params: getTemplateDefaultParams(template),
     };

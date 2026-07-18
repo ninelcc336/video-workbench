@@ -3,6 +3,7 @@ import type { DragEvent } from "react";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
 import { getTemplate } from "../../domain/templates/registry";
 import { getDropFrame, readTemplateDragData } from "./drag-and-drop";
+import { layoutEffectTracks } from "./effect-track-layout";
 import { TimelineClip, type TimelineClipKind } from "./TimelineClip";
 import type { TemplateDefinition } from "../../domain/templates/types";
 
@@ -85,6 +86,13 @@ export function Timeline({
 }: TimelineProps) {
   const duration = clipEnd(project);
   const timelineWidth = duration * pixelsPerFrame;
+  const effectTracks = useMemo(
+    () => layoutEffectTracks(project.effectClips),
+    [project.effectClips],
+  );
+  const visibleEffectTracks = effectTracks.length > 0
+    ? effectTracks
+    : [{ id: "effects-1", clips: [] }];
   const rulerMarks = useMemo(
     () => Array.from({ length: Math.ceil(duration / project.settings.fps) + 1 }, (_, index) => index),
     [duration, project.settings.fps],
@@ -183,31 +191,33 @@ export function Timeline({
               {project.videoClips.length === 0 && <span className="timeline-empty">从左侧导入视频素材</span>}
             </div>
           </div>
-          <div className="timeline-track">
-            <div className="timeline-track__label">特效轨道</div>
-            <div
-              className="timeline-track__content"
-              onDragOver={handleTemplateDragOver}
-              onDrop={handleTemplateDrop}
-            >
-              {project.effectClips.map((clip) => (
-                <TimelineClip
-                  clip={clip}
-                  durationInFrames={clip.durationInFrames}
-                  fromFrame={clip.fromFrame}
-                  key={clip.id}
-                  kind="effect"
-                  label={clipLabel(clip, "effect")}
-                  onMove={(clipId, fromFrame) => move(clipId, "effect", fromFrame)}
-                  onResize={(clipId, fromFrame, durationInFrames) => resize(clipId, "effect", fromFrame, durationInFrames)}
-                  onSelect={select}
-                  pixelsPerFrame={pixelsPerFrame}
-                  selected={selectedClipId === clip.id}
-                />
-              ))}
-              {project.effectClips.length === 0 && <span className="timeline-empty">点击模板库中的“添加”放入特效</span>}
+          {visibleEffectTracks.map((track, trackIndex) => (
+            <div className="timeline-track" key={track.id}>
+              <div className="timeline-track__label">特效轨道 {trackIndex + 1}</div>
+              <div
+                className="timeline-track__content"
+                onDragOver={handleTemplateDragOver}
+                onDrop={handleTemplateDrop}
+              >
+                {track.clips.map((clip) => (
+                  <TimelineClip
+                    clip={clip}
+                    durationInFrames={clip.durationInFrames}
+                    fromFrame={clip.fromFrame}
+                    key={clip.id}
+                    kind="effect"
+                    label={clipLabel(clip, "effect")}
+                    onMove={(clipId, fromFrame) => move(clipId, "effect", fromFrame)}
+                    onResize={(clipId, fromFrame, durationInFrames) => resize(clipId, "effect", fromFrame, durationInFrames)}
+                    onSelect={select}
+                    pixelsPerFrame={pixelsPerFrame}
+                    selected={selectedClipId === clip.id}
+                  />
+                ))}
+                {track.clips.length === 0 && <span className="timeline-empty">点击模板库中的“添加”放入特效</span>}
+              </div>
             </div>
-          </div>
+          ))}
           <span className="timeline-playhead" style={{ left: currentFrame * pixelsPerFrame }} />
         </div>
       </div>
