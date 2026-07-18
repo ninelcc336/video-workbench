@@ -28,6 +28,24 @@ button { cursor: pointer; }
 .export-button span { margin-left: 5px; font-size: 14px; }
 .editor-notice { gap: 10px; position: absolute; z-index: 5; top: 86px; left: 50%; transform: translateX(-50%); padding: 10px 13px; border: 1px solid #d97756; border-radius: 9px; color: #ffd9cd; background: #3b231e; box-shadow: 0 8px 30px #0008; font-size: 12px; }
 .editor-notice button { border: 0; color: inherit; background: transparent; font-size: 16px; }
+/* 中文注释：重置弹窗以半透明遮罩隔离危险操作，并让荧光确认按钮保持编辑器的视觉记忆点。 */
+.reset-dialog__overlay { position: fixed; z-index: 30; inset: 0; background: rgb(3 5 4 / 72%); backdrop-filter: blur(8px); animation: reset-dialog-fade-in .18s ease-out; }
+.reset-dialog__content { position: fixed; z-index: 31; top: 50%; left: 50%; display: grid; width: min(420px, calc(100vw - 36px)); gap: 18px; transform: translate(-50%, -50%); border: 1px solid #65744d; border-radius: 16px; padding: 24px; outline: none; color: #edf1e9; background: radial-gradient(circle at 87% 0%, #e3f26a25, transparent 35%), #171b18; box-shadow: 0 26px 100px #000c, inset 0 1px #ffffff0d; animation: reset-dialog-rise-in .22s cubic-bezier(.2, .8, .2, 1); }
+.reset-dialog__signal { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid #d8e87866; border-radius: 12px; color: #1a1d16; background: #e3f26a; box-shadow: 0 0 28px #e3f26a3d; font-size: 22px; font-weight: 800; }
+.reset-dialog__copy { display: grid; gap: 8px; }
+.reset-dialog__eyebrow { margin: 0; color: #cbd96d; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.reset-dialog__copy h2 { margin: 0; letter-spacing: -.03em; font-size: 21px; }
+.reset-dialog__copy p:not(.reset-dialog__eyebrow) { margin: 0; color: #a5afa5; font-size: 12px; line-height: 1.75; }
+.reset-dialog__actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 2px; }
+.reset-dialog__cancel, .reset-dialog__confirm { border-radius: 9px; padding: 9px 13px; font-size: 12px; font-weight: 800; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+.reset-dialog__cancel { border: 1px solid #485148; color: #c3cac1; background: #202620; }
+.reset-dialog__confirm { border: 1px solid #e3f26a; color: #151712; background: #e3f26a; box-shadow: 0 5px 18px #e3f26a2b; }
+.reset-dialog__cancel:hover, .reset-dialog__confirm:hover { transform: translateY(-1px); }
+.reset-dialog__cancel:hover { border-color: #8c988e; background: #2a312a; }
+.reset-dialog__confirm:hover { background: #f1ff99; }
+@keyframes reset-dialog-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes reset-dialog-rise-in { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .reset-dialog__overlay, .reset-dialog__content { animation: none; } }
 .editor-main-grid { flex: 1; min-width: 0; min-height: 0; display: grid; overflow: hidden; grid-template-columns: 280px minmax(360px, 1fr) 288px; }
 .panel { min-width: 0; min-height: 0; background: #171a18; }
 .left-sidebar { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid #2a2e2b; }

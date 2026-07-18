@@ -57,18 +57,19 @@ describe("编辑项目的素材导入", () => {
 
   it("确认重置后清空时间轴、恢复默认画布并将播放头归零", async () => {
     const store = createLandscapeProjectStore();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<EditorPage store={store} />);
     fireEvent.click(screen.getByRole("button", { name: "定位播放头" }));
     expect(screen.getByTestId("preview-canvas").dataset.currentFrame).toBe("10");
 
     fireEvent.click(screen.getByRole("button", { name: "重置编辑项目" }));
+    // 中文注释：危险操作先在页面内显示可访问的确认弹窗，避免原生确认框打断编辑器视觉体验。
+    expect(screen.getByRole("alertdialog", { name: "重置此编辑项目？" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
 
     await waitFor(() => {
       expect(store.getSnapshot()).toEqual(createEmptyProject());
     });
-    expect(window.confirm).toHaveBeenCalledOnce();
     expect(screen.getByTestId("preview-canvas").dataset.currentFrame).toBe("0");
 
     // 中文注释：重置属于可撤销的编辑操作，撤销后应同时回到重置前的项目与播放位置。
@@ -88,12 +89,12 @@ describe("编辑项目的素材导入", () => {
 
   it("取消重置确认时保留当前项目和播放头", () => {
     const store = createLandscapeProjectStore();
-    vi.spyOn(window, "confirm").mockReturnValue(false);
 
     render(<EditorPage store={store} />);
     // 中文注释：取消确认属于无副作用路径，既不能清空时间轴，也不能改变页面播放头。
     fireEvent.click(screen.getByRole("button", { name: "定位播放头" }));
     fireEvent.click(screen.getByRole("button", { name: "重置编辑项目" }));
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
     expect(store.getSnapshot().videoClips).toHaveLength(1);
     expect(screen.getByTestId("preview-canvas").dataset.currentFrame).toBe("10");

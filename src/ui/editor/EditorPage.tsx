@@ -12,6 +12,7 @@ import { getCompositionDurationInFrames } from "../../remotion/EditorComposition
 import { clampPreviewFrame } from "../preview/PreviewPlayer";
 import { createAutosaveController, SaveIndicator, useAutosaveState } from "./SaveIndicator";
 import { ExportDialog } from "./ExportDialog";
+import { ResetProjectDialog } from "./ResetProjectDialog";
 import { RenderStatus } from "./RenderStatus";
 import { PresetDialog } from "./PresetDialog";
 import { VideoTemplateDialog } from "./VideoTemplateDialog";
@@ -56,6 +57,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [renderSnapshot, setRenderSnapshot] = useState<import("../../server/render/render-job").RenderJobSnapshot | null>(null);
   const [presetOpen, setPresetOpen] = useState(false);
   const [videoTemplateOpen, setVideoTemplateOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [videoTemplates, setVideoTemplates] = useState<VideoTemplate[]>([]);
   // 中文注释：只记录最近一次重置前的播放头，以便紧接着撤销重置时恢复用户正在查看的位置。
@@ -144,7 +146,6 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   };
 
   const resetProject = () => {
-    if (!window.confirm("确定重置编辑项目吗？时间轴和画布设置将恢复初始状态，本地视频文件不会删除。")) return;
     // 中文注释：项目快照通过 Store 重置并进入撤销历史；页面级临时选区和播放状态同步归零。
     frameBeforeProjectReset.current = currentFrame;
     dispatch({ type: "reset-project" });
@@ -219,7 +220,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={resetProject} title="重置项目" type="button">↺</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置项目" type="button">↺</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
       </header>
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <div className="editor-main-grid">
@@ -229,6 +230,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       </div>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
+      <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />
       <PresetDialog onApply={(preset) => { if (selectedEffectClip) applyPreset(store, preset, selectedEffectClip.id); }} onClose={() => setPresetOpen(false)} onSave={savePreset} open={presetOpen} presets={presets} templateName={selectedTemplateName} />
       <VideoTemplateDialog effectCount={project.effectClips.length} onApply={(template) => { applyVideoTemplate(store, template, currentFrame); setVideoTemplateOpen(false); }} onClose={() => setVideoTemplateOpen(false)} onSave={saveVideoTemplate} open={videoTemplateOpen} template={videoTemplates.at(-1)} />
