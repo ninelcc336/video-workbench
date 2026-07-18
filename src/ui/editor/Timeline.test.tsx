@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject } from "../../domain/project/model";
 import { getTemplateDefaultParams, getTemplate } from "../../domain/templates/registry";
+import { TEMPLATE_DRAG_MIME } from "./drag-and-drop";
 import { Timeline, clampClipRange, pixelsToFrames } from "./Timeline";
 
 afterEach(cleanup);
@@ -109,6 +110,47 @@ describe("基础时间轴", () => {
     fireEvent.keyDown(window, { key: "Delete" });
 
     expect(onDeleteClip).toHaveBeenCalledWith("effect-1", "effect");
+  });
+
+  it("接收模板拖放并把时间轴位置换算成特效起始帧", () => {
+    const onDropTemplate = vi.fn();
+    const template = getTemplate("bubble-decoration", 1);
+    const values = new Map<string, string>([
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ templateId: template.id, templateVersion: template.version })],
+    ]);
+    const dataTransfer = {
+      dropEffect: "none",
+      getData: (type: string) => values.get(type) ?? "",
+    } as unknown as DataTransfer;
+
+    render(
+      <Timeline
+        onDropTemplate={onDropTemplate}
+        pixelsPerFrame={10}
+        project={createTimelineProject()}
+        selectedClipId={null}
+      />,
+    );
+
+    const effectTrack = screen.getByText("特效轨道").parentElement?.querySelector(".timeline-track__content") as HTMLElement;
+    expect(effectTrack).toBeTruthy();
+    (effectTrack as HTMLElement).getBoundingClientRect = () => ({
+      bottom: 100,
+      height: 56,
+      left: 100,
+      right: 1100,
+      top: 0,
+      width: 1000,
+      x: 100,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    const dropEvent = createEvent.drop(effectTrack as HTMLElement, { dataTransfer });
+    Object.defineProperty(dropEvent, "clientX", { value: 350 });
+    fireEvent(effectTrack, dropEvent);
+
+    expect(onDropTemplate).toHaveBeenCalledWith(template, 25);
   });
 });
 // 中文注释：验证时间轴显示和片段操作事件。

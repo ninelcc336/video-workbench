@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from "react";
+import type { DragEvent } from "react";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
 import { getTemplate } from "../../domain/templates/registry";
+import { getDropFrame, readTemplateDragData } from "./drag-and-drop";
 import { TimelineClip, type TimelineClipKind } from "./TimelineClip";
+import type { TemplateDefinition } from "../../domain/templates/types";
 
 export type ClipKind = TimelineClipKind;
 
@@ -20,6 +23,7 @@ export type TimelineProps = {
   ) => void;
   onDeleteClip?: (clipId: string, kind: ClipKind) => void;
   onSeekFrame?: (frame: number) => void;
+  onDropTemplate?: (template: TemplateDefinition, frame: number) => void;
 };
 
 /** 中文注释：像素到帧的换算统一向最近整数帧吸附，保证时间轴与项目模型一致。 */
@@ -77,6 +81,7 @@ export function Timeline({
   onResizeClip,
   onDeleteClip,
   onSeekFrame,
+  onDropTemplate,
 }: TimelineProps) {
   const duration = clipEnd(project);
   const timelineWidth = duration * pixelsPerFrame;
@@ -106,6 +111,31 @@ export function Timeline({
     fromFrame: number,
     durationInFrames: number,
   ) => onResizeClip?.(clipId, kind, fromFrame, durationInFrames);
+
+  const handleTemplateDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!readTemplateDragData(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleTemplateDrop = (event: DragEvent<HTMLDivElement>) => {
+    const dragData = readTemplateDragData(event.dataTransfer);
+    if (!dragData) return;
+    event.preventDefault();
+
+    try {
+      const template = getTemplate(dragData.templateId, dragData.templateVersion);
+      const frame = getDropFrame(
+        { clientX: event.clientX },
+        event.currentTarget,
+        pixelsPerFrame,
+      );
+      // 中文注释：放置位置由时间轴换算，页面层负责创建片段并写入 EditorStore。
+      onDropTemplate?.(template, frame);
+    } catch {
+      // 中文注释：外部拖放或已失效模板不会破坏时间轴当前项目。
+    }
+  };
 
   return (
     <section aria-label="时间轴" className="timeline-panel">
@@ -155,7 +185,11 @@ export function Timeline({
           </div>
           <div className="timeline-track">
             <div className="timeline-track__label">特效轨道</div>
-            <div className="timeline-track__content">
+            <div
+              className="timeline-track__content"
+              onDragOver={handleTemplateDragOver}
+              onDrop={handleTemplateDrop}
+            >
               {project.effectClips.map((clip) => (
                 <TimelineClip
                   clip={clip}

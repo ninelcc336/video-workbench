@@ -201,7 +201,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} onFrameChange={seekFrame} project={project} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} project={project} selectedClip={selectedEffectClip} />
       </div>
-      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
+      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />
       <PresetDialog onApply={(preset) => { if (selectedEffectClip) applyPreset(store, preset, selectedEffectClip.id); }} onClose={() => setPresetOpen(false)} onSave={savePreset} open={presetOpen} presets={presets} templateName={selectedTemplateName} />
