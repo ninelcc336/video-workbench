@@ -14,6 +14,10 @@ export type PreviewCanvasProps = {
   currentFrame?: number;
   selectedClip?: EffectClip | null;
   paramsSnapshot?: Record<string, unknown>;
+  /** 中文注释：拖动期间报告临时参数，由页面层统一生成过程预览项目。 */
+  onPreviewParams?: (clipId: string, params: Record<string, unknown>) => void;
+  /** 中文注释：画布手势结束后清除页面层临时项目。 */
+  onPreviewEnd?: () => void;
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
   onFrameChange?: (frame: number) => void;
 };
@@ -123,6 +127,8 @@ export function PreviewCanvas({
   currentFrame = 0,
   selectedClip = null,
   paramsSnapshot,
+  onPreviewParams,
+  onPreviewEnd,
   onChangeParams,
   onFrameChange,
 }: PreviewCanvasProps) {
@@ -160,6 +166,8 @@ export function PreviewCanvas({
               project={project}
             />
             <CanvasSelection
+              onPreviewParams={onPreviewParams}
+              onPreviewEnd={onPreviewEnd}
               onChangeParams={onChangeParams}
               paramsSnapshot={paramsSnapshot}
               project={project}

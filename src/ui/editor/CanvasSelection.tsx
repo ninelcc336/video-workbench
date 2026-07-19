@@ -7,12 +7,15 @@ type CanvasSize = { width: number; height: number };
 type ResizeHandle = "nw" | "ne" | "sw" | "se";
 
 type DragState = {
+  clipId: string;
   mode: "move" | ResizeHandle;
   startX: number;
   startY: number;
   startPosition: CanvasPoint;
   startSize: CanvasSize;
   canvasRect: DOMRect;
+  currentPosition?: CanvasPoint;
+  currentResizeValues?: { position: CanvasPoint; size: CanvasSize };
 };
 
 export type CanvasSelectionProps = {
@@ -20,6 +23,10 @@ export type CanvasSelectionProps = {
   selectedClip: EffectClip | null;
   /** 中文注释：参数快照可由预览和属性面板共同传入，确保两处显示完全一致。 */
   paramsSnapshot?: Record<string, unknown>;
+  /** 中文注释：拖动期间只报告临时参数，由页面层生成过程预览项目。 */
+  onPreviewParams?: (clipId: string, params: Record<string, unknown>) => void;
+  /** 中文注释：手势结束时清除临时项目，即使最终没有产生正式参数变化。 */
+  onPreviewEnd?: () => void;
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
 };
 
@@ -112,6 +119,8 @@ export function CanvasSelection({
   project,
   selectedClip,
   paramsSnapshot,
+  onPreviewParams,
+  onPreviewEnd,
   onChangeParams,
 }: CanvasSelectionProps) {
   const dragRef = useRef<DragState | null>(null);
@@ -121,45 +130,52 @@ export function CanvasSelection({
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       const drag = dragRef.current;
-      if (!drag || !selectedClip) return;
+      if (!drag) return;
 
       if (drag.mode === "move") {
         const nextPosition = {
-          x: clamp(
+          x: roundUnit(clamp(
             drag.startPosition.x + (event.clientX - drag.startX) / Math.max(1, drag.canvasRect.width),
             drag.startSize.width / 2,
             1 - drag.startSize.width / 2,
-          ),
-          y: clamp(
+          )),
+          y: roundUnit(clamp(
             drag.startPosition.y + (event.clientY - drag.startY) / Math.max(1, drag.canvasRect.height),
             drag.startSize.height / 2,
             1 - drag.startSize.height / 2,
-          ),
+          )),
         };
-        dragRef.current = { ...drag, currentPosition: nextPosition } as DragState & { currentPosition: CanvasPoint };
+        dragRef.current = { ...drag, currentPosition: nextPosition };
+        // 中文注释：移动期间只发出临时位置，让页面层驱动过程预览而不写入历史。
+        onPreviewParams?.(drag.clipId, { position: nextPosition });
         return;
       }
 
       const next = getResizeValues(drag, event);
-      dragRef.current = { ...drag, current: next } as DragState & { current: typeof next };
+      dragRef.current = { ...drag, currentResizeValues: next };
+      // 中文注释：缩放期间同时报告位置和尺寸，保证选框、画面和属性面板保持同一快照。
+      onPreviewParams?.(drag.clipId, next);
     };
 
     const handleMouseUp = () => {
-      const drag = dragRef.current as (DragState & {
-        currentPosition?: CanvasPoint;
-        current?: { position: CanvasPoint; size: CanvasSize };
-      }) | null;
-      if (!drag || !selectedClip) return;
+      const drag = dragRef.current;
+      if (!drag) return;
       dragRef.current = null;
 
       if (drag.mode === "move") {
-        onChangeParams?.(selectedClip.id, {
-          position: drag.currentPosition ?? drag.startPosition,
-        });
+        const nextPosition = drag.currentPosition ?? drag.startPosition;
+        if (nextPosition.x !== drag.startPosition.x || nextPosition.y !== drag.startPosition.y) {
+          onChangeParams?.(drag.clipId, { position: nextPosition });
+        }
       } else {
-        const next = drag.current ?? { position: drag.startPosition, size: drag.startSize };
-        onChangeParams?.(selectedClip.id, next);
+        const next = drag.currentResizeValues ?? { position: drag.startPosition, size: drag.startSize };
+        const changed = next.position.x !== drag.startPosition.x
+          || next.position.y !== drag.startPosition.y
+          || next.size.width !== drag.startSize.width
+          || next.size.height !== drag.startSize.height;
+        if (changed) onChangeParams?.(drag.clipId, next);
       }
+      onPreviewEnd?.();
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -168,7 +184,7 @@ export function CanvasSelection({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [onChangeParams, selectedClip]);
+  }, [onChangeParams, onPreviewEnd, onPreviewParams]);
 
   if (!selectedClip || !values) return null;
 
@@ -178,6 +194,7 @@ export function CanvasSelection({
     const canvas = canvasRef.current;
     if (!canvas) return;
     dragRef.current = {
+      clipId: selectedClip.id,
       mode,
       startX: event.clientX,
       startY: event.clientY,

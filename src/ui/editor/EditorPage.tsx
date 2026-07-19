@@ -50,6 +50,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [project, setProject] = useState(store.getSnapshot());
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
+  const [previewProject, setPreviewProject] = useState<EditProject | null>(null);
   const [mediaSources, setMediaSources] = useState<MediaSources>(initialMediaSources);
   const [missingMediaIds, setMissingMediaIds] = useState(initialMissingMediaIds);
   const [notice, setNotice] = useState<string | null>(null);
@@ -84,8 +85,28 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     }
   };
 
-  const selectedEffectClip = getClip(project, selectedClipId);
+  const visibleProject = previewProject ?? project;
+  const selectedEffectClip = getClip(visibleProject, selectedClipId);
   const selectedTemplateName = selectedEffectClip ? getTemplate(selectedEffectClip.templateId, selectedEffectClip.templateVersion).name : undefined;
+
+  /** 中文注释：拖动特效期间只更新页面级临时项目，让预览、选区和属性面板共享同一结果。 */
+  const previewEffectParams = (clipId: string, params: Record<string, unknown>) => {
+    const baseProject = previewProject ?? project;
+    const nextProject: EditProject = {
+      ...baseProject,
+      videoClips: baseProject.videoClips.map((clip) => ({ ...clip })),
+      effectClips: baseProject.effectClips.map((clip) => clip.id === clipId
+        ? { ...clip, params: { ...clip.params, ...params } }
+        : { ...clip, params: { ...clip.params } }),
+    };
+    setPreviewProject(nextProject);
+  };
+
+  /** 中文注释：画布手势结束后一次性提交最终参数，并清除页面级临时快照。 */
+  const commitEffectParams = (clipId: string, params: Record<string, unknown>) => {
+    dispatch({ type: "update-effect-params", clipId, params });
+    setPreviewProject(null);
+  };
 
   const addTemplate = (templateId: string) => {
     const template = getTemplate(templateId);
@@ -151,6 +172,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     dispatch({ type: "reset-project" });
     setCurrentFrame(0);
     setSelectedClipId(null);
+    setPreviewProject(null);
     setRenderSnapshot(null);
   };
 
@@ -225,8 +247,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <div className="editor-main-grid">
         <aside className="left-sidebar panel"><MediaBin missingMediaIds={missingMediaIds} onImportMedia={importMedia} project={project} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
-        <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} onFrameChange={seekFrame} project={project} selectedClip={selectedEffectClip} />
-        <PropertiesPanel onChangeParams={(clipId, params) => dispatch({ type: "update-effect-params", clipId, params })} project={project} selectedClip={selectedEffectClip} />
+        <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
+        <PropertiesPanel onChangeParams={commitEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
       </div>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
