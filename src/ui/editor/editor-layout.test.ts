@@ -13,4 +13,17 @@ describe("编辑器视口滚动边界", () => {
     expect(editorCss).toMatch(/\.timeline-panel\s*\{[^}]*display:\s*flex/s);
     expect(editorCss).toMatch(/\.timeline-scroll\s*\{[^}]*overflow:\s*auto/s);
   });
+
+  it("为所有滚动容器提供统一的标准与 WebKit 滚动条主题", () => {
+    // 中文注释：样式契约确保 Firefox 等标准实现和 Chromium/WebKit 伪元素都不会回退到默认外观。
+    expect(editorCss).toMatch(/:root\s*\{[^}]*--scrollbar-track:/s);
+    expect(editorCss).toMatch(/:root,\s*\*\s*\{[^}]*scrollbar-width:\s*thin/s);
+    expect(editorCss).toMatch(/:root,\s*\*\s*\{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb\)/s);
+    expect(editorCss).toMatch(/\*::\-webkit\-scrollbar\s*\{[^}]*width:\s*9px[^}]*height:\s*9px/s);
+    expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-track\s*\{[^}]*border-radius:\s*999px/s);
+    expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-thumb\s*\{[^}]*border:\s*2px\s+solid\s+var\(--scrollbar-track\)[^}]*border-radius:\s*999px/s);
+    expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-thumb:hover\s*\{[^}]*background:\s*var\(--scrollbar-thumb-hover\)/s);
+    expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-thumb:active\s*\{[^}]*background:\s*var\(--scrollbar-thumb-active\)/s);
+    expect(editorCss).not.toMatch(/\*::\-webkit\-scrollbar\s*\{[^}]*display:\s*none/s);
+  });
 });

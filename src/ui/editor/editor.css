@@ -1,10 +1,29 @@
 /* 中文注释：编辑器样式集中在此文件，颜色和空间规则服务于标准三栏布局。 */
 :root {
+  /* 中文注释：滚动条复用编辑器的暗色底和荧光绿色强调色，保持所有面板视觉统一。 */
+  --scrollbar-track: #171a18;
+  --scrollbar-thumb: #4f5d47;
+  --scrollbar-thumb-hover: #70845a;
+  --scrollbar-thumb-active: #e3f26a;
   color: #f4f1e9;
   background: #111312;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   font-synthesis: none;
 }
+
+/* 中文注释：标准属性覆盖 Firefox 等现代浏览器，所有滚动容器均继承同一主题。 */
+:root, * {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+/* 中文注释：WebKit 伪元素为 Chromium、Safari 等浏览器提供等价的细节样式。 */
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { border-radius: 999px; background: var(--scrollbar-track); }
+*::-webkit-scrollbar-thumb { border: 2px solid var(--scrollbar-track); border-radius: 999px; background: var(--scrollbar-thumb); }
+*::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+*::-webkit-scrollbar-thumb:active { background: var(--scrollbar-thumb-active); }
+*::-webkit-scrollbar-corner { background: var(--scrollbar-track); }
 
 * { box-sizing: border-box; }
 /* 中文注释：页面本身固定在视口内，超出内容必须由所属面板负责滚动。 */
