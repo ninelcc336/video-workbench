@@ -4,6 +4,7 @@ import { PreviewControls } from "../preview/PreviewControls";
 import type { MediaSources } from "../../remotion/media";
 import { getCompositionDurationInFrames } from "../../remotion/EditorComposition";
 import { CanvasSelection } from "./CanvasSelection";
+import { CanvasEffectPreview } from "./CanvasEffectPreview";
 import { isEffectClipActive } from "./effect-visibility";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
@@ -14,6 +15,7 @@ export type PreviewCanvasProps = {
   mediaSources?: MediaSources;
   currentFrame?: number;
   selectedClip?: EffectClip | null;
+  onSelectClip?: (clipId: string | null) => void;
   paramsSnapshot?: Record<string, unknown>;
   /** 中文注释：拖动期间报告临时参数，由页面层统一生成过程预览项目。 */
   onPreviewParams?: (clipId: string, params: Record<string, unknown>) => void;
@@ -127,6 +129,7 @@ export function PreviewCanvas({
   mediaSources = {},
   currentFrame = 0,
   selectedClip = null,
+  onSelectClip,
   paramsSnapshot,
   onPreviewParams,
   onPreviewEnd,
@@ -166,6 +169,14 @@ export function PreviewCanvas({
               mediaSources={mediaSources}
               onFrameChange={onFrameChange}
               playerRef={playerRef}
+              project={project}
+            />
+            <CanvasEffectPreview
+              currentFrame={currentFrame}
+              onChangeParams={onChangeParams}
+              onPreviewEnd={onPreviewEnd}
+              onPreviewParams={onPreviewParams}
+              onSelectClip={onSelectClip}
               project={project}
             />
             <CanvasSelection

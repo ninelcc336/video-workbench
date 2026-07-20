@@ -161,7 +161,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     }
   };
 
-  const selectClip = (clipId: string) => setSelectedClipId(clipId);
+  /** 中文注释：预览和时间轴共用同一个选择入口，传入 null 表示点击预览空白取消选择。 */
+  const selectClip = (clipId: string | null) => setSelectedClipId(clipId);
 
   const seekFrame = (frame: number) => {
     setCurrentFrame(clampPreviewFrame(frame, getCompositionDurationInFrames(project)));
@@ -248,7 +249,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <EditorPanelLayout>
         <aside className="left-sidebar panel"><MediaBin missingMediaIds={missingMediaIds} onImportMedia={importMedia} project={project} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
-        <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
+        <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={commitEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />

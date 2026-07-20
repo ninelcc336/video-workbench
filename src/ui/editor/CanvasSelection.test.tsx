@@ -170,6 +170,31 @@ describe("画布特效选区", () => {
     });
   });
 
+  it("点击已选中特效但未超过拖拽阈值时不改变位置", () => {
+    const clip = createEffectClip();
+    const onPreviewParams = vi.fn();
+    const onChangeParams = vi.fn();
+
+    render(
+      <CanvasSelection
+        isSelectedClipActive={true}
+        onChangeParams={onChangeParams}
+        onPreviewParams={onPreviewParams}
+        project={createEmptyProject()}
+        selectedClip={clip}
+      />,
+    );
+
+    const selection = screen.getByRole("group", { name: "特效选区" });
+    setCanvasRect(selection);
+    fireEvent.mouseDown(selection, { clientX: 500, clientY: 500 });
+    fireEvent.mouseMove(window, { clientX: 502, clientY: 502 });
+    fireEvent.mouseUp(window);
+
+    expect(onPreviewParams).not.toHaveBeenCalled();
+    expect(onChangeParams).not.toHaveBeenCalled();
+  });
+
   it("缩放过程中报告临时位置和尺寸", () => {
     const clip = createEffectClip();
     const onPreviewParams = vi.fn();

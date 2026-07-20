@@ -14,6 +14,7 @@ type DragState = {
   startPosition: CanvasPoint;
   startSize: CanvasSize;
   canvasRect: DOMRect;
+  hasStarted: boolean;
   currentPosition?: CanvasPoint;
   currentResizeValues?: { position: CanvasPoint; size: CanvasSize };
 };
@@ -33,6 +34,9 @@ export type CanvasSelectionProps = {
 };
 
 const MIN_SIZE = 0.05;
+
+/** 中文注释：点击和拖动共用同一个阈值，避免不同预览入口产生不一致的手势体验。 */
+export const CANVAS_DRAG_THRESHOLD = 4;
 
 function roundUnit(value: number): number {
   // 中文注释：鼠标换算会产生浮点尾差，参数保存前统一到百万分之一。
@@ -55,7 +59,8 @@ function isSize(value: unknown): value is CanvasSize {
     typeof (value as CanvasSize).height === "number";
 }
 
-function getPositionAndSize(
+/** 中文注释：统一读取特效片段的画布边界，预览命中层和已选选区必须使用同一套参数换算。 */
+export function getPositionAndSize(
   clip: EffectClip,
   paramsSnapshot?: Record<string, unknown>,
 ): { position: CanvasPoint; size: CanvasSize } | null {
@@ -141,27 +146,32 @@ export function CanvasSelection({
         return;
       }
 
+      const deltaX = event.clientX - drag.startX;
+      const deltaY = event.clientY - drag.startY;
+      if (!drag.hasStarted && Math.hypot(deltaX, deltaY) <= CANVAS_DRAG_THRESHOLD) return;
+      const startedDrag = { ...drag, hasStarted: true };
+
       if (drag.mode === "move") {
         const nextPosition = {
           x: roundUnit(clamp(
-            drag.startPosition.x + (event.clientX - drag.startX) / Math.max(1, drag.canvasRect.width),
+            drag.startPosition.x + deltaX / Math.max(1, drag.canvasRect.width),
             drag.startSize.width / 2,
             1 - drag.startSize.width / 2,
           )),
           y: roundUnit(clamp(
-            drag.startPosition.y + (event.clientY - drag.startY) / Math.max(1, drag.canvasRect.height),
+            drag.startPosition.y + deltaY / Math.max(1, drag.canvasRect.height),
             drag.startSize.height / 2,
             1 - drag.startSize.height / 2,
           )),
         };
-        dragRef.current = { ...drag, currentPosition: nextPosition };
+        dragRef.current = { ...startedDrag, currentPosition: nextPosition };
         // 中文注释：移动期间只发出临时位置，让页面层驱动过程预览而不写入历史。
         onPreviewParams?.(drag.clipId, { position: nextPosition });
         return;
       }
 
       const next = getResizeValues(drag, event);
-      dragRef.current = { ...drag, currentResizeValues: next };
+      dragRef.current = { ...startedDrag, currentResizeValues: next };
       // 中文注释：缩放期间同时报告位置和尺寸，保证选框、画面和属性面板保持同一快照。
       onPreviewParams?.(drag.clipId, next);
     };
@@ -172,6 +182,11 @@ export function CanvasSelection({
       dragRef.current = null;
       if (!isSelectedClipActive) {
         // 中文注释：非生效帧只允许结束临时状态，不允许把不可见期间的鼠标变化写入项目。
+        onPreviewEnd?.();
+        return;
+      }
+      if (!drag.hasStarted) {
+        // 中文注释：没有越过拖动阈值的鼠标手势只代表选择，不应提交或制造过程预览历史。
         onPreviewEnd?.();
         return;
       }
@@ -222,6 +237,7 @@ export function CanvasSelection({
       startPosition: values.position,
       startSize: values.size,
       canvasRect: canvas.getBoundingClientRect(),
+      hasStarted: false,
     };
   };
 
@@ -268,7 +284,8 @@ export function CanvasSelection({
           boxShadow: "0 0 0 1px #111312, 0 0 16px #e3f26a66",
           transform: "translate(-50%, -50%)",
           cursor: "move",
-          pointerEvents: "auto",
+          // 中文注释：位置移动由预览命中层统一处理，避免已选底层特效遮挡上层命中；控制点仍可单独接收事件。
+          pointerEvents: "none",
         }}
       >
         {(Object.keys({ nw: true, ne: true, sw: true, se: true }) as ResizeHandle[]).map((handle) => (
