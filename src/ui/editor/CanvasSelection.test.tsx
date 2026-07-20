@@ -46,6 +46,99 @@ function setCanvasRect(element: HTMLElement): void {
 }
 
 describe("画布特效选区", () => {
+  it.each([
+    [10, true],
+    [20, true],
+    [30, false],
+    [9, false],
+  ] as const)("在%s时选区%s可见并允许画布交互", (_currentFrame, expectedActive) => {
+    const clip = { ...createEffectClip(), fromFrame: 10, durationInFrames: 20 };
+    const onPreviewParams = vi.fn();
+    const onChangeParams = vi.fn();
+
+    render(
+      <CanvasSelection
+        isSelectedClipActive={expectedActive}
+        onChangeParams={onChangeParams}
+        onPreviewParams={onPreviewParams}
+        project={createEmptyProject()}
+        selectedClip={clip}
+      />,
+    );
+
+    const selection = screen.queryByRole("group", { name: "特效选区" });
+    expect(Boolean(selection)).toBe(expectedActive);
+    if (!expectedActive) {
+      fireEvent.mouseMove(window, { clientX: 800, clientY: 900 });
+      fireEvent.mouseUp(window);
+      expect(onPreviewParams).not.toHaveBeenCalled();
+      expect(onChangeParams).not.toHaveBeenCalled();
+    }
+  });
+
+  it("播放头回到生效区间时恢复选区并允许拖动", () => {
+    const clip = { ...createEffectClip(), fromFrame: 10, durationInFrames: 20 };
+    const onPreviewParams = vi.fn();
+    const { rerender } = render(
+      <CanvasSelection
+        isSelectedClipActive={false}
+        onPreviewParams={onPreviewParams}
+        project={createEmptyProject()}
+        selectedClip={clip}
+      />,
+    );
+
+    expect(screen.queryByRole("group", { name: "特效选区" })).toBeNull();
+
+    rerender(
+      <CanvasSelection
+        isSelectedClipActive={true}
+        onPreviewParams={onPreviewParams}
+        project={createEmptyProject()}
+        selectedClip={clip}
+      />,
+    );
+    const selection = screen.getByRole("group", { name: "特效选区" });
+    setCanvasRect(selection);
+    fireEvent.mouseDown(selection, { clientX: 500, clientY: 500 });
+    fireEvent.mouseMove(window, { clientX: 800, clientY: 900 });
+
+    expect(onPreviewParams).toHaveBeenCalledWith("effect-1", { position: { x: 0.8, y: 0.9 } });
+  });
+
+  it("拖动期间进入未生效区间时取消旧手势且不提交参数", () => {
+    const clip = { ...createEffectClip(), fromFrame: 10, durationInFrames: 20 };
+    const onPreviewEnd = vi.fn();
+    const onChangeParams = vi.fn();
+    const { rerender } = render(
+      <CanvasSelection
+        isSelectedClipActive={true}
+        onChangeParams={onChangeParams}
+        onPreviewEnd={onPreviewEnd}
+        project={createEmptyProject()}
+        selectedClip={clip}
+      />,
+    );
+
+    const selection = screen.getByRole("group", { name: "特效选区" });
+    setCanvasRect(selection);
+    fireEvent.mouseDown(selection, { clientX: 500, clientY: 500 });
+    rerender(
+      <CanvasSelection
+        isSelectedClipActive={false}
+        onChangeParams={onChangeParams}
+        onPreviewEnd={onPreviewEnd}
+        project={createEmptyProject()}
+        selectedClip={clip}
+      />,
+    );
+    fireEvent.mouseMove(window, { clientX: 800, clientY: 900 });
+    fireEvent.mouseUp(window);
+
+    expect(onPreviewEnd).toHaveBeenCalledOnce();
+    expect(onChangeParams).not.toHaveBeenCalled();
+  });
+
   it("拖动过程中报告临时位置，松开后仍只提交最终参数", () => {
     const clip = createEffectClip();
     const onPreviewParams = vi.fn();
@@ -53,6 +146,7 @@ describe("画布特效选区", () => {
 
     render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onChangeParams={onChangeParams}
         onPreviewParams={onPreviewParams}
         project={createEmptyProject()}
@@ -82,6 +176,7 @@ describe("画布特效选区", () => {
 
     render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onPreviewParams={onPreviewParams}
         project={createEmptyProject()}
         selectedClip={clip}
@@ -106,6 +201,7 @@ describe("画布特效选区", () => {
 
     render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onChangeParams={onChangeParams}
         onPreviewEnd={onPreviewEnd}
         project={createEmptyProject()}
@@ -135,6 +231,7 @@ describe("画布特效选区", () => {
 
     render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onPreviewParams={onPreviewParams}
         project={createEmptyProject()}
         selectedClip={clip}
@@ -156,6 +253,7 @@ describe("画布特效选区", () => {
     const onChangeParams = vi.fn();
     const { rerender } = render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onChangeParams={onChangeParams}
         onPreviewParams={onPreviewParams}
         project={createEmptyProject()}
@@ -168,6 +266,7 @@ describe("画布特效选区", () => {
     fireEvent.mouseDown(selection, { clientX: 500, clientY: 500 });
     rerender(
       <CanvasSelection
+        isSelectedClipActive={true}
         onChangeParams={onChangeParams}
         onPreviewParams={onPreviewParams}
         project={createEmptyProject()}
@@ -187,6 +286,7 @@ describe("画布特效选区", () => {
 
     render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onChangeParams={onChangeParams}
         project={createEmptyProject()}
         selectedClip={clip}
@@ -211,6 +311,7 @@ describe("画布特效选区", () => {
 
     render(
       <CanvasSelection
+        isSelectedClipActive={true}
         onChangeParams={onChangeParams}
         project={createEmptyProject()}
         selectedClip={clip}

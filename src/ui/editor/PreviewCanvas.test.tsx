@@ -3,6 +3,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
+import type { EffectClip } from "../../domain/project/model";
+import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
 import { getContainSize, getPreviewDeviceStyle, getPreviewOrientation, PreviewCanvas } from "./PreviewCanvas";
 
 vi.mock("../preview/PreviewPlayer", () => ({
@@ -12,6 +14,20 @@ vi.mock("../preview/PreviewPlayer", () => ({
 }));
 
 afterEach(cleanup);
+
+/** 中文注释：构造带有明确生效区间的特效片段，复用真实 CanvasSelection 验证预览接缝。 */
+function createEffectClip(fromFrame = 10, durationInFrames = 20): EffectClip {
+  const template = getTemplate("card-overlay", 1);
+  return {
+    id: "effect-1",
+    templateId: template.id,
+    templateVersion: template.version,
+    trackId: "effects-1",
+    fromFrame,
+    durationInFrames,
+    params: getTemplateDefaultParams(template),
+  };
+}
 
 describe("预览画布尺寸", () => {
   it("在可用区域内按项目比例放大宽屏画布", () => {
@@ -59,5 +75,20 @@ describe("预览画布尺寸", () => {
     const verticalCanvas = container.querySelector(".preview-device__canvas") as HTMLDivElement;
     expect(verticalCanvas.style.aspectRatio).toBe("1080 / 1920");
     expect(verticalCanvas.contains(screen.getByRole("group", { name: "实时预览控制栏" }))).toBe(false);
+  });
+
+  it.each([
+    [10, true],
+    [20, true],
+    [29, true],
+    [30, false],
+    [9, false],
+  ] as const)("在%s时选区%s可见", (currentFrame, expectedActive) => {
+    const project = createEmptyProject();
+    const clip = createEffectClip();
+
+    render(<PreviewCanvas currentFrame={currentFrame} project={project} selectedClip={clip} />);
+
+    expect(Boolean(screen.queryByRole("group", { name: "特效选区" }))).toBe(expectedActive);
   });
 });

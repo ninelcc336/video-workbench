@@ -21,6 +21,8 @@ type DragState = {
 export type CanvasSelectionProps = {
   project: EditProject;
   selectedClip: EffectClip | null;
+  /** 中文注释：由 PreviewCanvas 传入当前帧下的统一生效状态，未生效时不显示交互选区。 */
+  isSelectedClipActive: boolean;
   /** 中文注释：参数快照可由预览和属性面板共同传入，确保两处显示完全一致。 */
   paramsSnapshot?: Record<string, unknown>;
   /** 中文注释：拖动期间只报告临时参数，由页面层生成过程预览项目。 */
@@ -118,6 +120,7 @@ function getResizeValues(
 export function CanvasSelection({
   project,
   selectedClip,
+  isSelectedClipActive,
   paramsSnapshot,
   onPreviewParams,
   onPreviewEnd,
@@ -131,6 +134,12 @@ export function CanvasSelection({
     const handleMouseMove = (event: MouseEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
+      if (!isSelectedClipActive) {
+        // 中文注释：播放头离开生效区间时取消未完成手势，避免隐藏选区后仍提交参数。
+        dragRef.current = null;
+        onPreviewEnd?.();
+        return;
+      }
 
       if (drag.mode === "move") {
         const nextPosition = {
@@ -161,6 +170,11 @@ export function CanvasSelection({
       const drag = dragRef.current;
       if (!drag) return;
       dragRef.current = null;
+      if (!isSelectedClipActive) {
+        // 中文注释：非生效帧只允许结束临时状态，不允许把不可见期间的鼠标变化写入项目。
+        onPreviewEnd?.();
+        return;
+      }
 
       if (drag.mode === "move") {
         const nextPosition = drag.currentPosition ?? drag.startPosition;
@@ -184,9 +198,16 @@ export function CanvasSelection({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [onChangeParams, onPreviewEnd, onPreviewParams]);
+  }, [isSelectedClipActive, onChangeParams, onPreviewEnd, onPreviewParams]);
 
-  if (!selectedClip || !values) return null;
+  useEffect(() => {
+    if (isSelectedClipActive || !dragRef.current) return;
+    // 中文注释：生效状态切换为 false 时立即丢弃旧手势，防止选区恢复后沿用过期鼠标基准。
+    dragRef.current = null;
+    onPreviewEnd?.();
+  }, [isSelectedClipActive, onPreviewEnd]);
+
+  if (!selectedClip || !values || !isSelectedClipActive) return null;
 
   const startDrag = (mode: DragState["mode"], event: React.MouseEvent) => {
     event.preventDefault();
