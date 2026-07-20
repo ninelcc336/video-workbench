@@ -1,6 +1,6 @@
 # 特效未生效时间段的预览交互限制
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
@@ -59,3 +59,7 @@ Status: ready-for-agent
 
 - 本规格补充 `.scratch/canvas-effect-drag-preview/spec.md` 中已经完成的特效过程预览能力，重点解决“已选中但当前不可见仍可拖拽”的交互边界。
 - 该功能不需要新的 ADR：它是可逆的预览交互门控，不引入新的持久化协议或跨模块架构取舍。
+
+## Comments
+
+2026-07-20：功能已完成实现并通过完整测试与构建验收，已提交 `71a91e6`（修复特效未生效时的预览选区交互）；按维护者要求归档，不再进入后续分诊或实现队列。
