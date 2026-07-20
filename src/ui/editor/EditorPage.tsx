@@ -23,6 +23,7 @@ import { TemplateLibrary } from "./TemplateLibrary";
 import { Timeline, type ClipKind } from "./Timeline";
 import { importMediaFile } from "./media-import";
 import { getAvailableEffectTrackId } from "./effect-track-layout";
+import { EditorPanelLayout } from "./EditorPanelLayout";
 import "./editor.css";
 
 export type EditorPageProps = {
@@ -245,11 +246,11 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置项目" type="button">↺</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
       </header>
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
-      <div className="editor-main-grid">
+      <EditorPanelLayout>
         <aside className="left-sidebar panel"><MediaBin missingMediaIds={missingMediaIds} onImportMedia={importMedia} project={project} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={commitEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
-      </div>
+      </EditorPanelLayout>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />

@@ -65,7 +65,13 @@ button { cursor: pointer; }
 @keyframes reset-dialog-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes reset-dialog-rise-in { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .reset-dialog__overlay, .reset-dialog__content { animation: none; } }
-.editor-main-grid { flex: 1; min-width: 0; min-height: 0; display: grid; overflow: hidden; grid-template-columns: 280px minmax(360px, 1fr) 288px; }
+.editor-main-grid { position: relative; flex: 1; min-width: 750px; min-height: 0; display: grid; overflow: hidden; grid-template-columns: minmax(220px, var(--editor-left-panel-width, 280px)) minmax(40%, 1fr) minmax(230px, var(--editor-right-panel-width, 288px)); }
+.editor-main-grid--resizing { user-select: none; cursor: col-resize; }
+.editor-panel-resize-handle { position: absolute; z-index: 6; top: 0; bottom: 0; width: 12px; cursor: col-resize; touch-action: none; }
+.editor-panel-resize-handle::after { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; border-radius: 999px; content: ""; transform: translateX(-50%); background: #e3f26a; opacity: 0; transition: opacity .16s ease, box-shadow .16s ease; }
+.editor-panel-resize-handle:hover::after, .editor-panel-resize-handle:focus-visible::after, .editor-main-grid--resizing .editor-panel-resize-handle::after { opacity: .9; box-shadow: 0 0 12px #e3f26a99; }
+.editor-panel-resize-handle--left { left: var(--editor-left-panel-width, 280px); transform: translateX(-50%); }
+.editor-panel-resize-handle--right { right: var(--editor-right-panel-width, 288px); transform: translateX(50%); }
 .panel { min-width: 0; min-height: 0; background: #171a18; }
 .left-sidebar { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid #2a2e2b; }
 .library-section { padding: 22px 18px; }
@@ -161,6 +167,5 @@ button { cursor: pointer; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
 
 @media (max-width: 900px) {
-  .editor-main-grid { grid-template-columns: 220px minmax(300px, 1fr) 230px; }
   .topbar-actions .save-state { display: none; }
 }

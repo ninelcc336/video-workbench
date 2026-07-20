@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  clampEditorPanelWidths,
+  DEFAULT_EDITOR_PANEL_WIDTHS,
+  resizeEditorPanel,
+} from "./editor-layout";
 
 const editorCss = readFileSync(resolve(process.cwd(), "src/ui/editor/editor.css"), "utf8");
 
@@ -25,5 +30,60 @@ describe("编辑器视口滚动边界", () => {
     expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-thumb:hover\s*\{[^}]*background:\s*var\(--scrollbar-thumb-hover\)/s);
     expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-thumb:active\s*\{[^}]*background:\s*var\(--scrollbar-thumb-active\)/s);
     expect(editorCss).not.toMatch(/\*::\-webkit\-scrollbar\s*\{[^}]*display:\s*none/s);
+  });
+});
+
+describe("编辑器三栏布局宽度", () => {
+  it("保留默认面板宽度", () => {
+    expect(DEFAULT_EDITOR_PANEL_WIDTHS).toEqual({ left: 280, right: 288 });
+  });
+
+  it("拖拽素材库右边框时只增加素材库宽度", () => {
+    expect(resizeEditorPanel({ left: 280, right: 288 }, "left", 100, 1200)).toEqual({
+      left: 380,
+      right: 288,
+    });
+  });
+
+  it("拖拽特效参数面板左边框时只改变参数面板宽度", () => {
+    expect(resizeEditorPanel({ left: 280, right: 288 }, "right", 100, 1200)).toEqual({
+      left: 280,
+      right: 230,
+    });
+  });
+
+  it("向左拖拽特效参数面板边框时可以连续增加宽度", () => {
+    expect(resizeEditorPanel({ left: 280, right: 288 }, "right", -100, 1200)).toEqual({
+      left: 280,
+      right: 388,
+    });
+  });
+
+  it("拖拽时不允许预览区域小于编辑主区域的百分之四十", () => {
+    expect(resizeEditorPanel({ left: 280, right: 288 }, "left", 500, 1200)).toEqual({
+      left: 432,
+      right: 288,
+    });
+  });
+
+  it("拖拽素材库时不允许低于 220px", () => {
+    expect(resizeEditorPanel({ left: 280, right: 288 }, "left", -500, 1200)).toEqual({
+      left: 220,
+      right: 288,
+    });
+  });
+
+  it("窗口变窄时按最小面板宽度和预览比例收紧当前布局", () => {
+    expect(clampEditorPanelWidths({ left: 500, right: 400 }, 1200)).toEqual({
+      left: 388,
+      right: 332,
+    });
+  });
+
+  it("在 750px 最小支持宽度时保留两侧最小面板和预览下限", () => {
+    expect(clampEditorPanelWidths({ left: 500, right: 400 }, 750)).toEqual({
+      left: 220,
+      right: 230,
+    });
   });
 });
