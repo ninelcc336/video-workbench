@@ -3,6 +3,8 @@ import type { RenderJobSnapshot } from "../../server/render/render-job";
 export type RenderStatusProps = {
   snapshot: RenderJobSnapshot | null;
   onCancel?: () => void;
+  onRetry?: () => void;
+  resultUrl?: string;
 };
 
 const statusLabels: Record<RenderJobSnapshot["status"], string> = {
@@ -20,7 +22,7 @@ function stageLabel(status: RenderJobSnapshot["status"]): string {
 }
 
 /** 中文注释：渲染状态组件不发起请求，只消费轮询得到的任务快照。 */
-export function RenderStatus({ snapshot, onCancel }: RenderStatusProps) {
+export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl }: RenderStatusProps) {
   if (!snapshot) return null;
 
   const canCancel = snapshot.status === "preparing" || snapshot.status === "rendering";
@@ -31,8 +33,12 @@ export function RenderStatus({ snapshot, onCancel }: RenderStatusProps) {
       </p>
       {snapshot.error ? <p role="alert">错误摘要：{snapshot.error.message}</p> : null}
       {snapshot.status === "completed" ? (
-        <a href={snapshot.outputPath} rel="noreferrer" target="_blank">打开导出文件</a>
+        <>
+          {snapshot.file ? <p>文件大小：{Math.max(1, Math.round(snapshot.file.sizeBytes / 1024))} KB　生成时间：{new Date(snapshot.file.createdAt).toLocaleString("zh-CN")}</p> : null}
+          <a href={resultUrl ?? snapshot.outputPath} rel="noreferrer" target="_blank">打开导出文件</a>
+        </>
       ) : null}
+      {snapshot.status === "failed" ? <button onClick={onRetry} type="button">重试导出</button> : null}
       {canCancel ? <button onClick={onCancel} type="button">取消渲染</button> : null}
     </section>
   );

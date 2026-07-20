@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   assertSafePathSegment,
@@ -29,7 +29,7 @@ function parseVideoTemplate(value: unknown, templateId: string): VideoTemplate {
     throw new Error(`视频模板“${templateId}”的数据格式无效`);
   }
 
-  const data = value as { name: string; effectClips: unknown[] };
+  const data = value as { name: string; effectClips: unknown[]; fps?: number };
   const effectClips = data.effectClips.map((clip) => {
     if (
       typeof clip !== "object" ||
@@ -58,11 +58,13 @@ function parseVideoTemplate(value: unknown, templateId: string): VideoTemplate {
     };
   });
 
-  return {
+  const template: VideoTemplate = {
     id: templateId,
     name: data.name,
     effectClips,
   };
+  if (data.fps !== undefined) Object.defineProperty(template, "fps", { configurable: true, enumerable: false, value: data.fps });
+  return template;
 }
 
 /** 中文注释：视频模板仓储只保存可复用的特效布局，不保存视频素材或文件路径。 */
@@ -80,6 +82,9 @@ export class VideoTemplateRepository {
     }
     await mkdir(this.paths.videoTemplates, { recursive: true });
     const saved = structuredClone(template);
+    if (template.fps !== undefined && saved.fps === undefined) {
+      Object.defineProperty(saved, "fps", { configurable: true, enumerable: false, value: template.fps });
+    }
     await writeFile(
       videoTemplateFilePath(this.paths, safeId),
       `${JSON.stringify(serializeVideoTemplate(saved), null, 2)}\n`,
@@ -123,6 +128,11 @@ export class VideoTemplateRepository {
       templates.push(await this.loadVideoTemplate(fileName.slice(0, -".json".length)));
     }
     return templates.sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+  }
+
+  /** 中文注释：删除视频模板不会反向删除已经套用到项目中的特效片段。 */
+  async deleteVideoTemplate(templateId: string): Promise<void> {
+    await rm(videoTemplateFilePath(this.paths, templateId), { force: false });
   }
 }
 

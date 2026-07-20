@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   assertSafePathSegment,
@@ -99,6 +99,11 @@ export class PresetRepository {
       presets.push(await this.loadPreset(presetId));
     }
     return presets.sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
+  }
+
+  /** 中文注释：删除个人预设只删除其 JSON 记录，不影响模板注册表或项目片段。 */
+  async deletePreset(presetId: string): Promise<void> {
+    await rm(presetFilePath(this.paths, presetId), { force: false });
   }
 }
 

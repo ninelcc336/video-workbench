@@ -1,4 +1,6 @@
 import type { EditProject } from "../../domain/project/model";
+import { stat } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import type { MediaSources } from "../../remotion/media";
 import { renderProject as defaultRenderProject, type RenderAdapter, type RenderResult } from "./render-adapter";
 import type { RemotionBundleFunction } from "./remotion-bundler";
@@ -9,6 +11,8 @@ export type RenderJobSnapshot = {
   project: EditProject;
   status: RenderJobStatus;
   outputPath: string;
+  /** 中文注释：完成后的文件信息用于导出结果列表，浏览器不需要直接读取本地路径。 */
+  file?: { sizeBytes: number; createdAt: string };
   error?: { message: string };
 };
 
@@ -25,6 +29,8 @@ export function createRenderJob(
     outputPath: string;
     renderProject?: RenderAdapter;
     renderOptions?: { mediaSources?: MediaSources; serveUrl?: string; bundle?: RemotionBundleFunction; timeoutInMilliseconds?: number };
+    /** 中文注释：HTTP 导出必须确认真实文件已生成，纯领域测试可关闭此约束。 */
+    requireOutputFile?: boolean;
   },
 ): RenderJob {
   const snapshot: RenderJobSnapshot = {
@@ -42,6 +48,8 @@ export function createRenderJob(
         throw new Error(`渲染任务已${snapshot.status === "completed" ? "完成" : "启动"}，不能再次渲染`);
       }
 
+      if (cancelled) return;
+
       started = true;
       snapshot.status = "rendering";
 
@@ -53,14 +61,33 @@ export function createRenderJob(
         );
 
         if (cancelled) {
+          await rm(snapshot.outputPath, { force: true }).catch(() => undefined);
           snapshot.status = "cancelled";
           return;
         }
 
         snapshot.status = "completed";
         snapshot.outputPath = renderResult.outputPath;
+        if (renderResult.sizeBytes !== undefined || renderResult.createdAt !== undefined) {
+          snapshot.file = {
+            sizeBytes: renderResult.sizeBytes ?? 0,
+            createdAt: renderResult.createdAt ?? new Date().toISOString(),
+          };
+        }
+        if (!snapshot.file) {
+          try {
+            const fileStats = await stat(snapshot.outputPath);
+            snapshot.file = { sizeBytes: fileStats.size, createdAt: fileStats.mtime.toISOString() };
+          } catch {
+            // 中文注释：测试适配器或远程渲染器可能只返回逻辑路径，缺少文件统计时仍保留完成状态。
+          }
+        }
+        if (options.requireOutputFile && !snapshot.file) {
+          throw new Error("导出任务未生成有效 MP4 文件");
+        }
       } catch (error) {
         if (cancelled) {
+          await rm(snapshot.outputPath, { force: true }).catch(() => undefined);
           snapshot.status = "cancelled";
           return;
         }

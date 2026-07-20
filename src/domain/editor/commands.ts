@@ -6,6 +6,8 @@ import type { EditProject, EffectClip, VideoClip } from "../project/model";
 export type VideoDimensions = {
   width: number;
   height: number;
+  /** 中文注释：首个视频的源帧率用于建立项目时基，无法读取时由页面传入 30。 */
+  fps?: number;
 };
 
 /** 中文注释：编辑器命令只描述用户意图，不携带文件系统或 UI 依赖。 */
@@ -16,6 +18,7 @@ export type EditorCommand =
   | { type: "resize-video-clip"; clipId: string; fromFrame: number; durationInFrames: number }
   | { type: "delete-video-clip"; clipId: string }
   | { type: "add-effect-clip"; clip: EffectClip }
+  | { type: "add-effect-clips"; clips: EffectClip[] }
   | { type: "move-effect-clip"; clipId: string; fromFrame: number }
   | { type: "resize-effect-clip"; clipId: string; fromFrame: number; durationInFrames: number }
   | { type: "delete-effect-clip"; clipId: string }
@@ -88,22 +91,28 @@ function requireEffectClip(project: EditProject, clipId: string): EffectClip {
   return clip;
 }
 
-/** 中文注释：主视频轨道为空时可按首个横屏素材匹配画布；已有特效使用相对参数，不阻止这次匹配。 */
-function shouldMatchLandscapeCanvas(project: EditProject, dimensions: VideoDimensions | undefined): boolean {
+/** 中文注释：主视频轨道为空时按真实元数据匹配画布；兼容旧调用只传尺寸的横屏行为。 */
+function shouldMatchSourceCanvas(project: EditProject, dimensions: VideoDimensions | undefined): boolean {
   return Boolean(
-    dimensions
+      dimensions
       && Number.isFinite(dimensions.width)
       && Number.isFinite(dimensions.height)
-      && dimensions.width > dimensions.height
-      && project.videoClips.length === 0,
+      && project.videoClips.length === 0
+      && (dimensions.fps !== undefined || dimensions.width > dimensions.height),
   );
 }
 
-/** 中文注释：横屏画布统一以 1920 为长边，并从首个素材推导高度以保留其原始比例。 */
-function matchLandscapeCanvas(project: EditProject, dimensions: VideoDimensions): EditProject {
-  const width = 1920;
-  const height = Math.max(1, Math.round(width * dimensions.height / dimensions.width));
-  const settings = { ...project.settings, width, height };
+/** 中文注释：首个素材决定画布比例和帧率，尺寸统一缩放到适合编辑的长边。 */
+function matchSourceCanvas(project: EditProject, dimensions: VideoDimensions): EditProject {
+  const ratio = dimensions.width / dimensions.height;
+  const settings = ratio > 1
+    ? { ...project.settings, width: 1920, height: Math.max(1, Math.round(1920 / ratio)) }
+    : ratio < 1
+      ? { ...project.settings, width: Math.max(1, Math.round(1920 * ratio)), height: 1920 }
+      : { ...project.settings, width: 1080, height: 1080 };
+  if (dimensions.fps && Number.isFinite(dimensions.fps) && dimensions.fps > 0) {
+    settings.fps = Math.max(1, Math.round(dimensions.fps));
+  }
   return {
     ...project,
     settings,
@@ -126,8 +135,8 @@ export function applyCommand(
     case "add-video-clip":
       // 中文注释：横屏匹配与新增首个视频片段属于同一用户操作，历史记录可整体撤销。
       const sourceDimensions = command.sourceDimensions;
-      const projectForVideo = sourceDimensions && shouldMatchLandscapeCanvas(project, sourceDimensions)
-        ? matchLandscapeCanvas(project, sourceDimensions)
+      const projectForVideo = sourceDimensions && shouldMatchSourceCanvas(project, sourceDimensions)
+        ? matchSourceCanvas(project, sourceDimensions)
         : project;
       nextProject = {
         ...projectForVideo,
@@ -175,6 +184,16 @@ export function applyCommand(
         effectClips: [
           ...project.effectClips.map(copyEffectClip),
           copyEffectClip(command.clip),
+        ],
+      };
+      break;
+    case "add-effect-clips":
+      // 中文注释：视频模板套用以批量命令进入一次历史，用户可以用一次撤销撤回整套布局。
+      nextProject = {
+        ...project,
+        effectClips: [
+          ...project.effectClips.map(copyEffectClip),
+          ...command.clips.map(copyEffectClip),
         ],
       };
       break;

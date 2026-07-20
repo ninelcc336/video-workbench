@@ -13,6 +13,7 @@ export type AutosaveController = {
   schedule: (project: EditProject) => void;
   flush: () => Promise<void>;
   cancel: () => void;
+  retry: () => Promise<void>;
   getState: () => AutosaveState;
   subscribe: (listener: (state: AutosaveState) => void) => () => void;
 };
@@ -26,6 +27,7 @@ export function createAutosaveController(
 ): AutosaveController {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pendingProject: EditProject | null = null;
+  let failedProject: EditProject | null = null;
   let state: AutosaveState = { status: "idle", error: null, lastSavedAt: null };
   const listeners = new Set<(nextState: AutosaveState) => void>();
 
@@ -46,6 +48,7 @@ export function createAutosaveController(
     setState({ status: "saving", error: null, lastSavedAt: state.lastSavedAt });
     try {
       await save(structuredClone(project));
+      failedProject = null;
       setState({ status: "saved", error: null, lastSavedAt: new Date() });
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
@@ -54,6 +57,7 @@ export function createAutosaveController(
         error: `自动保存失败：${message}`,
         lastSavedAt: state.lastSavedAt,
       });
+      failedProject = structuredClone(project);
     }
   };
 
@@ -81,6 +85,11 @@ export function createAutosaveController(
       timer = null;
       pendingProject = null;
     },
+    retry: async () => {
+      if (!failedProject) return;
+      pendingProject = structuredClone(failedProject);
+      await performSave();
+    },
     getState: () => ({ ...state }),
     subscribe: (listener) => {
       listeners.add(listener);
@@ -91,6 +100,7 @@ export function createAutosaveController(
 
 export type SaveIndicatorProps = {
   state: AutosaveState;
+  onRetry?: () => void;
 };
 
 function formatSavedTime(value: Date | null): string {
@@ -99,7 +109,7 @@ function formatSavedTime(value: Date | null): string {
 }
 
 /** 中文注释：保存指示器只展示状态，不直接触碰文件系统或编辑器快照。 */
-export function SaveIndicator({ state }: SaveIndicatorProps) {
+export function SaveIndicator({ state, onRetry }: SaveIndicatorProps) {
   const label = {
     idle: "本地编辑中",
     saving: "自动保存中…",
@@ -112,6 +122,7 @@ export function SaveIndicator({ state }: SaveIndicatorProps) {
     <span aria-label="保存状态" className={`save-state save-state--${state.status}`} role="status">
       ● {label}{suffix}
       {state.error ? `：${state.error.replace(/^自动保存失败：/, "")}` : ""}
+      {state.status === "error" && onRetry ? <button onClick={onRetry} type="button">重试</button> : null}
     </span>
   );
 }

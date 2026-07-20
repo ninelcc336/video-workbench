@@ -4,10 +4,13 @@ import { getHealthStatus } from "./health";
 import { createRenderRouter } from "./render/render-routes";
 import { createWorkspaceAdapter } from "./workspace/workspace-adapter";
 import { createWorkspaceRouter } from "./workspace/workspace-routes";
+import { WorkspaceRegistry } from "./workspace/workspace-registry";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4173);
-const workspace = createWorkspaceAdapter(join(process.cwd(), "workspace"));
+const defaultWorkspacePath = join(process.cwd(), "workspace");
+const recentWorkspaces = await new WorkspaceRegistry().list();
+const workspace = createWorkspaceAdapter(recentWorkspaces[0]?.rootPath ?? defaultWorkspacePath);
 
 app.use(express.json());
 app.get("/api/health", (_request, response) => {

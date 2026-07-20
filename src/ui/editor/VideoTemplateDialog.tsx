@@ -6,9 +6,11 @@ export type VideoTemplateDialogProps = {
   effectCount: number;
   initialName?: string;
   template?: VideoTemplate;
+  templates?: VideoTemplate[];
   error?: string;
   onSave: (name: string) => void;
   onApply?: (template: VideoTemplate) => void;
+  onDelete?: (template: VideoTemplate) => void;
   onClose: () => void;
 };
 
@@ -18,9 +20,11 @@ export function VideoTemplateDialog({
   effectCount,
   initialName = "",
   template,
+  templates = template ? [template] : [],
   error,
   onSave,
   onApply,
+  onDelete,
   onClose,
 }: VideoTemplateDialogProps) {
   const [name, setName] = useState(initialName);
@@ -40,11 +44,7 @@ export function VideoTemplateDialog({
         <input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
       </label>
       <p>当前将保存 {effectCount} 个特效片段。</p>
-      {template ? (
-        <button type="button" onClick={() => onApply?.(template)}>
-          套用“{template.name}”（将新增 {template.effectClips.length} 个特效片段）
-        </button>
-      ) : null}
+      {templates.map((item) => <div key={item.id}><button type="button" onClick={() => onApply?.(item)}>套用“{item.name}”（将新增 {item.effectClips.length} 个特效片段）</button><button aria-label={`删除${item.name}`} onClick={() => onDelete?.(item)} type="button">删除</button></div>)}
       {error ? <p role="alert">{error}</p> : null}
       <div>
         <button type="button" onClick={onClose}>取消</button>

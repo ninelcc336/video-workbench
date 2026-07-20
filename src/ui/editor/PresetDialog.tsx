@@ -9,6 +9,7 @@ export type PresetDialogProps = {
   error?: string;
   onSave: (name: string) => void;
   onApply?: (preset: Preset) => void;
+  onDelete?: (preset: Preset) => void;
   onClose: () => void;
 };
 
@@ -21,6 +22,7 @@ export function PresetDialog({
   error,
   onSave,
   onApply,
+  onDelete,
   onClose,
 }: PresetDialogProps) {
   const [name, setName] = useState(initialName);
@@ -47,11 +49,7 @@ export function PresetDialog({
       {presets.length > 0 ? (
         <section aria-label="我的个人预设">
           <h3>我的个人预设</h3>
-          {presets.map((preset) => (
-            <button type="button" key={preset.id} onClick={() => onApply?.(preset)}>
-              {preset.name}
-            </button>
-          ))}
+          {presets.map((preset) => <div key={preset.id}><button type="button" onClick={() => onApply?.(preset)}>{preset.name} 套用</button><button aria-label={`删除${preset.name}`} onClick={() => onDelete?.(preset)} type="button">删除</button></div>)}
         </section>
       ) : null}
     </div>

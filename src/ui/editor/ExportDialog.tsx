@@ -79,7 +79,7 @@ function ExportDialogContent({
           ))}
         </select>
       </label>
-      <p>格式：MP4　帧率：30fps</p>
+      <p>格式：MP4　帧率：{project.export.fps}fps</p>
       {outputPath ? <p>输出路径：{outputPath}</p> : null}
       {renderStatus ? <p role="status">渲染状态：{renderStatusLabels[renderStatus]}</p> : null}
       {error ? <p role="alert">{error}</p> : null}

@@ -1,5 +1,6 @@
 import type { EditorStore } from "../editor/editor-store";
 import type { EditProject, ExportSettings } from "../project/model";
+import { getTemplate, normalizeParams } from "../templates/registry";
 
 /** 中文注释：个人预设只引用特效模板，并保存用户主动调整的参数。 */
 export type Preset = {
@@ -68,12 +69,27 @@ export function applyPreset(
   store: EditorStore,
   preset: Preset,
   effectClipId: string,
-): void {
+): boolean {
+  const target = store.getSnapshot().effectClips.find((clip) => clip.id === effectClipId);
+  if (!target) throw new Error(`未找到特效片段：${effectClipId}`);
+  let normalizedParams: Record<string, unknown>;
+  let compatible = true;
+  try {
+    // 中文注释：版本匹配时保留用户保存的公开参数，避免套用预设时意外改写编辑结果。
+    if (target.templateId !== preset.templateId || target.templateVersion !== preset.templateVersion) throw new Error("预设模板与当前特效不兼容");
+    getTemplate(preset.templateId, preset.templateVersion);
+    normalizedParams = cloneParams(preset.params);
+  } catch {
+    // 中文注释：旧模板版本不可用时回退到当前模板的安全默认参数，不把不兼容数据写入项目。
+    normalizedParams = normalizeParams(getTemplate(target.templateId, target.templateVersion), {});
+    compatible = false;
+  }
   store.dispatch({
     type: "update-effect-params",
     clipId: effectClipId,
-    params: cloneParams(preset.params),
+    params: cloneParams(normalizedParams),
   });
+  return compatible;
 }
 
 /** 中文注释：将界面上的三个导出预设转换为项目统一的 MP4 导出设置。 */
@@ -90,6 +106,6 @@ export function buildExportSettings(
     format: "mp4",
     width: dimensions.width,
     height: dimensions.height,
-    fps: 30,
+    fps: _project.export.fps,
   };
 }

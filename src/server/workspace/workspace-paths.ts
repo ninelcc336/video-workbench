@@ -23,10 +23,14 @@ export type WorkspaceErrorCode =
   | "unsafe_path"
   | "invalid_project"
   | "project_not_found"
+  | "project_exists"
   | "corrupt_project"
+  | "backup_not_found"
+  | "workspace_not_found"
   | "media_not_found"
   | "missing_media"
-  | "invalid_media";
+  | "invalid_media"
+  | "media_in_use";
 
 /** 中文注释：所有边界错误都带稳定 code，路由层可据此返回用户能理解的错误。 */
 export class WorkspaceError extends Error {
@@ -103,6 +107,12 @@ export function projectFilePath(paths: WorkspacePaths, projectId: string): strin
 export function projectTempFilePath(paths: WorkspacePaths, projectId: string): string {
   const safeId = assertSafePathSegment(projectId, "项目 ID");
   return assertInside(paths.projects, join(paths.projects, `.${safeId}.json.tmp`));
+}
+
+/** 中文注释：备份与正式项目放在同一目录，确保恢复时不会跨工作区读取文件。 */
+export function projectBackupFilePath(paths: WorkspacePaths, projectId: string): string {
+  const safeId = assertSafePathSegment(projectId, "项目 ID");
+  return assertInside(paths.projects, join(paths.projects, `.${safeId}.json.bak`));
 }
 
 export function mediaAssetPath(

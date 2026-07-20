@@ -8,6 +8,8 @@ export type VideoTemplate = {
   id: string;
   name: string;
   effectClips: ReadonlyArray<VideoTemplateEffectClip>;
+  /** 中文注释：模板创建时的帧率用于跨项目换算秒数；旧模板缺省按目标项目帧率处理。 */
+  fps?: number;
 };
 
 function cloneParams(params: Record<string, unknown>): Record<string, unknown> {
@@ -42,7 +44,7 @@ export function createVideoTemplate(
     project.effectClips[0]?.fromFrame ?? 0,
   );
 
-  return {
+  const template: VideoTemplate = {
     id,
     name: assertValidName(name),
     effectClips: project.effectClips.map(({ id: _id, ...clip }) => ({
@@ -51,12 +53,16 @@ export function createVideoTemplate(
       params: cloneParams(clip.params),
     })),
   };
+  // 中文注释：用不可枚举属性兼容旧测试和旧文件格式，同时让新调用方获得真实源帧率。
+  Object.defineProperty(template, "fps", { configurable: true, enumerable: false, value: project.settings.fps });
+  return template;
 }
 
 /** 中文注释：仓储写入时使用白名单，明确排除 mediaId、文件路径等项目数据。 */
 export function serializeVideoTemplate(template: VideoTemplate): Omit<VideoTemplate, "id"> {
   return {
     name: template.name,
+    ...(template.fps ? { fps: template.fps } : {}),
     effectClips: template.effectClips.map((clip) => ({
       templateId: clip.templateId,
       templateVersion: clip.templateVersion,
@@ -79,16 +85,34 @@ export function applyVideoTemplate(
     `effect-template-${index}-${crypto.randomUUID()}`,
 ): void {
   assertValidFrame(targetStartFrame, "模板应用起点");
+  const targetFps = store.getSnapshot().settings.fps;
+  const sourceFps = template.fps ?? targetFps;
+  const existingClips = store.getSnapshot().effectClips;
+  const addedClips: EffectClip[] = [];
+
+  /** 中文注释：为模板中的每个片段选择不重叠的最小特效轨道，避免覆盖已有布局。 */
+  const getTrackId = (fromFrame: number, durationInFrames: number): string => {
+    for (let index = 1; index <= existingClips.length + addedClips.length + 1; index += 1) {
+      const trackId = `effects-${index}`;
+      const occupied = [...existingClips, ...addedClips].some((clip) => clip.trackId === trackId
+        && clip.fromFrame < fromFrame + durationInFrames
+        && fromFrame < clip.fromFrame + clip.durationInFrames);
+      if (!occupied) return trackId;
+    }
+    return `effects-${existingClips.length + addedClips.length + 1}`;
+  };
 
   template.effectClips.forEach((clip, index) => {
-    store.dispatch({
-      type: "add-effect-clip",
-      clip: {
-        ...clip,
-        id: createEffectClipId(index),
-        fromFrame: targetStartFrame + clip.fromFrame,
-        params: cloneParams(clip.params),
-      },
+    const fromFrame = targetStartFrame + Math.round(clip.fromFrame / sourceFps * targetFps);
+    const durationInFrames = Math.max(1, Math.round(clip.durationInFrames / sourceFps * targetFps));
+    addedClips.push({
+      ...clip,
+      id: createEffectClipId(index),
+      trackId: getTrackId(fromFrame, durationInFrames),
+      fromFrame,
+      durationInFrames,
+      params: cloneParams(clip.params),
     });
   });
+  if (addedClips.length > 0) store.dispatch({ type: "add-effect-clips", clips: addedClips });
 }
