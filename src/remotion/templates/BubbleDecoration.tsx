@@ -1,6 +1,7 @@
 import React from "react";
 import { Easing, interpolate } from "remotion";
 import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { getVisibilityProgress } from "./animation";
 
 type BubbleParams = {
   color: string;
@@ -8,6 +9,7 @@ type BubbleParams = {
   size: { width: number; height: number };
   opacity: number;
   count: number;
+  animationDuration: number;
 };
 
 const bubbleDefaults: BubbleParams = {
@@ -16,6 +18,7 @@ const bubbleDefaults: BubbleParams = {
   size: { width: 0.18, height: 0.18 },
   opacity: 0.75,
   count: 5,
+  animationDuration: 18,
 };
 
 export const BubbleDecoration: React.FC<TemplateRenderProps> & {
@@ -28,6 +31,8 @@ export const BubbleDecoration: React.FC<TemplateRenderProps> & {
     extrapolateRight: "clamp",
     easing: Easing.inOut(Easing.quad),
   });
+  // 中文注释：气泡在片段尾部降低整体透明度，避免最后一帧突然消失。
+  const visibilityProgress = getVisibilityProgress(frame, durationInFrames, values.animationDuration);
   const bubbleCount = Math.max(1, Math.round(values.count));
   const bubbleWidth = values.size.width * width;
   const bubbleHeight = values.size.height * height;
@@ -56,7 +61,7 @@ export const BubbleDecoration: React.FC<TemplateRenderProps> & {
             cy={y}
             fill={values.color}
             key={index}
-            opacity={opacity}
+            opacity={opacity * visibilityProgress}
             r={radius}
           />
         );
@@ -92,6 +97,15 @@ BubbleDecoration.definition = {
       defaultValue: bubbleDefaults.count,
       min: 1,
       max: 12,
+      step: 1,
+    },
+    {
+      key: "animationDuration",
+      label: "入场/出场时长",
+      type: "number",
+      defaultValue: bubbleDefaults.animationDuration,
+      min: 1,
+      max: 90,
       step: 1,
     },
   ],

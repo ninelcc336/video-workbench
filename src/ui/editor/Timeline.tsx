@@ -1,13 +1,34 @@
-import { useEffect, useMemo } from "react";
-import type { DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
 import { getTemplate } from "../../domain/templates/registry";
 import { getDropFrame, readTemplateDragData } from "./drag-and-drop";
 import { layoutEffectTracks } from "./effect-track-layout";
 import { TimelineClip, type TimelineClipKind } from "./TimelineClip";
 import type { TemplateDefinition } from "../../domain/templates/types";
+import { normalizeVideoRange, type VideoRangeMode } from "../../domain/editor/clip-ranges";
 
 export type ClipKind = TimelineClipKind;
+
+/** 中文注释：轨道名称列的宽度必须与标尺左侧占位保持一致，保证零点视觉对齐。 */
+export const TIMELINE_LABEL_WIDTH = 105;
+
+/** 中文注释：时间轴拖拽高度的常规最小值，窄视口会在边界计算中自动收缩。 */
+export const TIMELINE_MIN_HEIGHT = 160;
+
+/** 中文注释：时间轴高度上限固定为视口的一半，避免挤压预览工作区。 */
+export function getTimelineHeightBounds(viewportHeight: number): { min: number; max: number } {
+  const safeViewportHeight = Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 720;
+  const max = Math.max(1, Math.floor(safeViewportHeight * 0.5));
+  return { min: Math.min(TIMELINE_MIN_HEIGHT, max), max };
+}
+
+/** 中文注释：统一限制拖拽或窗口缩放带来的时间轴高度，避免出现负值和超过半屏的情况。 */
+export function clampTimelineHeight(height: number, viewportHeight: number): number {
+  const { min, max } = getTimelineHeightBounds(viewportHeight);
+  const safeHeight = Number.isFinite(height) ? height : min;
+  return Math.round(Math.max(min, Math.min(max, safeHeight)));
+}
 
 export type TimelineProps = {
   project: EditProject;
@@ -25,6 +46,7 @@ export type TimelineProps = {
   onDeleteClip?: (clipId: string, kind: ClipKind) => void;
   onSeekFrame?: (frame: number) => void;
   onDropTemplate?: (template: TemplateDefinition, frame: number) => void;
+  onPreviewProject?: (project: EditProject | null) => void;
 };
 
 /** 中文注释：像素到帧的换算统一向最近整数帧吸附，保证时间轴与项目模型一致。 */
@@ -83,20 +105,42 @@ export function Timeline({
   onDeleteClip,
   onSeekFrame,
   onDropTemplate,
+  onPreviewProject,
 }: TimelineProps) {
-  const duration = clipEnd(project);
-  const timelineWidth = duration * pixelsPerFrame;
+  const [previewProject, setPreviewProject] = useState<EditProject | null>(null);
+  const previewProjectRef = useRef<EditProject | null>(null);
+  const timelineProject = previewProject ?? project;
+  const duration = clipEnd(timelineProject);
+  // 中文注释：时间轴总宽度包含左侧轨道名称列，轨道内容区才能从 0 帧开始完整铺开。
+  const timelineWidth = TIMELINE_LABEL_WIDTH + duration * pixelsPerFrame;
+  const viewportHeight = typeof window === "undefined" ? 720 : window.innerHeight;
+  const [timelineHeight, setTimelineHeight] = useState(() =>
+    clampTimelineHeight(238, viewportHeight),
+  );
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStart = useRef<{ clientY: number; height: number } | null>(null);
   const effectTracks = useMemo(
-    () => layoutEffectTracks(project.effectClips),
-    [project.effectClips],
+    () => {
+      const committedTracks = layoutEffectTracks(project.effectClips);
+      if (!previewProject) return committedTracks;
+      const previewClips = new Map(timelineProject.effectClips.map((clip) => [clip.id, clip]));
+      // 中文注释：拖动期间固定原特效轨道，避免片段临时跨轨道重排导致鼠标手势组件卸载。
+      return committedTracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => previewClips.get(clip.id) ?? clip),
+      }));
+    },
+    [previewProject, project.effectClips, timelineProject.effectClips],
   );
   const visibleEffectTracks = effectTracks.length > 0
     ? effectTracks
     : [{ id: "effects-1", clips: [] }];
   const rulerMarks = useMemo(
-    () => Array.from({ length: Math.ceil(duration / project.settings.fps) + 1 }, (_, index) => index),
-    [duration, project.settings.fps],
+    () => Array.from({ length: Math.ceil(duration / timelineProject.settings.fps) + 1 }, (_, index) => index),
+    [duration, timelineProject.settings.fps],
   );
+  const [isSeeking, setIsSeeking] = useState(false);
+  const seekTargetRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -110,15 +154,153 @@ export function Timeline({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onDeleteClip, project.effectClips, project.videoClips, selectedClipId]);
 
+  useEffect(() => {
+    const handleViewportResize = () => {
+      setTimelineHeight((height) => clampTimelineHeight(height, window.innerHeight));
+    };
+    window.addEventListener("resize", handleViewportResize);
+    return () => window.removeEventListener("resize", handleViewportResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = resizeStart.current;
+      if (!start) return;
+      // 中文注释：拖动上边缘时，指针向上移动应增加面板高度。
+      setTimelineHeight(clampTimelineHeight(start.height - (event.clientY - start.clientY), window.innerHeight));
+    };
+    const stopResizing = () => {
+      resizeStart.current = null;
+      setIsResizing(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+    };
+  }, [isResizing]);
+
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    resizeStart.current = { clientY: event.clientY, height: timelineHeight };
+    setIsResizing(true);
+  };
+
+  /** 中文注释：将标尺或轨道内的屏幕坐标换算为当前播放帧，拖动期间直接驱动预览。 */
+  const seekFromClientX = (clientX: number, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    onSeekFrame?.(Math.max(0, Math.min(duration, pixelsToFrames(clientX - rect.left, pixelsPerFrame))));
+  };
+
+  useEffect(() => {
+    if (!isSeeking) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (seekTargetRef.current) seekFromClientX(event.clientX, seekTargetRef.current);
+    };
+    const stopSeeking = () => {
+      seekTargetRef.current = null;
+      setIsSeeking(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", stopSeeking);
+    window.addEventListener("mouseleave", stopSeeking);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", stopSeeking);
+      window.removeEventListener("mouseleave", stopSeeking);
+    };
+  }, [duration, isSeeking, onSeekFrame, pixelsPerFrame]);
+
+  const beginSeek = (event: React.MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    seekTargetRef.current = event.currentTarget;
+    setIsSeeking(true);
+    seekFromClientX(event.clientX, event.currentTarget);
+  };
+
+  /** 中文注释：拖动期间基于已提交项目构造临时快照，时间轴和预览可以共享同一结果。 */
+  const previewRange = (
+    clipId: string,
+    kind: ClipKind,
+    fromFrame: number,
+    durationInFrames: number,
+    mode: VideoRangeMode = "move",
+  ) => {
+    const baseProject = previewProjectRef.current ?? project;
+    const clip = kind === "video"
+      ? baseProject.videoClips.find((candidate) => candidate.id === clipId)
+      : baseProject.effectClips.find((candidate) => candidate.id === clipId);
+    if (!clip) return;
+
+    const range = kind === "video"
+      ? normalizeVideoRange(baseProject, clipId, fromFrame, durationInFrames, mode)
+      : clampClipRange(fromFrame, durationInFrames);
+    const nextProject: EditProject = {
+      ...baseProject,
+      videoClips: kind === "video"
+        ? baseProject.videoClips.map((candidate) => candidate.id === clipId ? { ...candidate, ...range } : candidate)
+        : baseProject.videoClips.map((candidate) => ({ ...candidate })),
+      effectClips: kind === "effect"
+        ? baseProject.effectClips.map((candidate) => candidate.id === clipId ? { ...candidate, ...range } : candidate)
+        : baseProject.effectClips.map((candidate) => ({ ...candidate, params: { ...candidate.params } })),
+    };
+    previewProjectRef.current = nextProject;
+    setPreviewProject(nextProject);
+    onPreviewProject?.(nextProject);
+  };
+
+  /** 中文注释：提交或取消手势后清空临时快照，避免临时状态进入下一次编辑。 */
+  const clearPreview = () => {
+    previewProjectRef.current = null;
+    setPreviewProject(null);
+    onPreviewProject?.(null);
+  };
+
+  const adjustHeightWithKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const { min, max } = getTimelineHeightBounds(window.innerHeight);
+    const step = event.shiftKey ? 48 : 16;
+    let nextHeight: number | null = null;
+    if (event.key === "ArrowUp") nextHeight = timelineHeight + step;
+    if (event.key === "ArrowDown") nextHeight = timelineHeight - step;
+    if (event.key === "Home") nextHeight = min;
+    if (event.key === "End") nextHeight = max;
+    if (nextHeight === null) return;
+    event.preventDefault();
+    setTimelineHeight(clampTimelineHeight(nextHeight, window.innerHeight));
+  };
+
   const select = (clipId: string) => onSelectClip?.(clipId);
-  const move = (clipId: string, kind: ClipKind, fromFrame: number) =>
-    onMoveClip?.(clipId, kind, fromFrame);
+  const move = (clipId: string, kind: ClipKind, fromFrame: number) => {
+    const clip = kind === "video"
+      ? project.videoClips.find((candidate) => candidate.id === clipId)
+      : project.effectClips.find((candidate) => candidate.id === clipId);
+    if (!clip) return;
+    const nextFromFrame = kind === "video"
+      ? normalizeVideoRange(project, clipId, fromFrame, clip.durationInFrames, "move").fromFrame
+      : Math.max(0, Math.round(fromFrame));
+    onMoveClip?.(clipId, kind, nextFromFrame);
+  };
   const resize = (
     clipId: string,
     kind: ClipKind,
     fromFrame: number,
     durationInFrames: number,
-  ) => onResizeClip?.(clipId, kind, fromFrame, durationInFrames);
+    mode: VideoRangeMode = "resize-right",
+  ) => {
+    const range = kind === "video"
+      ? normalizeVideoRange(project, clipId, fromFrame, durationInFrames, mode)
+      : clampClipRange(fromFrame, durationInFrames);
+    onResizeClip?.(clipId, kind, range.fromFrame, range.durationInFrames);
+  };
 
   const handleTemplateDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!readTemplateDragData(event.dataTransfer)) return;
@@ -146,7 +328,24 @@ export function Timeline({
   };
 
   return (
-    <section aria-label="时间轴" className="timeline-panel">
+    <section
+      aria-label="时间轴"
+      className={`timeline-panel${isResizing ? " timeline-panel--resizing" : ""}`}
+      style={{ height: `${timelineHeight}px` }}
+    >
+      <div
+        aria-label="调整时间轴高度"
+        aria-orientation="vertical"
+        aria-valuemax={getTimelineHeightBounds(viewportHeight).max}
+        aria-valuemin={getTimelineHeightBounds(viewportHeight).min}
+        aria-valuenow={timelineHeight}
+        className="timeline-panel__resize-handle"
+        onKeyDown={adjustHeightWithKeyboard}
+        onPointerDown={startResize}
+        role="slider"
+        tabIndex={0}
+        title="上下拖动调整时间轴高度"
+      />
       <div className="timeline-panel__header">
         <div>
           <span className="eyebrow">编辑轨道</span>
@@ -156,24 +355,23 @@ export function Timeline({
       </div>
       <div className="timeline-scroll">
         <div className="timeline" style={{ width: timelineWidth }}>
-          <div
-            aria-label="时间标尺"
-            className="timeline-ruler"
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              onSeekFrame?.(Math.max(0, Math.min(duration, pixelsToFrames(event.clientX - rect.left, pixelsPerFrame))));
-            }}
-          >
-            {rulerMarks.map((second) => (
-              <span className="timeline-ruler__mark" key={second} style={{ left: second * project.settings.fps * pixelsPerFrame }}>
-                <b>{second}s</b>
-              </span>
-            ))}
+          <div aria-label="时间标尺" className="timeline-ruler">
+            <span aria-hidden="true" className="timeline-ruler__gutter" />
+            <div
+              className="timeline-ruler__scale"
+              onMouseDown={beginSeek}
+            >
+              {rulerMarks.map((second) => (
+                <span className="timeline-ruler__mark" key={second} style={{ left: second * timelineProject.settings.fps * pixelsPerFrame }}>
+                  <b>{second}s</b>
+                </span>
+              ))}
+            </div>
           </div>
           <div className="timeline-track">
             <div className="timeline-track__label">主视频轨道</div>
-            <div className="timeline-track__content">
-              {project.videoClips.map((clip) => (
+            <div className="timeline-track__content" onMouseDown={beginSeek}>
+              {timelineProject.videoClips.map((clip) => (
                 <TimelineClip
                   clip={clip}
                   durationInFrames={clip.durationInFrames}
@@ -182,13 +380,16 @@ export function Timeline({
                   kind="video"
                   label={clipLabel(clip, "video")}
                   onMove={(clipId, fromFrame) => move(clipId, "video", fromFrame)}
-                  onResize={(clipId, fromFrame, durationInFrames) => resize(clipId, "video", fromFrame, durationInFrames)}
+                  onPreviewMove={(clipId, fromFrame) => previewRange(clipId, "video", fromFrame, clip.durationInFrames, "move")}
+                  onPreviewResize={(clipId, fromFrame, durationInFrames, mode) => previewRange(clipId, "video", fromFrame, durationInFrames, mode)}
+                  onResize={(clipId, fromFrame, durationInFrames, mode) => resize(clipId, "video", fromFrame, durationInFrames, mode)}
+                  onInteractionEnd={clearPreview}
                   onSelect={select}
                   pixelsPerFrame={pixelsPerFrame}
                   selected={selectedClipId === clip.id}
                 />
               ))}
-              {project.videoClips.length === 0 && <span className="timeline-empty">从左侧导入视频素材</span>}
+                {timelineProject.videoClips.length === 0 && <span className="timeline-empty">从左侧导入视频素材</span>}
             </div>
           </div>
           {visibleEffectTracks.map((track, trackIndex) => (
@@ -198,6 +399,7 @@ export function Timeline({
                 className="timeline-track__content"
                 onDragOver={handleTemplateDragOver}
                 onDrop={handleTemplateDrop}
+                onMouseDown={beginSeek}
               >
                 {track.clips.map((clip) => (
                   <TimelineClip
@@ -208,7 +410,10 @@ export function Timeline({
                     kind="effect"
                     label={clipLabel(clip, "effect")}
                     onMove={(clipId, fromFrame) => move(clipId, "effect", fromFrame)}
-                    onResize={(clipId, fromFrame, durationInFrames) => resize(clipId, "effect", fromFrame, durationInFrames)}
+                    onPreviewMove={(clipId, fromFrame) => previewRange(clipId, "effect", fromFrame, clip.durationInFrames, "move")}
+                    onPreviewResize={(clipId, fromFrame, durationInFrames, mode) => previewRange(clipId, "effect", fromFrame, durationInFrames, mode)}
+                    onResize={(clipId, fromFrame, durationInFrames, mode) => resize(clipId, "effect", fromFrame, durationInFrames, mode)}
+                    onInteractionEnd={clearPreview}
                     onSelect={select}
                     pixelsPerFrame={pixelsPerFrame}
                     selected={selectedClipId === clip.id}
@@ -218,7 +423,7 @@ export function Timeline({
               </div>
             </div>
           ))}
-          <span className="timeline-playhead" style={{ left: currentFrame * pixelsPerFrame }} />
+          <span className="timeline-playhead" style={{ left: TIMELINE_LABEL_WIDTH + currentFrame * pixelsPerFrame }} />
         </div>
       </div>
     </section>

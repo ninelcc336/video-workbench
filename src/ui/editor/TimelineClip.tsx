@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EffectClip, VideoClip } from "../../domain/project/model";
 
 export type TimelineClipKind = "video" | "effect";
@@ -13,7 +13,10 @@ export type TimelineClipProps = {
   selected: boolean;
   onSelect: (clipId: string) => void;
   onMove: (clipId: string, fromFrame: number) => void;
-  onResize: (clipId: string, fromFrame: number, durationInFrames: number) => void;
+  onResize: (clipId: string, fromFrame: number, durationInFrames: number, mode: DragState["mode"]) => void;
+  onPreviewMove?: (clipId: string, fromFrame: number) => void;
+  onPreviewResize?: (clipId: string, fromFrame: number, durationInFrames: number, mode: DragState["mode"]) => void;
+  onInteractionEnd?: () => void;
 };
 
 type DragState = {
@@ -34,11 +37,15 @@ export function TimelineClip({
   selected,
   onSelect,
   onMove,
+  onPreviewMove,
+  onPreviewResize,
   onResize,
+  onInteractionEnd,
 }: TimelineClipProps) {
   const dragRef = useRef<DragState | null>(null);
   const latestFrameRef = useRef(fromFrame);
   const latestDurationRef = useRef(durationInFrames);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -48,11 +55,13 @@ export function TimelineClip({
       const deltaFrames = Math.round((event.clientX - drag.startX) / pixelsPerFrame);
       if (drag.mode === "move") {
         latestFrameRef.current = Math.max(0, drag.startFromFrame + deltaFrames);
+        onPreviewMove?.(clip.id, latestFrameRef.current);
         return;
       }
 
       if (drag.mode === "resize-right") {
         latestDurationRef.current = Math.max(1, drag.startDuration + deltaFrames);
+        onPreviewResize?.(clip.id, latestFrameRef.current, latestDurationRef.current, drag.mode);
         return;
       }
 
@@ -68,6 +77,7 @@ export function TimelineClip({
         1,
         drag.startDuration - (nextFromFrame - drag.startFromFrame),
       );
+      onPreviewResize?.(clip.id, latestFrameRef.current, latestDurationRef.current, drag.mode);
     };
 
     const handleMouseUp = () => {
@@ -76,10 +86,17 @@ export function TimelineClip({
       dragRef.current = null;
 
       if (drag.mode === "move") {
-        onMove(clip.id, latestFrameRef.current);
-      } else {
-        onResize(clip.id, latestFrameRef.current, latestDurationRef.current);
+        if (latestFrameRef.current !== drag.startFromFrame) {
+          onMove(clip.id, latestFrameRef.current);
+        }
+      } else if (
+        latestFrameRef.current !== drag.startFromFrame
+        || latestDurationRef.current !== drag.startDuration
+      ) {
+        onResize(clip.id, latestFrameRef.current, latestDurationRef.current, drag.mode);
       }
+      onInteractionEnd?.();
+      setIsDragging(false);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -88,7 +105,7 @@ export function TimelineClip({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [clip.id, onMove, onResize, pixelsPerFrame]);
+  }, [clip.id, onMove, onPreviewMove, onPreviewResize, onResize, onInteractionEnd, pixelsPerFrame]);
 
   const beginDrag = (mode: DragState["mode"], event: React.MouseEvent) => {
     event.stopPropagation();
@@ -101,12 +118,13 @@ export function TimelineClip({
       startFromFrame: fromFrame,
       startDuration: durationInFrames,
     };
+    setIsDragging(true);
   };
 
   return (
     <button
       aria-label={`${label}，${kind === "video" ? "视频" : "特效"}片段`}
-      className={`timeline-clip ${kind}-clip${selected ? " selected" : ""}`}
+      className={`timeline-clip ${kind}-clip${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
       onClick={() => onSelect(clip.id)}
       onMouseDown={(event) => beginDrag("move", event)}
       style={{

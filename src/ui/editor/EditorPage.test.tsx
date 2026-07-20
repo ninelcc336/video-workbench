@@ -11,11 +11,21 @@ const importMediaFile = vi.hoisted(() => vi.fn());
 vi.mock("./media-import", () => ({ importMediaFile }));
 vi.mock("./PreviewCanvas", () => ({
   // 中文注释：本用例只验证页面导入事件到编辑器快照的桥接，不依赖 Remotion 的浏览器运行时。
-  PreviewCanvas: ({ currentFrame }: { currentFrame?: number }) => <div data-current-frame={currentFrame} data-testid="preview-canvas" />,
+  PreviewCanvas: ({ currentFrame, onSelectClip }: { currentFrame?: number; onSelectClip?: (clipId: string | null) => void }) => (
+    <div data-current-frame={currentFrame} data-testid="preview-canvas">
+      <button onClick={() => onSelectClip?.("effect-1")} type="button">从预览选择特效</button>
+    </div>
+  ),
 }));
 vi.mock("./Timeline", () => ({
   // 中文注释：用定位按钮驱动页面播放头，验证重置操作会同时归零预览状态。
-  Timeline: ({ onSeekFrame }: { onSeekFrame?: (frame: number) => void }) => <button onClick={() => onSeekFrame?.(10)} type="button">定位播放头</button>,
+  Timeline: ({ onSeekFrame, onSelectClip, selectedClipId }: { onSeekFrame?: (frame: number) => void; onSelectClip?: (clipId: string) => void; selectedClipId?: string | null }) => (
+    <>
+      <button onClick={() => onSeekFrame?.(10)} type="button">定位播放头</button>
+      <button onClick={() => onSelectClip?.("video-1")} type="button">选择视频片段</button>
+      <span data-testid="selected-clip-id">{selectedClipId ?? ""}</span>
+    </>
+  ),
 }));
 
 /** 中文注释：集中构造重置场景的横屏项目，避免多个交互用例复制相同的视频时间轴夹具。 */
@@ -28,6 +38,7 @@ function createLandscapeProjectStore() {
   return store;
 }
 
+/** 中文注释：构造包含可编辑特效的页面夹具，验证临时项目能同时驱动预览和属性面板。 */
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -99,4 +110,47 @@ describe("编辑项目的素材导入", () => {
     expect(store.getSnapshot().videoClips).toHaveLength(1);
     expect(screen.getByTestId("preview-canvas").dataset.currentFrame).toBe("10");
   });
+
+  it("通过快捷键复制并粘贴视频片段，且一次撤销可以移除副本", async () => {
+    const store = createLandscapeProjectStore();
+
+    render(<EditorPage store={store} />);
+    fireEvent.click(screen.getByRole("button", { name: "选择视频片段" }));
+    fireEvent.keyDown(window, { ctrlKey: true, key: "c" });
+    fireEvent.click(screen.getByRole("button", { name: "定位播放头" }));
+    fireEvent.keyDown(window, { ctrlKey: true, key: "v" });
+
+    await waitFor(() => expect(store.getSnapshot().videoClips).toHaveLength(2));
+    const pasted = store.getSnapshot().videoClips[1];
+    expect(pasted.id).not.toBe("video-1");
+    expect(pasted.fromFrame).toBe(30);
+
+    fireEvent.keyDown(window, { ctrlKey: true, key: "z" });
+    await waitFor(() => expect(store.getSnapshot().videoClips).toHaveLength(1));
+
+    fireEvent.keyDown(window, { ctrlKey: true, key: "y" });
+    await waitFor(() => expect(store.getSnapshot().videoClips).toHaveLength(2));
+  });
+
+  it("从实时预览选择特效后同步选中特效轨道片段", async () => {
+    const store = createEditorStore(createEmptyProject());
+    store.dispatch({
+      type: "add-effect-clip",
+      clip: {
+        durationInFrames: 20,
+        fromFrame: 0,
+        id: "effect-1",
+        params: {},
+        templateId: "card-overlay",
+        templateVersion: 1,
+        trackId: "effects-1",
+      },
+    });
+
+    render(<EditorPage store={store} />);
+    fireEvent.click(screen.getByRole("button", { name: "从预览选择特效" }));
+
+    await waitFor(() => expect(screen.getByTestId("selected-clip-id").textContent).toBe("effect-1"));
+  });
+
 });

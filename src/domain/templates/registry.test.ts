@@ -8,13 +8,17 @@ import {
 import type { TemplateDefinition } from "./types";
 
 describe("特效模板注册表", () => {
-  it("注册启动时可用的三类内置模板", () => {
-    // 中文注释：用户通过分类浏览模板，因此三类首批模板都必须能从公共注册表发现。
+  it("注册启动时可用的基础模板和科技解说信息叠加模板", () => {
+    // 中文注释：用户通过分类浏览模板，因此基础模板和目标视频拆出的信息层都必须能被发现。
     expect(listTemplates()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "card-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "bubble-decoration", category: "decorative-animation" }),
         expect.objectContaining({ id: "basic-transition", category: "transition" }),
+        expect.objectContaining({ id: "section-title-overlay", category: "information-overlay" }),
+        expect.objectContaining({ id: "checklist-overlay", category: "information-overlay" }),
+        expect.objectContaining({ id: "comment-panel-overlay", category: "information-overlay" }),
+        expect.objectContaining({ id: "tag-pills-overlay", category: "information-overlay" }),
       ]),
     );
   });
@@ -63,11 +67,9 @@ describe("特效模板注册表", () => {
       durationInFrames: 60,
     };
 
-    const templates: TemplateDefinition[] = [
-      getTemplate("card-overlay", 1),
-      getTemplate("bubble-decoration", 1),
-      getTemplate("basic-transition", 1),
-    ];
+    const templates: TemplateDefinition[] = listTemplates().map((summary) =>
+      getTemplate(summary.id, summary.version),
+    );
 
     for (const template of templates) {
       const element = template.render({

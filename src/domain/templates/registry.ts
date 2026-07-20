@@ -1,6 +1,10 @@
 import { BubbleDecoration } from "../../remotion/templates/BubbleDecoration";
 import { CardOverlay } from "../../remotion/templates/CardOverlay";
 import { BasicTransition } from "../../remotion/templates/BasicTransition";
+import { ChecklistOverlay } from "../../remotion/templates/ChecklistOverlay";
+import { CommentPanelOverlay } from "../../remotion/templates/CommentPanelOverlay";
+import { SectionTitleOverlay } from "../../remotion/templates/SectionTitleOverlay";
+import { TagPillsOverlay } from "../../remotion/templates/TagPillsOverlay";
 import {
   getDefaultParams,
   normalizeParameterValues,
@@ -66,3 +70,7 @@ export const getTemplateDefaultParams = (
 registerTemplate(CardOverlay.definition);
 registerTemplate(BubbleDecoration.definition);
 registerTemplate(BasicTransition.definition);
+registerTemplate(SectionTitleOverlay.definition);
+registerTemplate(ChecklistOverlay.definition);
+registerTemplate(CommentPanelOverlay.definition);
+registerTemplate(TagPillsOverlay.definition);

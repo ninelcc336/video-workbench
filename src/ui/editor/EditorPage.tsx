@@ -10,6 +10,7 @@ import type { MediaSources } from "../../remotion/media";
 import type { ExportSettings } from "../../domain/project/model";
 import { getCompositionDurationInFrames } from "../../remotion/EditorComposition";
 import { clampPreviewFrame } from "../preview/PreviewPlayer";
+import { findNearestLegalVideoStart } from "../../domain/editor/clip-ranges";
 import { createAutosaveController, SaveIndicator, useAutosaveState } from "./SaveIndicator";
 import { ExportDialog } from "./ExportDialog";
 import { ResetProjectDialog } from "./ResetProjectDialog";
@@ -43,6 +44,36 @@ function getClip(project: EditProject, id: string | null): EffectClip | null {
   return project.effectClips.find((clip) => clip.id === id) ?? null;
 }
 
+type ClipboardClip =
+  | { kind: "video"; clip: VideoClip }
+  | { kind: "effect"; clip: EffectClip };
+
+/** 中文注释：复制片段时深拷贝可变参数，避免后续属性编辑反向污染内部剪贴板。 */
+function cloneClipboardValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(cloneClipboardValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [key, cloneClipboardValue(nestedValue)]),
+    );
+  }
+  return value;
+}
+
+/** 中文注释：只保存片段业务字段，不保存 React 对象或对原项目数组的引用。 */
+function cloneClipboardClip(clip: VideoClip | EffectClip): VideoClip | EffectClip {
+  if ("params" in clip) {
+    return { ...clip, params: cloneClipboardValue(clip.params) as Record<string, unknown> };
+  }
+  return { ...clip };
+}
+
+/** 中文注释：时间轴快捷键不应抢占输入控件的系统编辑行为。 */
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element) return false;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName) || element.isContentEditable;
+}
+
 /** 中文注释：页面层把时间轴事件翻译成 EditorStore 公共命令，组件自身不直接修改项目数组。 */
 export function EditorPage({ store: providedStore, mediaSources: initialMediaSources = {}, missingMediaIds: initialMissingMediaIds = [], onSaveProject }: EditorPageProps) {
   const store = useMemo(() => providedStore ?? createEditorStoreForPage(), [providedStore]);
@@ -64,6 +95,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [videoTemplates, setVideoTemplates] = useState<VideoTemplate[]>([]);
   // 中文注释：只记录最近一次重置前的播放头，以便紧接着撤销重置时恢复用户正在查看的位置。
   const frameBeforeProjectReset = useRef<number | null>(null);
+  const clipboardRef = useRef<ClipboardClip | null>(null);
 
   useEffect(() => store.subscribe((snapshot) => {
     setProject(snapshot);
@@ -187,17 +219,72 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     frameBeforeProjectReset.current = null;
   };
 
+  /** 中文注释：重做与顶部按钮共用 EditorStore 历史，播放头仍由项目时长同步校正。 */
+  const redo = () => store.redo();
+
+  /** 中文注释：复制只更新编辑器级剪贴板，不创建项目历史记录。 */
+  const copySelectedClip = () => {
+    const video = project.videoClips.find((clip) => clip.id === selectedClipId);
+    if (video) {
+      clipboardRef.current = { kind: "video", clip: cloneClipboardClip(video) as VideoClip };
+      return;
+    }
+    const effect = project.effectClips.find((clip) => clip.id === selectedClipId);
+    if (effect) clipboardRef.current = { kind: "effect", clip: cloneClipboardClip(effect) as EffectClip };
+  };
+
+  /** 中文注释：粘贴始终生成新片段并一次性提交，完成后自动选中新副本。 */
+  const pasteSelectedClip = () => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard) return;
+
+    if (clipboard.kind === "video") {
+      const source = clipboard.clip;
+      const clip: VideoClip = {
+        ...source,
+        id: createId("video"),
+        fromFrame: findNearestLegalVideoStart(project, null, currentFrame, source.durationInFrames),
+      };
+      dispatch({ type: "add-video-clip", clip });
+      setSelectedClipId(clip.id);
+      return;
+    }
+
+    const source = clipboard.clip;
+    const clip: EffectClip = {
+      ...source,
+      id: createId("effect"),
+      fromFrame: Math.max(0, Math.round(currentFrame)),
+      trackId: getAvailableEffectTrackId(project.effectClips, currentFrame, source.durationInFrames),
+      params: cloneClipboardValue(source.params) as Record<string, unknown>,
+    };
+    dispatch({ type: "add-effect-clip", clip });
+    setSelectedClipId(clip.id);
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || isEditableTarget(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (!["c", "v", "z", "y"].includes(key)) return;
+      event.preventDefault();
+      if (key === "c") copySelectedClip();
+      if (key === "v") pasteSelectedClip();
+      if (key === "z") undo();
+      if (key === "y") redo();
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [currentFrame, project, selectedClipId]);
+
   const moveClip = (clipId: string, kind: ClipKind, fromFrame: number) => {
     dispatch(kind === "video" ? { type: "move-video-clip", clipId, fromFrame } : { type: "move-effect-clip", clipId, fromFrame });
   };
 
   const resizeClip = (clipId: string, kind: ClipKind, fromFrame: number, durationInFrames: number) => {
-    const sourceClip = kind === "video" ? project.videoClips.find((clip) => clip.id === clipId) : project.effectClips.find((clip) => clip.id === clipId);
-    if (!sourceClip) return;
-    const nextClip = { ...sourceClip, fromFrame: Math.max(0, fromFrame), durationInFrames: Math.max(1, durationInFrames) };
-    // 中文注释：当前领域命令已覆盖增删，裁剪通过删除旧快照再添加新快照完成，仍由 Store 校验并进入历史。
-    dispatch(kind === "video" ? { type: "delete-video-clip", clipId } : { type: "delete-effect-clip", clipId });
-    dispatch(kind === "video" ? { type: "add-video-clip", clip: nextClip as VideoClip } : { type: "add-effect-clip", clip: nextClip as EffectClip });
+    dispatch(kind === "video"
+      ? { type: "resize-video-clip", clipId, fromFrame, durationInFrames }
+      : { type: "resize-effect-clip", clipId, fromFrame, durationInFrames });
   };
 
   const deleteClip = (clipId: string, kind: ClipKind) => {
@@ -244,7 +331,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={() => store.redo()} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置项目" type="button">↺</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+        <div className="topbar-actions"><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={redo} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置项目" type="button">↺</button><SaveIndicator state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
       </header>
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <EditorPanelLayout>
@@ -252,7 +339,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={commitEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
-      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
+      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />

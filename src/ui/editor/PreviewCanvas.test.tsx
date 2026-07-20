@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EffectClip } from "../../domain/project/model";
@@ -16,10 +16,15 @@ vi.mock("../preview/PreviewPlayer", () => ({
 afterEach(cleanup);
 
 /** 中文注释：构造带有明确生效区间的特效片段，复用真实 CanvasSelection 验证预览接缝。 */
-function createEffectClip(fromFrame = 10, durationInFrames = 20): EffectClip {
-  const template = getTemplate("card-overlay", 1);
+function createEffectClip(
+  templateId = "card-overlay",
+  fromFrame = 10,
+  durationInFrames = 20,
+  id = "effect-1",
+): EffectClip {
+  const template = getTemplate(templateId, 1);
   return {
-    id: "effect-1",
+    id,
     templateId: template.id,
     templateVersion: template.version,
     trackId: "effects-1",
@@ -90,5 +95,170 @@ describe("预览画布尺寸", () => {
     render(<PreviewCanvas currentFrame={currentFrame} project={project} selectedClip={clip} />);
 
     expect(Boolean(screen.queryByRole("group", { name: "特效选区" }))).toBe(expectedActive);
+  });
+
+  it.each([
+    "section-title-overlay",
+    "checklist-overlay",
+    "comment-panel-overlay",
+    "tag-pills-overlay",
+  ])("新增信息叠加模板 %s 在实时预览中提供可拖拽选区", (templateId) => {
+    const project = createEmptyProject();
+    const clip = createEffectClip(templateId);
+
+    render(<PreviewCanvas currentFrame={10} project={project} selectedClip={clip} />);
+
+    // 中文注释：没有选区就没有位置和尺寸手柄，用户无法在实时预览中拖拽该特效。
+    expect(screen.getByRole("group", { name: "特效选区" })).toBeTruthy();
+  });
+});
+
+describe("实时预览直接选择特效", () => {
+  it("点击当前生效特效的边界框即可选中特效片段", () => {
+    const project = createEmptyProject();
+    const clip = createEffectClip("section-title-overlay");
+    project.effectClips = [clip];
+    const onSelectClip = vi.fn();
+
+    render(
+      <PreviewCanvas
+        currentFrame={10}
+        onSelectClip={onSelectClip}
+        project={project}
+      />,
+    );
+
+    fireEvent.mouseDown(screen.getByRole("button", { name: "选择特效：章节标题卡" }));
+
+    expect(onSelectClip).toHaveBeenCalledWith("effect-1");
+  });
+
+  it("点击预览空白区域可以取消当前特效选择", () => {
+    const project = createEmptyProject();
+    const clip = createEffectClip("section-title-overlay");
+    project.effectClips = [clip];
+    const onSelectClip = vi.fn();
+
+    render(
+      <PreviewCanvas
+        currentFrame={10}
+        onSelectClip={onSelectClip}
+        project={project}
+        selectedClip={clip}
+      />,
+    );
+
+    fireEvent.mouseDown(screen.getByLabelText("取消特效选择"));
+
+    expect(onSelectClip).toHaveBeenCalledWith(null);
+  });
+
+  it("播放头不在生效区间时不提供预览特效选择目标", () => {
+    const project = createEmptyProject();
+    project.effectClips = [createEffectClip("section-title-overlay")];
+
+    render(<PreviewCanvas currentFrame={9} project={project} />);
+
+    expect(screen.queryByRole("button", { name: "选择特效：章节标题卡" })).toBeNull();
+  });
+
+  it("重叠特效按预览层级优先命中最上层特效", () => {
+    const project = createEmptyProject();
+    project.effectClips = [
+      createEffectClip("section-title-overlay", 10, 20, "effect-1"),
+      createEffectClip("section-title-overlay", 10, 20, "effect-2"),
+    ];
+    const onSelectClip = vi.fn();
+
+    render(
+      <PreviewCanvas
+        currentFrame={10}
+        onSelectClip={onSelectClip}
+        project={project}
+      />,
+    );
+
+    const targets = screen.getAllByRole("button", { name: "选择特效：章节标题卡" });
+    expect(Number(targets[1].getAttribute("style")?.match(/z-index: (\d+)/)?.[1])).toBeGreaterThan(
+      Number(targets[0].getAttribute("style")?.match(/z-index: (\d+)/)?.[1]),
+    );
+    fireEvent.mouseDown(targets[1]);
+
+    expect(onSelectClip).toHaveBeenCalledWith("effect-2");
+  });
+
+  it("从未选中特效按下并移动超过阈值后进行位置过程预览并一次提交", () => {
+    const project = createEmptyProject();
+    const clip = createEffectClip("section-title-overlay");
+    project.effectClips = [clip];
+    const onSelectClip = vi.fn();
+    const onPreviewParams = vi.fn();
+    const onPreviewEnd = vi.fn();
+    const onChangeParams = vi.fn();
+
+    render(
+      <PreviewCanvas
+        currentFrame={10}
+        onChangeParams={onChangeParams}
+        onPreviewEnd={onPreviewEnd}
+        onPreviewParams={onPreviewParams}
+        onSelectClip={onSelectClip}
+        project={project}
+      />,
+    );
+
+    const canvas = screen.getByLabelText("取消特效选择");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ bottom: 1000, height: 1000, left: 0, right: 1000, top: 0, width: 1000 }),
+    });
+    const target = screen.getByRole("button", { name: "选择特效：章节标题卡" });
+    fireEvent.mouseDown(target, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(window, { clientX: 101, clientY: 101 });
+    expect(onPreviewParams).not.toHaveBeenCalled();
+
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 200 });
+    expect(onPreviewParams).toHaveBeenLastCalledWith("effect-1", {
+      position: { x: 0.41, y: 0.33 },
+    });
+    fireEvent.mouseUp(window);
+
+    expect(onChangeParams).toHaveBeenCalledWith("effect-1", {
+      position: { x: 0.41, y: 0.33 },
+    });
+    expect(onPreviewEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("直接拖动期间播放头离开生效区间时取消手势且不提交位置", () => {
+    const project = createEmptyProject();
+    const clip = createEffectClip("section-title-overlay");
+    project.effectClips = [clip];
+    const onPreviewEnd = vi.fn();
+    const onChangeParams = vi.fn();
+    const { rerender } = render(
+      <PreviewCanvas
+        currentFrame={10}
+        onChangeParams={onChangeParams}
+        onPreviewEnd={onPreviewEnd}
+        project={project}
+      />,
+    );
+
+    const canvas = screen.getByLabelText("取消特效选择");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ bottom: 1000, height: 1000, left: 0, right: 1000, top: 0, width: 1000 }),
+    });
+    fireEvent.mouseDown(screen.getByRole("button", { name: "选择特效：章节标题卡" }), {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+    });
+    rerender(<PreviewCanvas currentFrame={30} onChangeParams={onChangeParams} onPreviewEnd={onPreviewEnd} project={project} />);
+    fireEvent.mouseMove(window, { clientX: 200, clientY: 200 });
+    fireEvent.mouseUp(window);
+
+    expect(onPreviewEnd).toHaveBeenCalledOnce();
+    expect(onChangeParams).not.toHaveBeenCalled();
   });
 });

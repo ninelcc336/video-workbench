@@ -13,9 +13,11 @@ export type EditorCommand =
   | { type: "reset-project" }
   | { type: "add-video-clip"; clip: VideoClip; sourceDimensions?: VideoDimensions }
   | { type: "move-video-clip"; clipId: string; fromFrame: number }
+  | { type: "resize-video-clip"; clipId: string; fromFrame: number; durationInFrames: number }
   | { type: "delete-video-clip"; clipId: string }
   | { type: "add-effect-clip"; clip: EffectClip }
   | { type: "move-effect-clip"; clipId: string; fromFrame: number }
+  | { type: "resize-effect-clip"; clipId: string; fromFrame: number; durationInFrames: number }
   | { type: "delete-effect-clip"; clipId: string }
   | {
       type: "update-effect-params";
@@ -59,6 +61,14 @@ function assertCommandResult(project: EditProject): void {
 function assertNonNegativeFrame(fromFrame: number): void {
   if (!Number.isInteger(fromFrame) || fromFrame < 0) {
     throw new RangeError("片段起始帧必须是非负整数");
+  }
+}
+
+/** 中文注释：裁剪命令在领域边界统一校验起点和时长，保证一次操作可以安全进入历史。 */
+function assertClipRange(fromFrame: number, durationInFrames: number): void {
+  assertNonNegativeFrame(fromFrame);
+  if (!Number.isInteger(durationInFrames) || durationInFrames < 1) {
+    throw new RangeError("片段时长必须是正整数");
   }
 }
 
@@ -137,6 +147,19 @@ export function applyCommand(
       };
       break;
     }
+    case "resize-video-clip": {
+      requireVideoClip(project, command.clipId);
+      assertClipRange(command.fromFrame, command.durationInFrames);
+      nextProject = {
+        ...project,
+        videoClips: project.videoClips.map((clip) =>
+          clip.id === command.clipId
+            ? { ...copyVideoClip(clip), fromFrame: command.fromFrame, durationInFrames: command.durationInFrames }
+            : copyVideoClip(clip),
+        ),
+      };
+      break;
+    }
     case "delete-video-clip":
       requireVideoClip(project, command.clipId);
       nextProject = {
@@ -163,6 +186,19 @@ export function applyCommand(
         effectClips: project.effectClips.map((clip) =>
           clip.id === command.clipId
             ? { ...copyEffectClip(clip), fromFrame: command.fromFrame }
+            : copyEffectClip(clip),
+        ),
+      };
+      break;
+    }
+    case "resize-effect-clip": {
+      requireEffectClip(project, command.clipId);
+      assertClipRange(command.fromFrame, command.durationInFrames);
+      nextProject = {
+        ...project,
+        effectClips: project.effectClips.map((clip) =>
+          clip.id === command.clipId
+            ? { ...copyEffectClip(clip), fromFrame: command.fromFrame, durationInFrames: command.durationInFrames }
             : copyEffectClip(clip),
         ),
       };

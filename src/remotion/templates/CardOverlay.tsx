@@ -1,6 +1,6 @@
 import React from "react";
-import { Easing, interpolate } from "remotion";
 import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { getVisibilityProgress } from "./animation";
 
 export type CardOverlayParams = {
   text: string;
@@ -41,17 +41,8 @@ export const CardOverlay: React.FC<TemplateRenderProps> & {
   definition: TemplateDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...cardDefaults, ...params } as CardOverlayParams;
-  // 中文注释：frame 是当前特效片段内的帧，动画时长参数决定卡片入场进度。
-  const progress = interpolate(
-    frame,
-    [0, Math.max(1, values.animationDuration)],
-    [0, 1],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-      easing: Easing.out(Easing.cubic),
-    },
-  );
+  // 中文注释：同一进度覆盖入场和出场，片段结束前会沿入场方向反向退场。
+  const progress = getVisibilityProgress(frame, durationInFrames, values.animationDuration);
   const offset = getOffset(values.enterDirection, 0.08 * (1 - progress));
   const left = (values.position.x + offset.x) * width;
   const top = (values.position.y + offset.y) * height;
@@ -115,7 +106,7 @@ CardOverlay.definition = {
     },
     {
       key: "animationDuration",
-      label: "动画时长",
+      label: "入场/出场时长",
       type: "number",
       defaultValue: cardDefaults.animationDuration,
       min: 1,

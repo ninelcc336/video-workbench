@@ -6,7 +6,7 @@ import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject } from "../../domain/project/model";
 import { getTemplateDefaultParams, getTemplate } from "../../domain/templates/registry";
 import { TEMPLATE_DRAG_MIME } from "./drag-and-drop";
-import { Timeline, clampClipRange, pixelsToFrames } from "./Timeline";
+import { clampClipRange, clampTimelineHeight, getTimelineHeightBounds, Timeline, TIMELINE_LABEL_WIDTH, pixelsToFrames } from "./Timeline";
 
 afterEach(cleanup);
 
@@ -37,6 +37,32 @@ function createTimelineProject(): EditProject {
 }
 
 describe("基础时间轴", () => {
+  it("把时间轴高度限制在视口的一半，并支持拖拽调整", () => {
+    expect(getTimelineHeightBounds(1000)).toEqual({ min: 160, max: 500 });
+    expect(clampTimelineHeight(999, 1000)).toBe(500);
+    expect(clampTimelineHeight(1, 1000)).toBe(160);
+
+    render(<Timeline project={createTimelineProject()} selectedClipId={null} />);
+
+    const resizeHandle = screen.getByRole("slider", { name: "调整时间轴高度" });
+    expect(resizeHandle.getAttribute("aria-valuenow")).toBe("238");
+    fireEvent.pointerDown(resizeHandle, { clientY: 600, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(Number(resizeHandle.getAttribute("aria-valuenow"))).toBeGreaterThan(238);
+  });
+
+  it("让标尺零点、播放头零帧和轨道内容起点对齐", () => {
+    render(<Timeline currentFrame={0} project={createTimelineProject()} selectedClipId={null} />);
+
+    const rulerGutter = document.querySelector(".timeline-ruler__gutter");
+    const playhead = document.querySelector(".timeline-playhead");
+    expect(rulerGutter).toBeTruthy();
+    expect((playhead as HTMLElement).style.left).toBe(`${TIMELINE_LABEL_WIDTH}px`);
+    expect(document.querySelector(".timeline")?.getAttribute("style")).toContain("width: 1185px");
+  });
+
   it("将屏幕像素换算为整数帧，并显示主轨道和特效轨道", () => {
     expect(pixelsToFrames(150, 10)).toBe(15);
 
@@ -94,6 +120,80 @@ describe("基础时间轴", () => {
     fireEvent.mouseUp(window);
 
     expect(onResizeClip).toHaveBeenCalledWith("effect-1", "effect", 30, 30);
+  });
+
+  it("拖动片段期间持续发出临时项目，松开后清理临时项目", () => {
+    const onPreviewProject = vi.fn();
+
+    render(
+      <Timeline
+        onPreviewProject={onPreviewProject}
+        onMoveClip={vi.fn()}
+        pixelsPerFrame={10}
+        project={createTimelineProject()}
+        selectedClipId={null}
+      />,
+    );
+
+    const clip = screen.getByRole("button", { name: /弹入卡片/ });
+    fireEvent.mouseDown(clip, { clientX: 300, button: 0 });
+    fireEvent.mouseMove(window, { clientX: 350 });
+
+    const preview = onPreviewProject.mock.calls.at(-1)?.[0] as EditProject;
+    expect(preview.effectClips[0].fromFrame).toBe(35);
+
+    fireEvent.mouseUp(window);
+    expect(onPreviewProject).toHaveBeenLastCalledWith(null);
+  });
+
+  it("拖动标尺期间持续更新播放头且鼠标松开结束手势", () => {
+    const onSeekFrame = vi.fn();
+    render(
+      <Timeline
+        onSeekFrame={onSeekFrame}
+        pixelsPerFrame={10}
+        project={createTimelineProject()}
+        selectedClipId={null}
+      />,
+    );
+
+    const ruler = document.querySelector(".timeline-ruler__scale") as HTMLElement;
+    ruler.getBoundingClientRect = () => ({
+      bottom: 30,
+      height: 27,
+      left: 100,
+      right: 1000,
+      top: 0,
+      width: 900,
+      x: 100,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseDown(ruler, { button: 0, clientX: 150 });
+    fireEvent.mouseMove(window, { clientX: 200 });
+    fireEvent.mouseUp(window);
+
+    expect(onSeekFrame).toHaveBeenNthCalledWith(1, 5);
+    expect(onSeekFrame).toHaveBeenLastCalledWith(10);
+  });
+
+  it("没有实际移动时不发出片段提交事件", () => {
+    const onMoveClip = vi.fn();
+    render(
+      <Timeline
+        onMoveClip={onMoveClip}
+        pixelsPerFrame={10}
+        project={createTimelineProject()}
+        selectedClipId={null}
+      />,
+    );
+
+    const clip = screen.getByRole("button", { name: /弹入卡片/ });
+    fireEvent.mouseDown(clip, { button: 0, clientX: 300 });
+    fireEvent.mouseUp(window);
+
+    expect(onMoveClip).not.toHaveBeenCalled();
   });
 
   it("删除键会发出删除事件", () => {

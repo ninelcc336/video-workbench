@@ -44,6 +44,22 @@ describe("命令式编辑器核心", () => {
     expect(store.getSnapshot().videoClips).toEqual([]);
   });
 
+  it("裁剪视频和特效片段时一次命令即可通过撤销完整恢复", () => {
+    const store = createStore();
+    store.dispatch({ type: "add-video-clip", clip: videoClip });
+    store.dispatch({ type: "add-effect-clip", clip: effectClip });
+
+    store.dispatch({ type: "resize-video-clip", clipId: videoClip.id, fromFrame: 5, durationInFrames: 20 });
+    store.dispatch({ type: "resize-effect-clip", clipId: effectClip.id, fromFrame: 15, durationInFrames: 10 });
+
+    store.undo();
+    expect(store.getSnapshot().effectClips[0]).toEqual(effectClip);
+    expect(store.getSnapshot().videoClips[0]).toEqual({ ...videoClip, fromFrame: 5, durationInFrames: 20 });
+
+    store.undo();
+    expect(store.getSnapshot().videoClips[0]).toEqual(videoClip);
+  });
+
   it("首个横屏视频片段会把空编辑项目切换为横屏画布和导出规格", () => {
     const store = createStore();
 
