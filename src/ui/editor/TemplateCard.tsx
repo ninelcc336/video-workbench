@@ -17,14 +17,29 @@ const categoryLabels: Record<TemplateCategory, string> = {
 /** 中文注释：模板卡片用模板自身的 Remotion 渲染函数做短预览，避免维护第二套视觉实现。 */
 export function TemplateCard({ template, onAddTemplate }: TemplateCardProps) {
   const [frame, setFrame] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
-    // 中文注释：缩略图持续自动播放，保留动效发现能力，不再依赖独立预览按钮。
+    // 中文注释：模板卡片默认停在首帧，只有鼠标悬浮时才创建预览计时器，避免左侧列表同时消耗动画资源。
+    if (!isHovered) return undefined;
+
     const timer = window.setInterval(() => {
       setFrame((current) => (current + 1) % Math.max(1, template.defaultDurationInFrames));
     }, 50);
     return () => window.clearInterval(timer);
-  }, [template.defaultDurationInFrames]);
+  }, [isHovered, template.defaultDurationInFrames]);
+
+  /** 中文注释：鼠标移入开始预览，保留当前首帧状态以便从头播放。 */
+  const handleMouseEnter = () => {
+    setFrame(0);
+    setIsHovered(true);
+  };
+
+  /** 中文注释：鼠标移出立即停止预览并回到首帧，保证未悬浮卡片始终静止。 */
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setFrame(0);
+  };
 
   const preview = template.render({
     frame,
@@ -40,6 +55,8 @@ export function TemplateCard({ template, onAddTemplate }: TemplateCardProps) {
       className="template-card"
       draggable
       onDragStart={(event) => writeTemplateDragData(event.dataTransfer, template)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <div className="template-card__preview" aria-label={`${template.name}动效预览`}>
         <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>

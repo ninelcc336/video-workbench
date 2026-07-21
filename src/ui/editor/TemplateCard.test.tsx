@@ -35,7 +35,7 @@ describe("特效模板卡片", () => {
     expect(screen.getByRole("article").getAttribute("draggable")).toBe("true");
   });
 
-  it("模板缩略图会自动推进动效帧，不再依赖独立预览按钮", () => {
+  it("模板缩略图默认停在首帧，鼠标悬浮后才推进动效帧", () => {
     vi.useFakeTimers();
     const renderTemplate = vi.fn(() => <span />);
 
@@ -43,8 +43,31 @@ describe("特效模板卡片", () => {
     const initialCallCount = renderTemplate.mock.calls.length;
 
     act(() => vi.advanceTimersByTime(50));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+    expect(renderTemplate.mock.calls.length).toBe(initialCallCount);
+
+    fireEvent.mouseEnter(screen.getByRole("article"));
+    act(() => vi.advanceTimersByTime(50));
 
     expect(renderTemplate.mock.calls.length).toBeGreaterThan(initialCallCount);
     expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 1 }));
+  });
+
+  it("鼠标移出后停止预览并回到首帧", () => {
+    vi.useFakeTimers();
+    const renderTemplate = vi.fn(() => <span />);
+
+    render(<TemplateCard template={createTemplate(renderTemplate)} />);
+    const card = screen.getByRole("article");
+
+    fireEvent.mouseEnter(card);
+    act(() => vi.advanceTimersByTime(100));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 2 }));
+
+    fireEvent.mouseLeave(card);
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+
+    act(() => vi.advanceTimersByTime(100));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
   });
 });
