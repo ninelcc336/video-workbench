@@ -49,6 +49,34 @@ button { cursor: pointer; }
 .workspace-settings label { display: grid; gap: 6px; color: #aab5a9; font-size: 10px; }
 .workspace-settings input, .workspace-settings select { width: 100%; border: 1px solid #343c36; border-radius: 7px; padding: 8px; color: #e8ede5; background: #202620; font-size: 11px; }
 .workspace-settings > button { border: 1px solid #65744d; border-radius: 7px; padding: 8px; color: #151712; background: #e3f26a; font-size: 11px; font-weight: 800; }
+.project-select__trigger, .workspace-select__trigger { display: inline-flex; min-width: 132px; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #495545; border-radius: 8px; padding: 8px 10px; color: #e6ede2; background: #202620; font-size: 11px; }
+.project-select__content, .workspace-select__content { z-index: 40; min-width: var(--radix-select-trigger-width); overflow: hidden; border: 1px solid #596750; border-radius: 9px; padding: 4px; color: #e6ede2; background: #171b18; box-shadow: 0 16px 40px #000c; }
+.project-select__item, .workspace-select__item { display: grid; gap: 3px; cursor: pointer; border-radius: 6px; padding: 8px 10px; outline: none; font-size: 11px; }
+.project-select__item[data-highlighted], .workspace-select__item[data-highlighted] { color: #141810; background: #e3f26a; }
+.workspace-select__item small { color: inherit; opacity: .65; font-size: 9px; }
+.project-manager { position: relative; }
+.project-manager__button { width: auto; padding: 0 9px; font-size: 10px; }
+.project-manager__panel { position: absolute; z-index: 25; top: 42px; left: 0; display: grid; width: 260px; gap: 10px; border: 1px solid #526046; border-radius: 10px; padding: 12px; background: #171b18; box-shadow: 0 16px 40px #000b; }
+.project-manager__panel label { display: grid; gap: 5px; color: #aab5a9; font-size: 10px; }
+.project-manager__panel input { border: 1px solid #343c36; border-radius: 7px; padding: 8px; color: #e8ede5; background: #202620; }
+.project-manager__actions { display: flex; gap: 7px; }
+.project-manager__actions button { border: 1px solid #526046; border-radius: 6px; padding: 6px 8px; color: #dfe8dc; background: #202620; font-size: 10px; }
+/* 中文注释：启动页与空工作区使用克制的本地工作台视觉，引导用户先确认存储边界再进入编辑。 */
+.workspace-start { display: grid; width: 100%; min-height: 100vh; place-items: center; padding: 24px; color: #eef2e9; background: radial-gradient(circle at 18% 20%, #e3f26a22, transparent 24%), #111312; }
+.workspace-start__card { display: grid; width: min(520px, 100%); gap: 15px; border: 1px solid #3d493e; border-radius: 18px; padding: 30px; background: linear-gradient(145deg, #1c211e, #151816); box-shadow: 0 28px 90px #0009; }
+.workspace-start__eyebrow { margin: 0; color: #c8d96f; font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.workspace-start__card h1, .workspace-start__card p { margin: 0; }
+.workspace-start__card h1 { font-size: 26px; letter-spacing: -.04em; }
+.workspace-start__card p { color: #aab5a9; font-size: 12px; line-height: 1.7; }
+.workspace-start__card label { display: grid; gap: 7px; color: #c5cec4; font-size: 11px; }
+.workspace-start__card input { border: 1px solid #465145; border-radius: 8px; padding: 10px; color: #eef2e9; background: #111412; }
+.workspace-start__card button { border: 1px solid #596750; border-radius: 8px; padding: 10px; color: #e7eee2; background: #202620; font-size: 11px; font-weight: 700; }
+.workspace-start__card .workspace-start__primary { color: #151712; background: #e3f26a; }
+.workspace-start__error { border: 1px solid #d97756; border-radius: 8px; padding: 8px; color: #ffd9cd !important; background: #3b231e; }
+.workspace-start__recent { display: grid; gap: 7px; padding-top: 4px; }
+.workspace-start__recent strong { color: #aab5a9; font-size: 10px; }
+.workspace-start__recent button { display: grid; gap: 3px; text-align: left; }
+.workspace-start__recent small { color: #8e9790; font-size: 9px; }
 .workspace-error { position: absolute; z-index: 10; top: 84px; left: 50%; display: flex; align-items: center; gap: 9px; max-width: min(720px, calc(100vw - 36px)); transform: translateX(-50%); border: 1px solid #d97756; border-radius: 9px; padding: 9px 12px; color: #ffd9cd; background: #3b231e; box-shadow: 0 8px 30px #0008; font-size: 11px; }
 .workspace-error button { border: 1px solid #d97756; border-radius: 6px; padding: 5px 8px; color: inherit; background: transparent; font-size: 10px; white-space: nowrap; }
 .icon-button { width: 34px; height: 34px; border: 1px solid #303631; border-radius: 9px; color: #b4bbb4; background: #1f2421; font-size: 20px; }

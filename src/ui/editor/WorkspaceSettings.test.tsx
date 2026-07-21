@@ -18,7 +18,8 @@ describe("工作区设置入口", () => {
 
     expect(screen.getByLabelText("当前工作区").textContent).toContain("当前工作区");
     fireEvent.click(screen.getByRole("button", { name: "设置" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "选择最近工作区" }), { target: { value: "D:/素材工作区" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "选择最近工作区" }));
+    fireEvent.click(screen.getByText("素材工作区"));
 
     expect(onOpenWorkspace).toHaveBeenCalledWith("D:/素材工作区");
   });

@@ -110,10 +110,6 @@ export class WorkspaceAdapter {
     return this.projectRepository.renameProject(projectId, nextProjectId);
   }
 
-  async copyProject(projectId: string, nextProjectId: string): Promise<void> {
-    return this.projectRepository.copyProject(projectId, nextProjectId);
-  }
-
   async deleteProject(projectId: string): Promise<void> {
     return this.projectRepository.deleteProject(projectId);
   }

@@ -1,7 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const defaultProject = {
+  effectClips: [],
+  export: { format: "mp4", fps: 30, height: 1920, width: 1080 },
+  schemaVersion: 1,
+  settings: { fps: 30, height: 1920, width: 1080 },
+  videoClips: [],
+};
+
+/** 中文注释：浏览器测试显式提供已打开的本地工作区，避免重新引入首次启动自动创建默认工作区的旧行为。 */
+async function prepareEditorWorkspace(page: Page, project = defaultProject) {
+  await page.route("**/api/workspace/recent", async (route) => {
+    await route.fulfill({ body: JSON.stringify([{ lastOpenedAt: "2026-07-22T00:00:00.000Z", name: "验收工作区", rootPath: "D:/验收工作区" }]), contentType: "application/json", status: 200 });
+  });
+  await page.route("**/api/workspace/projects", async (route) => {
+    await route.fulfill({ body: JSON.stringify([{ id: "local-project", name: "本地项目" }, { id: "second-project", name: "第二个项目" }]), contentType: "application/json", status: 200 });
+  });
+  await page.route("**/api/workspace/projects/local-project", async (route) => {
+    await route.fulfill({ body: JSON.stringify({ mediaSources: {}, missingMediaIds: [], project }), contentType: "application/json", status: 200 });
+  });
+}
+
+// 中文注释：首次启动没有最近工作区时先停在启动页，不静默创建默认工作区或编辑项目。
+test("首次启动要求用户选择本地工作区", async ({ page }) => {
+  await page.route("**/api/workspace/recent", async (route) => {
+    await route.fulfill({ body: "[]", contentType: "application/json", status: 200 });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "启动页" })).toBeVisible();
+  await expect(page.getByLabel("启动工作区路径")).toBeVisible();
+});
 
 // 中文注释：浏览器验收覆盖新手从打开编辑器到添加模板和进入导出的主路径。
 test("剪辑小白可以打开编辑器并添加模板", async ({ page }) => {
+  await prepareEditorWorkspace(page);
   await page.goto("/");
 
   await expect(page.getByText("本地视频特效编辑器")).toBeVisible();
@@ -18,6 +50,7 @@ test("剪辑小白可以打开编辑器并添加模板", async ({ page }) => {
 
 // 中文注释：工作区打开失败时，当前编辑器仍应可见，并提供明确的重试与返回入口。
 test("工作区打开失败不会静默替换当前编辑项目", async ({ page }) => {
+  await prepareEditorWorkspace(page);
   await page.route("**/api/workspace/open", async (route) => {
     await route.fulfill({
       body: JSON.stringify({ code: "workspace_error", message: "工作区目录无法访问" }),
@@ -40,46 +73,22 @@ test("工作区打开失败不会静默替换当前编辑项目", async ({ page 
 
 // 中文注释：项目选择被取消时不发起加载请求，当前项目选择仍保持不变。
 test("取消项目切换提示后返回当前编辑项目", async ({ page }) => {
-  await page.route("**/api/workspace/projects", async (route) => {
-    await route.fulfill({
-      body: JSON.stringify([
-        { id: "local-project", name: "本地项目" },
-        { id: "second-project", name: "第二个项目" },
-      ]),
-      contentType: "application/json",
-      status: 200,
-    });
-  });
-  let dialogMessage = "";
-  page.on("dialog", (dialog) => {
-    dialogMessage = dialog.message();
-    void dialog.dismiss();
-  });
+  await prepareEditorWorkspace(page);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "项目", exact: true }).click();
+  await page.getByRole("button", { name: "添加弹入卡片" }).click();
   const projectSelect = page.getByRole("combobox", { name: "选择编辑项目" });
-  await projectSelect.selectOption("second-project");
+  await projectSelect.click();
+  await page.getByRole("option", { name: "第二个项目" }).click();
 
-  await expect.poll(() => dialogMessage).toContain("切换项目可能丢失尚未自动保存的编辑");
-  await expect(projectSelect).toHaveValue("local-project");
+  await expect(page.getByRole("alertdialog")).toContainText("继续切换到“second-project”？");
+  await page.getByRole("button", { name: "返回编辑" }).click();
+  await expect(projectSelect).toContainText("本地项目");
 });
 
 test("横屏项目保持画布方向且页面溢出由时间轴容器承接", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.route("**/api/workspace/projects/local-project", async (route) => {
-    await route.fulfill({
-      body: JSON.stringify({
-        schemaVersion: 1,
-        settings: { width: 1920, height: 1080, fps: 30 },
-        videoClips: [],
-        effectClips: [],
-        export: { format: "mp4", width: 1920, height: 1080, fps: 30 },
-      }),
-      contentType: "application/json",
-      status: 200,
-    });
-  });
+  await prepareEditorWorkspace(page, { ...defaultProject, export: { format: "mp4", fps: 30, height: 1080, width: 1920 }, settings: { fps: 30, height: 1080, width: 1920 } });
   await page.goto("/");
 
   await expect(page.getByLabel("画布方向：横屏")).toBeVisible();

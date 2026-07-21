@@ -11,6 +11,7 @@ import type { EditProject } from "../../domain/project/model";
 import { validateProject } from "../../domain/project/validation";
 import {
   getWorkspacePaths,
+  assertSafePathSegment,
   projectBackupFilePath,
   projectFilePath,
   projectTempFilePath,
@@ -33,6 +34,12 @@ function isEditProject(value: unknown): value is EditProject {
 
 function projectIdFromFileName(fileName: string): string {
   return fileName.slice(0, -".json".length);
+}
+
+/** 中文注释：项目名称既是展示名称也是文件标识，统一裁剪并复用路径安全规则。 */
+function normalizeProjectId(projectId: string): string {
+  const normalized = projectId.trim();
+  return assertSafePathSegment(normalized, "项目名称");
 }
 
 /** 中文注释：把旧项目提升到当前数据版本，迁移只作用于内存快照。 */
@@ -89,12 +96,13 @@ export class ProjectRepository {
     projectOrIdOrId?: EditProject | string,
   ): Promise<void> {
     const project = typeof projectOrId === "string" ? projectOrIdOrId : projectOrId;
-    const projectId =
+    const requestedProjectId =
       typeof projectOrId === "string"
         ? projectOrId
         : typeof projectOrIdOrId === "string"
           ? projectOrIdOrId
           : "default";
+    const projectId = normalizeProjectId(requestedProjectId);
 
     if (!isEditProject(project)) {
       const result = validateProject(project);
@@ -130,13 +138,14 @@ export class ProjectRepository {
   }
 
   async loadProject(projectId: string): Promise<EditProject> {
-    const filePath = projectFilePath(this.paths, projectId);
+    const resolvedProjectId = await this.resolveExistingProjectId(projectId);
+    const filePath = projectFilePath(this.paths, resolvedProjectId);
     let raw: string;
     try {
       raw = await readFile(filePath, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new WorkspaceErrorClass("project_not_found", `找不到编辑项目“${projectId}”`);
+        throw new WorkspaceErrorClass("project_not_found", `找不到编辑项目“${resolvedProjectId}”`);
       }
       throw error;
     }
@@ -147,7 +156,7 @@ export class ProjectRepository {
     } catch {
       throw new WorkspaceErrorClass(
         "corrupt_project",
-        `编辑项目“${projectId}”的 JSON 文件已损坏，无法读取`,
+          `编辑项目“${resolvedProjectId}”的 JSON 文件已损坏，无法读取`,
       );
     }
 
@@ -156,13 +165,13 @@ export class ProjectRepository {
       migrated = migrateProject(parsed);
     } catch (error) {
       if (error instanceof WorkspaceErrorClass) throw error;
-      throw new WorkspaceErrorClass("corrupt_project", `编辑项目“${projectId}”迁移失败`, error);
+      throw new WorkspaceErrorClass("corrupt_project", `编辑项目“${resolvedProjectId}”迁移失败`, error);
     }
     const validation = validateProject(migrated.project);
     if (!validation.valid) {
       throw new WorkspaceErrorClass(
         "corrupt_project",
-        `编辑项目“${projectId}”的数据格式无效：${validation.errors
+        `编辑项目“${resolvedProjectId}”的数据格式无效：${validation.errors
           .map((error) => error.message)
           .join("；")}`,
         validation,
@@ -171,7 +180,7 @@ export class ProjectRepository {
     const project = validationProject(migrated.project);
     if (migrated.migrated) {
       // 中文注释：迁移成功后再原子保存，失败时原始文件仍由备份和正式文件保护。
-      await this.saveProject(project, projectId);
+      await this.saveProject(project, resolvedProjectId);
     }
     return project;
   }
@@ -228,55 +237,46 @@ export class ProjectRepository {
 
   /** 中文注释：创建项目只写一个合法的空项目，避免项目管理路由自行拼接模型。 */
   async createProject(projectId: string, project: EditProject): Promise<void> {
-    try {
-      await stat(projectFilePath(this.paths, projectId));
-      throw new WorkspaceErrorClass("project_exists", `编辑项目“${projectId}”已存在`);
-    } catch (error) {
-      if (error instanceof WorkspaceErrorClass) throw error;
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    await this.saveProject(project, projectId);
+    const normalizedProjectId = normalizeProjectId(projectId);
+    const existingProjectId = await this.findExistingProjectId(normalizedProjectId);
+    if (existingProjectId) throw new WorkspaceErrorClass("project_exists", `编辑项目“${normalizedProjectId}”已存在`);
+    await this.saveProject(project, normalizedProjectId);
   }
 
   /** 中文注释：重命名只移动项目记录与备份，不触碰共享视频素材。 */
   async renameProject(projectId: string, nextProjectId: string): Promise<void> {
-    const source = projectFilePath(this.paths, projectId);
-    const destination = projectFilePath(this.paths, nextProjectId);
-    try {
-      await stat(source);
-      await stat(destination);
-      throw new WorkspaceErrorClass("project_exists", `编辑项目“${nextProjectId}”已存在`);
-    } catch (error) {
-      if (error instanceof WorkspaceErrorClass) throw error;
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const sourceProjectId = await this.resolveExistingProjectId(projectId);
+    const normalizedNextProjectId = normalizeProjectId(nextProjectId);
+    const existingProjectId = await this.findExistingProjectId(normalizedNextProjectId);
+    if (existingProjectId && existingProjectId.toLocaleLowerCase("en-US") !== sourceProjectId.toLocaleLowerCase("en-US")) {
+      throw new WorkspaceErrorClass("project_exists", `编辑项目“${normalizedNextProjectId}”已存在`);
     }
+    const source = projectFilePath(this.paths, sourceProjectId);
+    const destination = projectFilePath(this.paths, normalizedNextProjectId);
+    if (sourceProjectId === normalizedNextProjectId) return;
     try {
       await rename(source, destination);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new WorkspaceErrorClass("project_not_found", `找不到编辑项目“${projectId}”`);
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new WorkspaceErrorClass("project_not_found", `找不到编辑项目“${sourceProjectId}”`);
       throw error;
     }
     try {
-      await rename(projectBackupFilePath(this.paths, projectId), projectBackupFilePath(this.paths, nextProjectId));
+      await rename(projectBackupFilePath(this.paths, sourceProjectId), projectBackupFilePath(this.paths, normalizedNextProjectId));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-  }
-
-  /** 中文注释：复制项目读取并重新序列化，保证新项目不会共享文件句柄或历史临时文件。 */
-  async copyProject(projectId: string, nextProjectId: string): Promise<void> {
-    await this.saveProject(await this.loadProject(projectId), nextProjectId);
   }
 
   /** 中文注释：删除项目记录及其备份，不级联删除任何媒体资产。 */
   async deleteProject(projectId: string): Promise<void> {
+    const resolvedProjectId = await this.resolveExistingProjectId(projectId);
     try {
-      await rm(projectFilePath(this.paths, projectId), { force: false });
+      await rm(projectFilePath(this.paths, resolvedProjectId), { force: false });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new WorkspaceErrorClass("project_not_found", `找不到编辑项目“${projectId}”`);
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new WorkspaceErrorClass("project_not_found", `找不到编辑项目“${resolvedProjectId}”`);
       throw error;
     }
-    await rm(projectBackupFilePath(this.paths, projectId), { force: true });
+    await rm(projectBackupFilePath(this.paths, resolvedProjectId), { force: true });
   }
 
   async listProjects(): Promise<ProjectSummary[]> {
@@ -302,7 +302,29 @@ export class ProjectRepository {
         sizeBytes: fileStats.size,
       });
     }
-    return summaries.sort((left, right) => left.id.localeCompare(right.id));
+    return summaries.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id));
+  }
+
+  /** 中文注释：Windows 对文件名大小写不敏感，读取与删除也必须解析到已存在的规范项目名称。 */
+  private async resolveExistingProjectId(projectId: string): Promise<string> {
+    return await this.findExistingProjectId(projectId) ?? normalizeProjectId(projectId);
+  }
+
+  /** 中文注释：通过项目目录扫描统一处理大小写不敏感的名称冲突，避免依赖运行系统差异。 */
+  private async findExistingProjectId(projectId: string): Promise<string | null> {
+    const normalizedProjectId = normalizeProjectId(projectId);
+    let fileNames: string[];
+    try {
+      fileNames = await readdir(this.paths.projects);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
+    return fileNames
+      .filter((fileName) => fileName.endsWith(".json"))
+      .map(projectIdFromFileName)
+      .find((existingProjectId) => existingProjectId.localeCompare(normalizedProjectId, "en-US", { sensitivity: "accent" }) === 0)
+      ?? null;
   }
 
   private async replaceFile(temporary: string, destination: string): Promise<void> {

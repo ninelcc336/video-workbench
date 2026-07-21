@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.19",
+    "@radix-ui/react-select": "^2.3.4",
     "@remotion/bundler": "^4.0.490",
     "@remotion/player": "latest",
     "@remotion/renderer": "latest",

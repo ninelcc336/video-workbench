@@ -38,13 +38,12 @@ describe("MVP 工作区恢复与项目生命周期", () => {
     expect(root).toContain("video-effect-mvp-");
   });
 
-  it("项目复制、重命名和删除只影响项目记录", async () => {
+  it("项目重命名和删除只影响项目记录", async () => {
     const { adapter } = await createAdapter();
     await adapter.saveProject("original", createEmptyProject());
-    await adapter.copyProject("original", "copy");
-    await adapter.renameProject("copy", "renamed");
+    await adapter.renameProject("original", "renamed");
     await adapter.deleteProject("renamed");
-    await expect(adapter.loadProject("original")).resolves.toEqual(createEmptyProject());
+    await expect(adapter.loadProject("original")).rejects.toMatchObject({ code: "project_not_found" });
     await expect(adapter.loadProject("renamed")).rejects.toMatchObject({ code: "project_not_found" });
   });
 

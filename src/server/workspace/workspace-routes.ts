@@ -109,21 +109,6 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter): Router {
     }
   });
 
-  router.post("/projects/:projectId/copy", async (request: Request, response: Response) => {
-    try {
-      const projectId = routeParam(request.params.projectId);
-      const nextProjectId = request.body?.id ?? request.body?.name;
-      if (typeof nextProjectId !== "string" || !nextProjectId) {
-        response.status(400).json({ code: "invalid_project", message: "请提供复制后的项目名称" });
-        return;
-      }
-      await adapter.copyProject(projectId, nextProjectId);
-      response.status(201).json({ ok: true, id: nextProjectId, name: nextProjectId });
-    } catch (error) {
-      sendWorkspaceError(response, error);
-    }
-  });
-
   router.delete("/projects/:projectId", async (request: Request, response: Response) => {
     try {
       await adapter.deleteProject(routeParam(request.params.projectId));

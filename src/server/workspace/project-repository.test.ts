@@ -24,6 +24,34 @@ afterEach(async () => {
 });
 
 describe("项目仓储", () => {
+  // 中文注释：项目名称是用户可见标识，仓储负责消除首尾空格并阻止 Windows 下的大小写冲突。
+  it("创建项目时规范名称并拒绝大小写不敏感的重复名称", async () => {
+    const { adapter } = await createTestAdapter();
+    const project = createEmptyProject();
+
+    await adapter.createProject("  Demo  ", project);
+
+    await expect(adapter.loadProject("Demo")).resolves.toEqual(project);
+    await expect(adapter.createProject("demo", project)).rejects.toMatchObject({
+      code: "project_exists",
+    });
+  });
+
+  // 中文注释：项目列表按最近更新时间排序，删除当前项目后调用方可直接选择列表首项继续编辑。
+  it("按最近更新时间倒序列出编辑项目", async () => {
+    const { adapter } = await createTestAdapter();
+    const project = createEmptyProject();
+
+    await adapter.createProject("较早项目", project);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    await adapter.createProject("较新项目", project);
+
+    await expect(adapter.listProjects()).resolves.toEqual([
+      expect.objectContaining({ id: "较新项目" }),
+      expect.objectContaining({ id: "较早项目" }),
+    ]);
+  });
+
   it("保存并重新加载相同的 EditProject 快照", async () => {
     const { adapter } = await createTestAdapter();
     const project = createEmptyProject({ width: 1920, height: 1080 });
