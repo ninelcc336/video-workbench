@@ -11,12 +11,10 @@ export type ProjectManagerProps = {
   onRename: (projectId: string, nextProjectId: string) => void;
   onCopy: (projectId: string, nextProjectId: string) => void;
   onDelete: (projectId: string) => void;
-  recentWorkspaces?: RecentWorkspace[];
-  onOpenWorkspace?: (rootPath: string) => void;
 };
 
 /** 中文注释：项目管理器只发出生命周期意图，实际文件操作由 App 通过工作区 HTTP 接口完成。 */
-export function ProjectManager({ projectId, projects, onOpen, onCreate, onRename, onCopy, onDelete, recentWorkspaces = [], onOpenWorkspace }: ProjectManagerProps) {
+export function ProjectManager({ projectId, projects, onOpen, onCreate, onRename, onCopy, onDelete }: ProjectManagerProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   if (!open) return <button className="icon-button" onClick={() => setOpen(true)} type="button">项目</button>;
@@ -47,7 +45,6 @@ export function ProjectManager({ projectId, projects, onOpen, onCreate, onRename
       <button onClick={submitRename} type="button">重命名</button>
       <button onClick={submitCopy} type="button">复制</button>
       <button disabled={projectId === "local-project"} onClick={() => onDelete(projectId)} type="button">删除</button>
-      {recentWorkspaces.length > 0 ? <select aria-label="选择最近工作区" defaultValue="" onChange={(event) => { if (event.target.value) onOpenWorkspace?.(event.target.value); }}><option value="">最近工作区</option>{recentWorkspaces.map((workspace) => <option key={workspace.rootPath} value={workspace.rootPath}>{workspace.name}</option>)}</select> : null}
       <button aria-label="关闭项目管理" onClick={() => setOpen(false)} type="button">×</button>
     </div>
   );

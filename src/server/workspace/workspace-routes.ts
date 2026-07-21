@@ -33,7 +33,7 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter): Router {
     try {
       const rootPath =
         typeof request.body?.rootPath === "string" ? request.body.rootPath : undefined;
-      await adapter.createWorkspace(rootPath);
+      await adapter.openWorkspace(rootPath);
       response.json({ ok: true, rootPath: adapter.getPaths().root, recentWorkspaces: await adapter.listRecentWorkspaces() });
     } catch (error) {
       sendWorkspaceError(response, error);

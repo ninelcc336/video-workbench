@@ -27,6 +27,7 @@ import { importMediaFile } from "./media-import";
 import { getAvailableEffectTrackId } from "./effect-track-layout";
 import { EditorPanelLayout } from "./EditorPanelLayout";
 import { ProjectManager, type ProjectSummary, type RecentWorkspace } from "./ProjectManager";
+import { WorkspaceSettings } from "./WorkspaceSettings";
 import "./editor.css";
 
 export type EditorPageProps = {
@@ -43,6 +44,10 @@ export type EditorPageProps = {
   onDeleteProject?: (projectId: string) => void;
   recentWorkspaces?: RecentWorkspace[];
   onOpenWorkspace?: (rootPath: string) => void;
+  currentWorkspaceName?: string;
+  workspaceError?: string | null;
+  onRetryWorkspace?: () => void;
+  onDismissWorkspaceError?: () => void;
 };
 
 function createId(prefix: string): string {
@@ -86,7 +91,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /** 中文注释：页面层把时间轴事件翻译成 EditorStore 公共命令，组件自身不直接修改项目数组。 */
-export function EditorPage({ store: providedStore, mediaSources: initialMediaSources = {}, missingMediaIds: initialMissingMediaIds = [], onSaveProject, projectId = "local-project", projects = [], onOpenProject, onCreateProject, onRenameProject, onCopyProject, onDeleteProject, recentWorkspaces = [], onOpenWorkspace }: EditorPageProps) {
+export function EditorPage({ store: providedStore, mediaSources: initialMediaSources = {}, missingMediaIds: initialMissingMediaIds = [], onSaveProject, projectId = "local-project", projects = [], onOpenProject, onCreateProject, onRenameProject, onCopyProject, onDeleteProject, recentWorkspaces = [], onOpenWorkspace, currentWorkspaceName = "本地工作区", workspaceError = null, onRetryWorkspace, onDismissWorkspaceError }: EditorPageProps) {
   const store = useMemo(() => providedStore ?? createEditorStoreForPage(), [providedStore]);
   const autosave = useMemo(() => createAutosaveController(onSaveProject ?? (async () => undefined)), [onSaveProject]);
   const autosaveState = useAutosaveState(autosave);
@@ -116,6 +121,12 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     autosave.schedule(snapshot);
   }), [autosave, store]);
 
+  useEffect(() => {
+    // 中文注释：工作区切换会生成新 Store，媒体地址和缺失标记也必须同步到新项目快照。
+    setMediaSources(initialMediaSources);
+    setMissingMediaIds(initialMissingMediaIds);
+  }, [store]);
+
   useEffect(() => () => {
     // 中文注释：关闭项目或切换工作区前尽量冲刷待保存快照，避免防抖窗口内的编辑丢失。
     void autosave.flush();
@@ -132,7 +143,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       setVideoTemplates(loadedTemplates as VideoTemplate[]);
       setMediaAssets(loadedMedia as MediaAsset[]);
     }).catch(() => undefined);
-  }, []);
+  }, [store]);
 
   useEffect(() => {
     // 中文注释：项目时长变化后同步收紧播放头，避免 Player 访问项目末尾之外的帧。
@@ -459,8 +470,9 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-        <div className="topbar-actions"><ProjectManager projectId={projectId} projects={projects} recentWorkspaces={recentWorkspaces} onCopy={onCopyProject ?? (() => undefined)} onCreate={onCreateProject ?? (() => undefined)} onDelete={onDeleteProject ?? (() => undefined)} onOpen={onOpenProject ?? (() => undefined)} onOpenWorkspace={onOpenWorkspace} onRename={onRenameProject ?? (() => undefined)} /><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={redo} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置项目" type="button">↺</button><SaveIndicator onRetry={() => void autosave.retry()} state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
-      </header>
+          <div className="topbar-actions"><ProjectManager projectId={projectId} projects={projects} onCopy={onCopyProject ?? (() => undefined)} onCreate={onCreateProject ?? (() => undefined)} onDelete={onDeleteProject ?? (() => undefined)} onOpen={onOpenProject ?? (() => undefined)} onRename={onRenameProject ?? (() => undefined)} /><WorkspaceSettings currentWorkspaceName={currentWorkspaceName} onOpenWorkspace={onOpenWorkspace ?? (() => undefined)} recentWorkspaces={recentWorkspaces} /><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={redo} type="button">↷</button><button aria-label="重置编辑项目" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置项目" type="button">↺</button><SaveIndicator onRetry={() => void autosave.retry()} state={autosaveState} /><button className="icon-button" disabled={!selectedEffectClip} onClick={() => setPresetOpen(true)} type="button">预设</button><button className="icon-button" onClick={() => setVideoTemplateOpen(true)} type="button">模板</button><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+        </header>
+        {workspaceError ? <div aria-label="工作区错误" className="workspace-error" role="alert"><span>{workspaceError}</span><button onClick={onRetryWorkspace} type="button">重试</button><button onClick={onDismissWorkspaceError} type="button">返回编辑</button></div> : null}
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <EditorPanelLayout>
         <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>

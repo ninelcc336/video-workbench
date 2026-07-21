@@ -24,7 +24,7 @@ type ProjectResponse = {
   mediaSources?: Record<string, string>;
 };
 
-/** 中文注释：App 只组装本地空项目和编辑器页面，后续可在这里接入工作区打开流程。 */
+/** 中文注释：App 负责协调当前工作区、项目加载和可恢复错误，编辑器页面只接收已加载的快照。 */
 export function App() {
   const [project, setProject] = useState<EditProject | null>(null);
   const [missingMediaIds, setMissingMediaIds] = useState<string[]>([]);
@@ -35,19 +35,21 @@ export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([]);
   const [backupAvailable, setBackupAvailable] = useState(false);
+  const [workspaceRootPath, setWorkspaceRootPath] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [retryWorkspaceRootPath, setRetryWorkspaceRootPath] = useState<string | null>(null);
 
   /** 中文注释：只有明确确认项目不存在时创建空项目，损坏或服务异常必须停在可恢复错误页。 */
-  const loadLocalProject = useCallback(async (nextProjectId = projectId) => {
+  const loadLocalProject = useCallback(async (nextProjectId = projectId): Promise<boolean> => {
     setLoadError(null);
     setBackupAvailable(false);
-    setProject(null);
     try {
       const response = await fetch(`/api/workspace/projects/${encodeURIComponent(nextProjectId)}`);
       if (response.status === 404) {
         if (nextProjectId === "local-project") setProject(createEmptyProject());
         else throw new Error(`找不到编辑项目“${nextProjectId}”`);
         setProjectId(nextProjectId);
-        return;
+        return true;
       }
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { message?: string } | null;
@@ -61,12 +63,14 @@ export function App() {
         setMediaSources(value.mediaSources ?? {});
         setProject(value.project);
         setProjectId(nextProjectId);
-        return;
+        return true;
       }
       setProject(value);
       setProjectId(nextProjectId);
+      return true;
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "无法读取本地项目");
+      return false;
     }
   }, [projectId]);
 
@@ -82,16 +86,31 @@ export function App() {
   }, [projectId, project]);
 
   useEffect(() => {
-    void fetch("/api/workspace/recent").then((response) => response.ok ? response.json() : []).then((value) => setRecentWorkspaces(value as RecentWorkspace[])).catch(() => undefined);
-  }, [projectId]);
+    void fetch("/api/workspace/recent").then((response) => response.ok ? response.json() : []).then((value) => {
+      const loaded = value as RecentWorkspace[];
+      setRecentWorkspaces(loaded);
+      if (!workspaceRootPath && loaded[0]) setWorkspaceRootPath(loaded[0].rootPath);
+    }).catch(() => undefined);
+  }, [projectId, workspaceRootPath]);
 
   /** 中文注释：打开工作区成功后重新加载默认项目，项目和素材列表由新工作区重新提供。 */
   const openWorkspace = (rootPath: string) => {
     if (!window.confirm("切换工作区可能丢失尚未自动保存的编辑，确定继续吗？")) return;
+    setWorkspaceError(null);
+    setRetryWorkspaceRootPath(rootPath);
     void fetch("/api/workspace/open", { body: JSON.stringify({ rootPath }), headers: { "Content-Type": "application/json" }, method: "POST" })
       .then(async (response) => { if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "工作区打开失败"); return response.json(); })
-      .then((value) => { setRecentWorkspaces(value.recentWorkspaces as RecentWorkspace[]); return loadLocalProject("local-project"); })
-      .catch((error) => setLoadError(error instanceof Error ? error.message : "工作区打开失败"));
+      .then(async (value) => {
+        setWorkspaceRootPath(value.rootPath as string);
+        setRecentWorkspaces(value.recentWorkspaces as RecentWorkspace[]);
+        if (!await loadLocalProject("local-project")) throw new Error("工作区中的默认项目无法读取");
+      })
+      .catch((error) => setWorkspaceError(error instanceof Error ? error.message : "工作区打开失败"));
+  };
+
+  /** 中文注释：重试只重放最近一次失败的路径，当前项目快照在失败期间始终保留。 */
+  const retryWorkspace = () => {
+    if (retryWorkspaceRootPath) openWorkspace(retryWorkspaceRootPath);
   };
 
   /** 中文注释：切换项目先提示未保存风险，确认后才替换当前编辑器快照。 */
@@ -140,6 +159,7 @@ export function App() {
 
   // 中文注释：Store 必须在页面生命周期内稳定，避免 React 重渲染时丢失撤销栈和自动保存订阅。
   const store = useMemo(() => project ? createEditorStore(project) : null, [project]);
+  const currentWorkspaceName = recentWorkspaces.find((workspace) => workspace.rootPath === workspaceRootPath)?.name ?? recentWorkspaces[0]?.name ?? "本地工作区";
   if (!project || !store) {
     return (
       <main>
@@ -155,5 +175,6 @@ export function App() {
       </main>
     );
   }
-  return <EditorPage mediaSources={mediaSources} missingMediaIds={missingMediaIds} onCopyProject={copyProject} onCreateProject={createProject} onDeleteProject={deleteProject} onOpenProject={openProject} onOpenWorkspace={openWorkspace} onRenameProject={renameProject} onSaveProject={(snapshot) => saveLocalProject(snapshot, projectId)} projectId={projectId} projects={projects} recentWorkspaces={recentWorkspaces} store={store} />;
+  const visibleWorkspaceError = workspaceError ?? loadError;
+  return <EditorPage currentWorkspaceName={currentWorkspaceName} mediaSources={mediaSources} missingMediaIds={missingMediaIds} onCopyProject={copyProject} onCreateProject={createProject} onDeleteProject={deleteProject} onDismissWorkspaceError={() => { setWorkspaceError(null); setLoadError(null); }} onOpenProject={openProject} onOpenWorkspace={openWorkspace} onRenameProject={renameProject} onRetryWorkspace={workspaceError ? retryWorkspace : () => setLoadVersion((version) => version + 1)} onSaveProject={(snapshot) => saveLocalProject(snapshot, projectId)} projectId={projectId} projects={projects} recentWorkspaces={recentWorkspaces} store={store} workspaceError={visibleWorkspaceError} />;
 }

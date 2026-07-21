@@ -44,13 +44,26 @@ export class WorkspaceAdapter {
   }
 
   async createWorkspace(rootPath = this.rootPath): Promise<void> {
-    this.rootPath = rootPath;
-    this.paths = getWorkspacePaths(rootPath);
-    await ensureWorkspaceDirectories(this.paths);
-    this.projectRepository = new ProjectRepository(this.paths);
-    this.mediaRepository = new MediaRepository(this.paths);
-    this.presetRepository = new PresetRepository(this.paths);
-    this.videoTemplateRepository = new VideoTemplateRepository(this.paths);
+    await this.openWorkspace(rootPath);
+  }
+
+  /** 中文注释：先初始化并校验候选工作区，再替换当前仓储，失败时保留正在编辑的工作区。 */
+  async openWorkspace(rootPath = this.rootPath, projectId = "local-project"): Promise<void> {
+    const nextPaths = getWorkspacePaths(rootPath);
+    await ensureWorkspaceDirectories(nextPaths);
+    const nextProjectRepository = new ProjectRepository(nextPaths);
+    try {
+      // 中文注释：已有默认项目必须先能读取；新工作区没有项目文件时交给前端显式创建空项目。
+      await nextProjectRepository.loadProject(projectId);
+    } catch (error) {
+      if (!(error instanceof WorkspaceError) || error.code !== "project_not_found") throw error;
+    }
+    this.rootPath = nextPaths.root;
+    this.paths = nextPaths;
+    this.projectRepository = nextProjectRepository;
+    this.mediaRepository = new MediaRepository(nextPaths);
+    this.presetRepository = new PresetRepository(nextPaths);
+    this.videoTemplateRepository = new VideoTemplateRepository(nextPaths);
     // 中文注释：最近工作区索引是辅助体验，Windows 文件被其他窗口占用时不能阻塞当前工作区打开。
     await this.workspaceRegistry.remember(this.rootPath).catch(() => undefined);
   }

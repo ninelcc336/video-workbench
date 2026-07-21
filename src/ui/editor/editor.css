@@ -39,6 +39,18 @@ button { cursor: pointer; }
 .brand-lockup h1 { margin: 0; letter-spacing: -.04em; font-size: 17px; line-height: 1; }
 .brand-lockup span:not(.brand-mark) { display: block; margin-top: 5px; color: #8e9790; font-size: 11px; letter-spacing: .08em; }
 .topbar-actions { gap: 9px; }
+/* 中文注释：工作区只展示只读名称，切换动作隐藏在设置入口内，避免与项目选择混淆。 */
+.workspace-status { display: flex; align-items: center; gap: 7px; }
+.workspace-status__name { max-width: 150px; overflow: hidden; color: #93a099; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-settings { position: absolute; z-index: 20; top: 60px; right: 18px; display: grid; width: min(320px, calc(100vw - 36px)); gap: 12px; border: 1px solid #526046; border-radius: 12px; padding: 15px; color: #dfe8dc; background: #171b18; box-shadow: 0 18px 50px #000b; }
+.workspace-settings__heading { display: flex; align-items: center; justify-content: space-between; }
+.workspace-settings__heading strong { font-size: 13px; }
+.workspace-settings p { margin: 0; color: #93a099; font-size: 11px; }
+.workspace-settings label { display: grid; gap: 6px; color: #aab5a9; font-size: 10px; }
+.workspace-settings input, .workspace-settings select { width: 100%; border: 1px solid #343c36; border-radius: 7px; padding: 8px; color: #e8ede5; background: #202620; font-size: 11px; }
+.workspace-settings > button { border: 1px solid #65744d; border-radius: 7px; padding: 8px; color: #151712; background: #e3f26a; font-size: 11px; font-weight: 800; }
+.workspace-error { position: absolute; z-index: 10; top: 84px; left: 50%; display: flex; align-items: center; gap: 9px; max-width: min(720px, calc(100vw - 36px)); transform: translateX(-50%); border: 1px solid #d97756; border-radius: 9px; padding: 9px 12px; color: #ffd9cd; background: #3b231e; box-shadow: 0 8px 30px #0008; font-size: 11px; }
+.workspace-error button { border: 1px solid #d97756; border-radius: 6px; padding: 5px 8px; color: inherit; background: transparent; font-size: 10px; white-space: nowrap; }
 .icon-button { width: 34px; height: 34px; border: 1px solid #303631; border-radius: 9px; color: #b4bbb4; background: #1f2421; font-size: 20px; }
 .project-manager { display: flex; align-items: center; gap: 6px; }
 .project-manager select, .project-manager input { max-width: 150px; border: 1px solid #343c36; border-radius: 7px; padding: 7px 8px; color: #dfe8dc; background: #202620; font-size: 11px; }

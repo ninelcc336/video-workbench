@@ -46,6 +46,27 @@ afterEach(() => {
 });
 
 describe("编辑项目的素材导入", () => {
+  // 中文注释：用两个 Store 模拟从一个工作区切换到另一个工作区的页面生命周期。
+  it("切换到新工作区提供的编辑器快照后重新加载素材、预设和视频模板", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    } as Response);
+    const firstStore = createEditorStore(createEmptyProject());
+    const secondStore = createEditorStore(createEmptyProject({ width: 1920, height: 1080 }));
+    const { rerender } = render(<EditorPage store={firstStore} />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    rerender(<EditorPage store={secondStore} />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
+    expect(fetchMock.mock.calls.slice(3).map(([url]) => url)).toEqual([
+      "/api/workspace/presets",
+      "/api/workspace/video-templates",
+      "/api/workspace/media",
+    ]);
+  });
+
   it("首次导入横屏素材时将素材尺寸交给编辑器命令", async () => {
     const store = createEditorStore(createEmptyProject());
     importMediaFile.mockResolvedValue({

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +30,17 @@ afterEach(async () => {
 });
 
 describe("本地工作区适配器", () => {
+  it("候选工作区项目损坏时不替换当前工作区", async () => {
+    const current = await createTestAdapter();
+    const candidateRoot = await mkdtemp(join(tmpdir(), "video-effect-workspace-candidate-"));
+    await mkdir(join(candidateRoot, "projects"), { recursive: true });
+    await writeFile(join(candidateRoot, "projects", "local-project.json"), "损坏", "utf8");
+
+    await expect(current.openWorkspace(candidateRoot)).rejects.toMatchObject({ code: "corrupt_project" });
+    expect(current.getPaths().root).not.toBe(candidateRoot);
+    await rm(candidateRoot, { recursive: true, force: true });
+  });
+
   it("创建约定的五类工作区目录", async () => {
     const adapter = await createTestAdapter();
     const paths = adapter.getPaths();

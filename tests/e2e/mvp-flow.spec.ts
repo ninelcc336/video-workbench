@@ -5,7 +5,7 @@ test("剪辑小白可以打开编辑器并添加模板", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText("本地视频特效编辑器")).toBeVisible();
-  await expect(page.getByText("特效模板")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "特效模板" })).toBeVisible();
   await expect(page.getByRole("button", { name: "导出视频" })).toBeVisible();
 
   await page.getByRole("button", { name: "添加弹入卡片" }).click();
@@ -14,6 +14,55 @@ test("剪辑小白可以打开编辑器并添加模板", async ({ page }) => {
 
   await page.getByRole("button", { name: "导出视频" }).click();
   await expect(page.getByRole("dialog", { name: "导出视频" })).toBeVisible();
+});
+
+// 中文注释：工作区打开失败时，当前编辑器仍应可见，并提供明确的重试与返回入口。
+test("工作区打开失败不会静默替换当前编辑项目", async ({ page }) => {
+  await page.route("**/api/workspace/open", async (route) => {
+    await route.fulfill({
+      body: JSON.stringify({ code: "workspace_error", message: "工作区目录无法访问" }),
+      contentType: "application/json",
+      status: 500,
+    });
+  });
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "设置" }).click();
+  await page.getByLabel("工作区路径").fill("D:/无法访问的工作区");
+  await page.getByRole("button", { name: "打开工作区" }).click();
+
+  await expect(page.getByRole("alert", { name: "工作区错误" })).toContainText("工作区目录无法访问");
+  await expect(page.getByRole("button", { name: "导出视频" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "重试" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "返回编辑" })).toBeVisible();
+});
+
+// 中文注释：项目选择被取消时不发起加载请求，当前项目选择仍保持不变。
+test("取消项目切换提示后返回当前编辑项目", async ({ page }) => {
+  await page.route("**/api/workspace/projects", async (route) => {
+    await route.fulfill({
+      body: JSON.stringify([
+        { id: "local-project", name: "本地项目" },
+        { id: "second-project", name: "第二个项目" },
+      ]),
+      contentType: "application/json",
+      status: 200,
+    });
+  });
+  let dialogMessage = "";
+  page.on("dialog", (dialog) => {
+    dialogMessage = dialog.message();
+    void dialog.dismiss();
+  });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "项目", exact: true }).click();
+  const projectSelect = page.getByRole("combobox", { name: "选择编辑项目" });
+  await projectSelect.selectOption("second-project");
+
+  await expect.poll(() => dialogMessage).toContain("切换项目可能丢失尚未自动保存的编辑");
+  await expect(projectSelect).toHaveValue("local-project");
 });
 
 test("横屏项目保持画布方向且页面溢出由时间轴容器承接", async ({ page }) => {
