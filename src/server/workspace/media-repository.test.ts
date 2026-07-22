@@ -85,6 +85,21 @@ describe("素材仓储", () => {
     });
   });
 
+  it("存在损坏编辑项目时保守保护共享素材，避免删除潜在引用", async () => {
+    const { adapter } = await createTestAdapter();
+    const asset = await adapter.importMedia({
+      buffer: Buffer.from("共享视频素材"),
+      mimeType: "video/mp4",
+      originalName: "共享素材.mp4",
+    });
+    await writeFile(join(adapter.getPaths().projects, "损坏项目.json"), "不是 JSON", "utf8");
+
+    await expect(adapter.deleteMedia(asset.id)).rejects.toMatchObject({
+      code: "media_in_use",
+      details: { references: ["损坏项目"] },
+    });
+  });
+
   it("为 Remotion 返回跨进程可读取的 file URL", async () => {
     const { adapter, root } = await createTestAdapter();
     const sourcePath = join(root, "source.mp4");

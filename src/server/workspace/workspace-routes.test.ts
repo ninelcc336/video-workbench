@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createWorkspaceAdapter, type WorkspaceAdapter } from "./workspace-adapter";
+import { createWorkspaceAdapter, WorkspaceError, type WorkspaceAdapter } from "./workspace-adapter";
 import { createWorkspaceRouter } from "./workspace-routes";
 import { createEmptyProject } from "../../domain/project/factories";
 
@@ -32,6 +32,26 @@ async function startWorkspaceServer(): Promise<{ adapter: WorkspaceAdapter; base
 }
 
 describe("工作区 HTTP 素材接口", () => {
+  it("固定项目库初始化失败时返回可恢复错误而不伪造空项目列表", async () => {
+    const root = await mkdtemp(join(tmpdir(), "video-effect-route-"));
+    temporaryRoots.push(root);
+    const adapter = createWorkspaceAdapter(root);
+    const app = express();
+    app.use(createWorkspaceRouter(adapter, {
+      getInitializationError: () => new WorkspaceError("project_library_unavailable", "迁移旧本地项目库失败，请检查旧数据后重试"),
+    }));
+    const server = createServer(app);
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("测试服务未成功监听");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/projects`);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ code: "project_library_unavailable" });
+  });
+
   it("把浏览器 multipart 文件复制到 media，并可通过稳定地址读取", async () => {
     const { adapter, baseUrl } = await startWorkspaceServer();
     const form = new FormData();

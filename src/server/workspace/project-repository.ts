@@ -36,10 +36,20 @@ function projectIdFromFileName(fileName: string): string {
   return fileName.slice(0, -".json".length);
 }
 
-/** 中文注释：项目名称既是展示名称也是文件标识，统一裁剪并复用路径安全规则。 */
+/** 中文注释：项目名称既是展示名称也是 Windows 文件名，统一裁剪、阻止保留名和路径危险字符。 */
 function normalizeProjectId(projectId: string): string {
   const normalized = projectId.trim();
-  return assertSafePathSegment(normalized, "项目名称");
+  assertSafePathSegment(normalized, "项目名称");
+  const windowsReservedName = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/iu;
+  const baseName = normalized.split(".")[0] ?? normalized;
+  if (
+    /[<>:"|?*\u0000-\u001f]/u.test(normalized)
+    || /[. ]$/u.test(normalized)
+    || windowsReservedName.test(baseName)
+  ) {
+    throw new WorkspaceErrorClass("unsafe_path", "项目名称包含 Windows 不支持的字符或保留名");
+  }
+  return normalized;
 }
 
 /** 中文注释：把旧项目提升到当前数据版本，迁移只作用于内存快照。 */
@@ -263,7 +273,11 @@ export class ProjectRepository {
     try {
       await rename(projectBackupFilePath(this.paths, sourceProjectId), projectBackupFilePath(this.paths, normalizedNextProjectId));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        // 中文注释：备份移动失败时回滚正式项目名称，避免项目与备份出现半完成的重命名状态。
+        await rename(destination, source).catch(() => undefined);
+        throw error;
+      }
     }
   }
 

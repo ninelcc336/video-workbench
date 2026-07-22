@@ -5,10 +5,18 @@ import type { VideoTemplate } from "../../domain/assets/video-template-model";
 import type { EditProject } from "../../domain/project/model";
 import { WorkspaceAdapter, WorkspaceError } from "./workspace-adapter";
 
+export type WorkspaceRouterOptions = {
+  /** 中文注释：固定项目库启动失败时由宿主提供当前错误，避免路由伪造空列表。 */
+  getInitializationError?: () => WorkspaceError | null;
+  /** 中文注释：用户点击重试后重新初始化固定项目库，成功后路由自动恢复可用。 */
+  retryInitialization?: () => Promise<void>;
+};
+
 function sendWorkspaceError(response: Response, error: unknown): void {
   if (error instanceof WorkspaceError) {
     const status =
       error.code === "project_not_found" || error.code === "media_not_found" || error.code === "backup_not_found" ? 404
+        : error.code === "project_library_unavailable" ? 503
         : error.code === "project_exists" ? 409
         : error.code === "media_in_use" ? 409
         : 400;
@@ -24,24 +32,28 @@ function routeParam(value: string | string[]): string {
 }
 
 /** 中文注释：路由只做 HTTP 参数解包和错误映射，不复制仓储或素材业务逻辑。 */
-export function createWorkspaceRouter(adapter: WorkspaceAdapter): Router {
+export function createWorkspaceRouter(adapter: WorkspaceAdapter, options: WorkspaceRouterOptions = {}): Router {
   const router = Router();
   // 中文注释：先把上传内容放进内存，再由工作区适配器复制到 media，避免 Multer 自己决定持久化路径。
   const upload = multer({ storage: multer.memoryStorage() });
 
-  router.post("/open", async (request: Request, response: Response) => {
+  router.post("/retry-initialization", async (_request: Request, response: Response) => {
     try {
-      const rootPath =
-        typeof request.body?.rootPath === "string" ? request.body.rootPath : undefined;
-      await adapter.openWorkspace(rootPath);
-      response.json({ ok: true, rootPath: adapter.getPaths().root, recentWorkspaces: await adapter.listRecentWorkspaces() });
+      if (!options.retryInitialization) throw options.getInitializationError?.() ?? new WorkspaceError("project_library_unavailable", "本地项目库暂时不可用");
+      await options.retryInitialization();
+      response.json({ ok: true });
     } catch (error) {
       sendWorkspaceError(response, error);
     }
   });
 
-  router.get("/recent", async (_request: Request, response: Response) => {
-    try { response.json(await adapter.listRecentWorkspaces()); } catch (error) { sendWorkspaceError(response, error); }
+  router.use((_request: Request, response: Response, next) => {
+    const initializationError = options.getInitializationError?.();
+    if (initializationError) {
+      sendWorkspaceError(response, initializationError);
+      return;
+    }
+    next();
   });
 
   router.get("/projects", async (_request: Request, response: Response) => {

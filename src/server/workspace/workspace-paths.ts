@@ -26,6 +26,7 @@ export type WorkspaceErrorCode =
   | "project_exists"
   | "corrupt_project"
   | "backup_not_found"
+  | "project_library_unavailable"
   | "workspace_not_found"
   | "media_not_found"
   | "missing_media"

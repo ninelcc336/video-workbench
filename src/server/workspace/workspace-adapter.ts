@@ -1,4 +1,6 @@
 import type { EditProject } from "../../domain/project/model";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PresetRepository } from "../assets/preset-repository";
 import { VideoTemplateRepository } from "../assets/video-template-repository";
@@ -12,7 +14,6 @@ import {
   WorkspaceError,
   type WorkspacePaths,
 } from "./workspace-paths";
-import { WorkspaceRegistry, type RecentWorkspace } from "./workspace-registry";
 
 export { WorkspaceError } from "./workspace-paths";
 export type { MediaAsset, MediaImportFile } from "./media-repository";
@@ -23,6 +24,40 @@ export type ProjectLoadResult = {
   missingMediaIds: string[];
 };
 
+export type FixedProjectLibraryOptions = {
+  /** 中文注释：应用根目录仅供启动配置与测试计算固定库位置，不暴露给用户界面。 */
+  applicationRoot?: string;
+  /** 中文注释：测试或宿主可显式覆盖固定库位置，生产环境始终使用应用根目录下的内部目录。 */
+  libraryRoot?: string;
+  /** 中文注释：旧版最近工作区只作为一次性兼容来源，不再构成可切换的用户状态。 */
+  legacyRoots?: string[];
+};
+
+/** 中文注释：固定项目库目录属于应用内部实现，用户不需要也不能选择该目录。 */
+export function getFixedProjectLibraryRoot(applicationRoot = process.cwd()): string {
+  return resolve(applicationRoot, "workspace");
+}
+
+/** 中文注释：检查某个目录是否已有用户资产；只有真正存在资产时才跳过旧数据迁移。 */
+async function hasPersistedLibraryData(paths: WorkspacePaths): Promise<boolean> {
+  for (const directory of [paths.projects, paths.media, paths.presets, paths.videoTemplates, paths.renders]) {
+    try {
+      if ((await readdir(directory)).length > 0) return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return false;
+}
+
+/** 中文注释：迁移前验证所有项目，避免把损坏的旧数据静默变成空项目库。 */
+async function validateMigratedProjects(paths: WorkspacePaths): Promise<void> {
+  const repository = new ProjectRepository(paths);
+  for (const project of await repository.listProjects()) {
+    await repository.loadProject(project.id);
+  }
+}
+
 /** 中文注释：适配器把编辑器看到的工作区能力收拢起来，未来可替换为云端实现。 */
 export class WorkspaceAdapter {
   private rootPath: string;
@@ -31,10 +66,8 @@ export class WorkspaceAdapter {
   private mediaRepository: MediaRepository;
   private presetRepository: PresetRepository;
   private videoTemplateRepository: VideoTemplateRepository;
-  private readonly workspaceRegistry: WorkspaceRegistry;
 
   constructor(rootPathOrPaths: string | WorkspacePaths) {
-    this.workspaceRegistry = new WorkspaceRegistry();
     this.rootPath = typeof rootPathOrPaths === "string" ? rootPathOrPaths : rootPathOrPaths.root;
     this.paths = typeof rootPathOrPaths === "string" ? getWorkspacePaths(rootPathOrPaths) : rootPathOrPaths;
     this.projectRepository = new ProjectRepository(this.paths);
@@ -44,32 +77,69 @@ export class WorkspaceAdapter {
   }
 
   async createWorkspace(rootPath = this.rootPath): Promise<void> {
-    await this.openWorkspace(rootPath);
+    const paths = getWorkspacePaths(rootPath);
+    await ensureWorkspaceDirectories(paths);
+    this.rootPath = paths.root;
+    this.paths = paths;
+    this.projectRepository = new ProjectRepository(paths);
+    this.mediaRepository = new MediaRepository(paths);
+    this.presetRepository = new PresetRepository(paths);
+    this.videoTemplateRepository = new VideoTemplateRepository(paths);
   }
 
-  /** 中文注释：先初始化并校验候选工作区，再替换当前仓储，失败时保留正在编辑的工作区。 */
-  async openWorkspace(rootPath = this.rootPath, projectId = "local-project"): Promise<void> {
-    const nextPaths = getWorkspacePaths(rootPath);
-    await ensureWorkspaceDirectories(nextPaths);
-    const nextProjectRepository = new ProjectRepository(nextPaths);
-    try {
-      // 中文注释：已有默认项目必须先能读取；新工作区没有项目文件时交给前端显式创建空项目。
-      await nextProjectRepository.loadProject(projectId);
-    } catch (error) {
-      if (!(error instanceof WorkspaceError) || error.code !== "project_not_found") throw error;
+  /** 中文注释：初始化固定项目库；迁移使用独立暂存目录，旧数据始终保留到复制和校验成功以后。 */
+  async initializeFixedProjectLibrary(legacyRoots: string[] = []): Promise<void> {
+    const libraryPaths = getWorkspacePaths(this.rootPath);
+    if (await hasPersistedLibraryData(libraryPaths)) {
+      await ensureWorkspaceDirectories(libraryPaths);
+      return;
     }
-    this.rootPath = nextPaths.root;
-    this.paths = nextPaths;
-    this.projectRepository = nextProjectRepository;
-    this.mediaRepository = new MediaRepository(nextPaths);
-    this.presetRepository = new PresetRepository(nextPaths);
-    this.videoTemplateRepository = new VideoTemplateRepository(nextPaths);
-    // 中文注释：最近工作区索引是辅助体验，Windows 文件被其他窗口占用时不能阻塞当前工作区打开。
-    await this.workspaceRegistry.remember(this.rootPath).catch(() => undefined);
-  }
 
-  /** 中文注释：返回最近成功打开的工作区，供启动页选择并再次打开。 */
-  async listRecentWorkspaces(): Promise<RecentWorkspace[]> { return this.workspaceRegistry.list(); }
+    const legacyRoot = (await Promise.all(
+      legacyRoots
+        .map((root) => resolve(root))
+        .filter((root) => root !== libraryPaths.root)
+        .map(async (root) => ({ root, hasData: await hasPersistedLibraryData(getWorkspacePaths(root)) })),
+    )).find((candidate) => candidate.hasData)?.root;
+
+    if (!legacyRoot) {
+      await ensureWorkspaceDirectories(libraryPaths);
+      return;
+    }
+
+    const stagingRoot = `${libraryPaths.root}.migration-${crypto.randomUUID()}`;
+    const stagingPaths = getWorkspacePaths(stagingRoot);
+    try {
+      await mkdir(stagingRoot, { recursive: false });
+      const legacyPaths = getWorkspacePaths(legacyRoot);
+      for (const [source, destination] of [
+        [legacyPaths.projects, stagingPaths.projects],
+        [legacyPaths.media, stagingPaths.media],
+        [legacyPaths.presets, stagingPaths.presets],
+        [legacyPaths.videoTemplates, stagingPaths.videoTemplates],
+        [legacyPaths.renders, stagingPaths.renders],
+      ] as const) {
+        try {
+          // 中文注释：文件名和 JSON 内的素材 ID 原样复制，项目与共享素材之间的引用无需重写。
+          await cp(source, destination, { recursive: true });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }
+      await ensureWorkspaceDirectories(stagingPaths);
+      await validateMigratedProjects(stagingPaths);
+      // 中文注释：固定目录没有用户资产时才会被替换，避免覆盖已初始化的项目库。
+      await rm(libraryPaths.root, { force: true, recursive: true });
+      await cp(stagingRoot, libraryPaths.root, { recursive: true });
+    } catch (error) {
+      throw error instanceof WorkspaceError
+        ? error
+        : new WorkspaceError("project_library_unavailable", "迁移旧本地项目库失败，请检查旧数据后重试", error);
+    } finally {
+      await rm(stagingRoot, { force: true, recursive: true }).catch(() => undefined);
+    }
+    await this.createWorkspace(libraryPaths.root);
+  }
 
   async saveProject(project: EditProject, projectId?: string): Promise<void>;
   async saveProject(projectId: string, project: EditProject): Promise<void>;
@@ -163,7 +233,8 @@ export class WorkspaceAdapter {
         const project = await this.projectRepository.loadProject(summary.id);
         if (project.videoClips.some((clip) => clip.mediaId === mediaId)) references.push(summary.id);
       } catch {
-        // 中文注释：损坏项目不阻塞素材管理，但不把它误报为已知引用。
+        // 中文注释：损坏项目无法可靠解析引用，保守阻止删除以免素材恢复后发现源文件已丢失。
+        references.push(summary.id);
       }
     }
     return references;
@@ -204,6 +275,14 @@ export class WorkspaceAdapter {
 
 export function createWorkspaceAdapter(rootPath: string): WorkspaceAdapter {
   return new WorkspaceAdapter(rootPath);
+}
+
+/** 中文注释：固定项目库的唯一启动入口，兼容读取旧目录型数据但不重新引入目录切换。 */
+export async function bootstrapFixedProjectLibrary(options: FixedProjectLibraryOptions = {}): Promise<WorkspaceAdapter> {
+  const rootPath = options.libraryRoot ?? getFixedProjectLibraryRoot(options.applicationRoot);
+  const adapter = createWorkspaceAdapter(rootPath);
+  await adapter.initializeFixedProjectLibrary(options.legacyRoots);
+  return adapter;
 }
 
 /** 中文注释：提供计划中约定的独立工作区初始化入口，实际能力仍由同一个适配器承载。 */

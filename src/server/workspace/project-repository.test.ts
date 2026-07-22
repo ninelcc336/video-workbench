@@ -37,6 +37,15 @@ describe("项目仓储", () => {
     });
   });
 
+  it("拒绝 Windows 路径中不安全的保留名和尾随字符", async () => {
+    const { adapter } = await createTestAdapter();
+    const project = createEmptyProject();
+
+    await expect(adapter.createProject("CON", project)).rejects.toMatchObject({ code: "unsafe_path" });
+    await expect(adapter.createProject("知识视频.", project)).rejects.toMatchObject({ code: "unsafe_path" });
+    await expect(adapter.createProject("知识:视频", project)).rejects.toMatchObject({ code: "unsafe_path" });
+  });
+
   // 中文注释：项目列表按最近更新时间排序，删除当前项目后调用方可直接选择列表首项继续编辑。
   it("按最近更新时间倒序列出编辑项目", async () => {
     const { adapter } = await createTestAdapter();
