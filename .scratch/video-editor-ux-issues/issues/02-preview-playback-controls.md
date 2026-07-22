@@ -3,7 +3,7 @@
 # 实时预览缺少播放、暂停和播放头同步
 
 Category: enhancement  
-Status: needs-triage
+Status: resolved
 
 ## Summary
 
@@ -45,3 +45,4 @@ Status: needs-triage
 
 ## Comments
 
+- 2026-07-19：按维护者要求归档；不再进入后续分诊或实现队列。

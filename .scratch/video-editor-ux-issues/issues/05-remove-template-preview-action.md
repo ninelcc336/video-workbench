@@ -3,7 +3,7 @@
 # 移除特效模板卡片上的“预览”操作
 
 Category: enhancement  
-Status: needs-triage
+Status: resolved
 
 ## Summary
 
@@ -35,3 +35,5 @@ Status: needs-triage
 现有模板卡片确实同时实现了内嵌动效和独立预览按钮；用户已确认只移除“预览/停止”按钮，保留动效缩略预览。仍先保留 `needs-triage`，等待维护者完成最终分派。
 
 ## Comments
+
+- 2026-07-19：按维护者要求归档；不再进入后续分诊或实现队列。

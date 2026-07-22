@@ -14,4 +14,4 @@ This is a single-context repo using root `CONTEXT.md` and `docs/adr/`. See `docs
 
 
 ## 注意事项
-当前项目禁止使用 brainstorming 和 writing-plans 这两个 skill 
+提交信息统一使用中文

@@ -3,7 +3,7 @@
 # 添加弹入卡片和漂浮气泡后，特效在预览画面中不可见
 
 Category: bug  
-Status: needs-triage
+Status: resolved
 
 ## Summary
 
@@ -45,3 +45,4 @@ Status: needs-triage
 
 ## Comments
 
+- 2026-07-19：按维护者要求归档；不再进入后续分诊或实现队列。

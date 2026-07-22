@@ -3,7 +3,7 @@
 # 特效片段全部落在同一条轨道，重叠时难以定位和编辑
 
 Category: enhancement  
-Status: needs-triage
+Status: resolved
 
 ## Summary
 
@@ -50,3 +50,4 @@ Status: needs-triage
 
 ## Comments
 
+- 2026-07-19：按维护者要求归档；不再进入后续分诊或实现队列。
