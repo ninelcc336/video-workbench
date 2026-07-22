@@ -56,4 +56,18 @@ describe("渲染状态", () => {
       "renders/demo.mp4",
     );
   });
+
+  it("完成后说明保存位置并提供下载 MP4 入口，而不暴露内部目录路径", () => {
+    render(
+      <RenderStatus
+        resultUrl="/api/render/job-1/file"
+        snapshot={snapshot("completed", { outputPath: "E:/应用内部/项目库/renders/20260723-demo.mp4" })}
+      />,
+    );
+
+    expect(screen.getByText("视频已导出到本地导出库")).toBeTruthy();
+    expect(screen.getByText("文件：20260723-demo.mp4")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("E:/应用内部");
+    expect(screen.getByRole("link", { name: "下载 MP4" }).getAttribute("download")).toBe("20260723-demo.mp4");
+  });
 });

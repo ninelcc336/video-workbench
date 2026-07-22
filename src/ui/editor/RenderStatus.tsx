@@ -21,11 +21,18 @@ function stageLabel(status: RenderJobSnapshot["status"]): string {
   return statusLabels[status];
 }
 
+/** 中文注释：浏览器不能安全展示应用内部目录，因此只提取文件名并提供用户可控的下载入口。 */
+function getExportFileName(outputPath: string): string {
+  return outputPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? "export.mp4";
+}
+
 /** 中文注释：渲染状态组件不发起请求，只消费轮询得到的任务快照。 */
 export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl }: RenderStatusProps) {
   if (!snapshot) return null;
 
   const canCancel = snapshot.status === "preparing" || snapshot.status === "rendering";
+  const exportFileName = getExportFileName(snapshot.outputPath);
+  const exportUrl = resultUrl ?? snapshot.outputPath;
   return (
     <section aria-label="视频渲染状态" className="render-status-panel">
       <p role="status">
@@ -33,10 +40,18 @@ export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl }: RenderS
       </p>
       {snapshot.error ? <p role="alert">错误摘要：{snapshot.error.message}</p> : null}
       {snapshot.status === "completed" ? (
-        <>
+        <div className="render-status-panel__result">
+          <div className="render-status-panel__result-heading">
+            <span aria-hidden="true" className="render-status-panel__success-mark">✓</span>
+            <div><strong>视频已导出到本地导出库</strong><span>文件：{exportFileName}</span></div>
+          </div>
           {snapshot.file ? <p>文件大小：{Math.max(1, Math.round(snapshot.file.sizeBytes / 1024))} KB　生成时间：{new Date(snapshot.file.createdAt).toLocaleString("zh-CN")}</p> : null}
-          <a href={resultUrl ?? snapshot.outputPath} rel="noreferrer" target="_blank">打开导出文件</a>
-        </>
+          <div className="render-status-panel__actions">
+            <a className="render-status-panel__download" download={exportFileName} href={exportUrl}>下载 MP4</a>
+            <a href={exportUrl} rel="noreferrer" target="_blank">打开导出文件</a>
+          </div>
+          <p className="render-status-panel__hint">点击“下载 MP4”后，文件会保存到浏览器设置的默认下载位置。</p>
+        </div>
       ) : null}
       {snapshot.status === "failed" ? <button onClick={onRetry} type="button">重试导出</button> : null}
       {canCancel ? <button onClick={onCancel} type="button">取消渲染</button> : null}
