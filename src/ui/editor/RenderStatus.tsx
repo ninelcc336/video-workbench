@@ -6,6 +6,7 @@ export type RenderStatusProps = {
   onRetry?: () => void;
   resultUrl?: string;
   downloadUrl?: string;
+  onDismiss?: () => void;
 };
 
 const statusLabels: Record<RenderJobSnapshot["status"], string> = {
@@ -28,7 +29,7 @@ function getExportFileName(outputPath: string): string {
 }
 
 /** 中文注释：渲染状态组件不发起请求，只消费轮询得到的任务快照。 */
-export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl, downloadUrl }: RenderStatusProps) {
+export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl, downloadUrl, onDismiss }: RenderStatusProps) {
   if (!snapshot) return null;
 
   const canCancel = snapshot.status === "preparing" || snapshot.status === "rendering";
@@ -46,6 +47,7 @@ export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl, downloadU
           <div className="render-status-panel__result-heading">
             <span aria-hidden="true" className="render-status-panel__success-mark">✓</span>
             <div><strong>视频已导出到本地导出库</strong><span>文件：{exportFileName}</span></div>
+            {onDismiss ? <button aria-label="关闭导出提示" className="render-status-panel__dismiss" onClick={onDismiss} type="button">×</button> : null}
           </div>
           {snapshot.file ? <p>文件大小：{Math.max(1, Math.round(snapshot.file.sizeBytes / 1024))} KB　生成时间：{new Date(snapshot.file.createdAt).toLocaleString("zh-CN")}</p> : null}
           <div className="render-status-panel__actions">

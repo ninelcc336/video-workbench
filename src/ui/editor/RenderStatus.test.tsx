@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { RenderJobSnapshot } from "../../server/render/render-job";
@@ -72,5 +72,14 @@ describe("渲染状态", () => {
     expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("href")).toBe("/api/render/job-1/file");
     expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("target")).toBe("_blank");
     expect(screen.getByRole("link", { name: "下载 MP4" }).getAttribute("href")).toBe("/api/render/job-1/download");
+  });
+
+  it("完成后的提示可关闭，但不会对导出文件执行任何删除操作", () => {
+    const onDismiss = vi.fn();
+    render(<RenderStatus onDismiss={onDismiss} snapshot={snapshot("completed")} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭导出提示" }));
+
+    expect(onDismiss).toHaveBeenCalledOnce();
   });
 });

@@ -220,6 +220,8 @@ button { cursor: pointer; }
 .render-status-panel > p { margin: 0; color: #aeb9ad; line-height: 1.5; }
 .render-status-panel__result { display: grid; gap: 9px; border-top: 1px solid #344033; padding-top: 10px; }
 .render-status-panel__result-heading { display: flex; align-items: center; gap: 9px; }
+.render-status-panel__dismiss { width: 24px; height: 24px; margin-left: auto; border: 1px solid #566052; border-radius: 6px; padding: 0; color: #b9c5b7; background: transparent; font-size: 17px; line-height: 1; }
+.render-status-panel__dismiss:hover { color: #172010; background: #dff46f; border-color: #dff46f; }
 .render-status-panel__result-heading strong { display: block; color: #edf6e8; font-size: 12px; }
 .render-status-panel__result-heading span:not(.render-status-panel__success-mark) { display: block; margin-top: 3px; color: #9fac9e; font-family: ui-monospace, monospace; font-size: 10px; }
 .render-status-panel__success-mark { display: grid; width: 24px; height: 24px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #172010; background: #dff46f; font-weight: 900; }

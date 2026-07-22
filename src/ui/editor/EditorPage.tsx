@@ -430,6 +430,12 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     void pollRenderJob(result.jobId);
   };
 
+  /** 中文注释：关闭完成提示只清理页面中的任务引用，不会删除已经生成的本地 MP4 文件。 */
+  const dismissRenderStatus = () => {
+    setRenderJobId(null);
+    setRenderSnapshot(null);
+  };
+
   const savePreset = (name: string) => {
     if (!selectedEffectClip) return;
     const preset = createPreset(createId("preset"), selectedEffectClip.templateId, selectedEffectClip.templateVersion, name, selectedEffectClip.params);
@@ -483,7 +489,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         <PropertiesPanel onChangeParams={commitEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
-      <RenderStatus downloadUrl={renderJobId ? `/api/render/${renderJobId}/download` : undefined} onCancel={() => void cancelRender()} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
+      <RenderStatus downloadUrl={renderJobId ? `/api/render/${renderJobId}/download` : undefined} onCancel={() => void cancelRender()} onDismiss={dismissRenderStatus} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />
       <PresetDialog onApply={(preset) => { if (selectedEffectClip && !applyPreset(store, preset, selectedEffectClip.id)) setNotice("预设版本与当前模板不兼容，已使用安全默认参数。"); }} onClose={() => setPresetOpen(false)} onDelete={deletePreset} onSave={savePreset} open={presetOpen} presets={presets} templateName={selectedTemplateName} />
