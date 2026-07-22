@@ -52,14 +52,15 @@ describe("渲染状态", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
 
     rerender(<RenderStatus snapshot={snapshot("completed")} />);
-    expect(screen.getByRole("link", { name: "打开导出文件" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("href")).toBe(
       "renders/demo.mp4",
     );
   });
 
-  it("完成后说明保存位置并提供下载 MP4 入口，而不暴露内部目录路径", () => {
+  it("完成后显示本地文件路径，并区分浏览器打开与下载入口", () => {
     render(
       <RenderStatus
+        downloadUrl="/api/render/job-1/download"
         resultUrl="/api/render/job-1/file"
         snapshot={snapshot("completed", { outputPath: "E:/应用内部/项目库/renders/20260723-demo.mp4" })}
       />,
@@ -67,7 +68,9 @@ describe("渲染状态", () => {
 
     expect(screen.getByText("视频已导出到本地导出库")).toBeTruthy();
     expect(screen.getByText("文件：20260723-demo.mp4")).toBeTruthy();
-    expect(document.body.textContent).not.toContain("E:/应用内部");
-    expect(screen.getByRole("link", { name: "下载 MP4" }).getAttribute("download")).toBe("20260723-demo.mp4");
+    expect(document.body.textContent).toContain("本地文件：E:/应用内部/项目库/renders/20260723-demo.mp4");
+    expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("href")).toBe("/api/render/job-1/file");
+    expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("target")).toBe("_blank");
+    expect(screen.getByRole("link", { name: "下载 MP4" }).getAttribute("href")).toBe("/api/render/job-1/download");
   });
 });
