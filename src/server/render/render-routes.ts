@@ -114,14 +114,5 @@ export function createRenderRouter(options: RenderRouterOptions = {}): Router {
     response.sendFile(snapshot.outputPath);
   });
 
-  router.get("/api/render/:jobId/download", (request, response) => {
-    const job = jobs.get(request.params.jobId);
-    if (!job) { response.status(404).json({ error: "渲染任务不存在" }); return; }
-    const snapshot = job.getSnapshot();
-    if (snapshot.status !== "completed") { response.status(409).json({ error: "导出文件尚未完成" }); return; }
-    // 中文注释：下载路由显式设置附件响应，避免浏览器把 MP4 当作页面预览而忽略用户的下载动作。
-    response.download(snapshot.outputPath, basename(snapshot.outputPath));
-  });
-
   return router;
 }

@@ -57,10 +57,9 @@ describe("渲染状态", () => {
     );
   });
 
-  it("完成后显示本地文件路径，并区分浏览器打开与下载入口", () => {
+  it("完成后显示本地文件路径并且不提供重复下载入口", () => {
     render(
       <RenderStatus
-        downloadUrl="/api/render/job-1/download"
         resultUrl="/api/render/job-1/file"
         snapshot={snapshot("completed", { outputPath: "E:/应用内部/项目库/renders/20260723-demo.mp4" })}
       />,
@@ -71,7 +70,8 @@ describe("渲染状态", () => {
     expect(document.body.textContent).toContain("本地文件：E:/应用内部/项目库/renders/20260723-demo.mp4");
     expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("href")).toBe("/api/render/job-1/file");
     expect(screen.getByRole("link", { name: "在浏览器中打开" }).getAttribute("target")).toBe("_blank");
-    expect(screen.getByRole("link", { name: "下载 MP4" }).getAttribute("href")).toBe("/api/render/job-1/download");
+    expect(screen.queryByRole("link", { name: "下载 MP4" })).toBeNull();
+    expect(document.body.textContent).not.toContain("浏览器设置的默认下载位置");
   });
 
   it("完成后的提示可关闭，但不会对导出文件执行任何删除操作", () => {

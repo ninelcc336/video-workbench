@@ -5,7 +5,6 @@ export type RenderStatusProps = {
   onCancel?: () => void;
   onRetry?: () => void;
   resultUrl?: string;
-  downloadUrl?: string;
   onDismiss?: () => void;
 };
 
@@ -29,13 +28,12 @@ function getExportFileName(outputPath: string): string {
 }
 
 /** 中文注释：渲染状态组件不发起请求，只消费轮询得到的任务快照。 */
-export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl, downloadUrl, onDismiss }: RenderStatusProps) {
+export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl, onDismiss }: RenderStatusProps) {
   if (!snapshot) return null;
 
   const canCancel = snapshot.status === "preparing" || snapshot.status === "rendering";
   const exportFileName = getExportFileName(snapshot.outputPath);
   const exportUrl = resultUrl ?? snapshot.outputPath;
-  const resolvedDownloadUrl = downloadUrl ?? exportUrl;
   return (
     <section aria-label="视频渲染状态" className="render-status-panel">
       <p role="status">
@@ -51,11 +49,10 @@ export function RenderStatus({ snapshot, onCancel, onRetry, resultUrl, downloadU
           </div>
           {snapshot.file ? <p>文件大小：{Math.max(1, Math.round(snapshot.file.sizeBytes / 1024))} KB　生成时间：{new Date(snapshot.file.createdAt).toLocaleString("zh-CN")}</p> : null}
           <div className="render-status-panel__actions">
-            <a className="render-status-panel__download" href={resolvedDownloadUrl}>下载 MP4</a>
             <a href={exportUrl} rel="noreferrer" target="_blank">在浏览器中打开</a>
           </div>
           <p className="render-status-panel__local-path">本地文件：<code>{snapshot.outputPath}</code></p>
-          <p className="render-status-panel__hint">“在浏览器中打开”会新开本地服务地址；“下载 MP4”会保存到浏览器设置的默认下载位置。</p>
+          <p className="render-status-panel__hint">文件已经导出到上方路径；“在浏览器中打开”会新开本地服务地址用于查看结果。</p>
         </div>
       ) : null}
       {snapshot.status === "failed" ? <button onClick={onRetry} type="button">重试导出</button> : null}
