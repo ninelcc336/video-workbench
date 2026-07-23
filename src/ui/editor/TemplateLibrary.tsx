@@ -22,16 +22,33 @@ const categoryLabels: Record<"all" | TemplateCategory, string> = {
 export function TemplateLibrary({ onAddTemplate, currentFrame = 0, onAddTemplateAtFrame }: TemplateLibraryProps) {
   const [category, setCategory] = useState<"all" | TemplateCategory>("all");
   const templates = useMemo(() => listTemplates(category === "all" ? undefined : category), [category]);
+
+  /** 中文注释：切换分类时只改变模板发现结果，不会影响时间轴或当前播放头。 */
+  const selectCategory = (nextCategory: "all" | TemplateCategory) => {
+    setCategory(nextCategory);
+  };
+
   return (
     <section className="library-section template-library">
       <div className="library-section__heading"><div><span className="eyebrow">02 / 动效</span><h2>特效模板</h2></div><span className="count-badge">{templates.length}</span></div>
-      <div className="category-tabs" role="tablist">
+      <div aria-label="特效模板分类" className="category-tabs" role="tablist">
         {(Object.keys(categoryLabels) as Array<"all" | TemplateCategory>).map((item) => (
-          <button aria-selected={category === item} className={category === item ? "active" : ""} key={item} onClick={() => setCategory(item)} role="tab" type="button">{categoryLabels[item]}</button>
+          <button
+            aria-controls="template-library-results"
+            aria-selected={category === item}
+            className={category === item ? "active" : ""}
+            id={`template-category-${item}`}
+            key={item}
+            onClick={() => selectCategory(item)}
+            role="tab"
+            type="button"
+          >
+            {categoryLabels[item]}
+          </button>
         ))}
       </div>
       <p className="muted-copy">拖动卡片到时间轴，或在播放头位置点击添加。</p>
-      <div className="template-list">
+      <div aria-labelledby={`template-category-${category}`} className="template-list" id="template-library-results" role="tabpanel">
         {templates.map((summary) => {
           const template = getTemplate(summary.id, summary.version);
           return (

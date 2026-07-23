@@ -7,11 +7,32 @@ import { App } from "./App";
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 /** 中文注释：空工作区库是首次启动的正常状态，不应再要求用户理解或选择本地目录。 */
 describe("视频工作区启动", () => {
+  // 中文注释：默认深色由月亮图标表达，点击图标切换浅色并保存为本地偏好。
+  it("首次启动默认深色，点击主题图标后保存浅色偏好", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      json: async () => [],
+      ok: true,
+    } as Response);
+
+    const { unmount } = render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "切换为浅色主题" }));
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
+    expect(window.localStorage.getItem("frame-flow.theme-mode")).toBe("light");
+
+    unmount();
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "切换为深色主题" })).toBeTruthy();
+  });
+
   it("工作区库为空时直接显示新建视频工作区入口，且不存在目录输入", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       json: async () => [],

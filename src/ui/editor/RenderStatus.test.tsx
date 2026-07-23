@@ -82,4 +82,13 @@ describe("渲染状态", () => {
 
     expect(onDismiss).toHaveBeenCalledOnce();
   });
+
+  it("已取消的任务也能重新导出", () => {
+    const onRetry = vi.fn();
+    render(<RenderStatus onRetry={onRetry} snapshot={snapshot("cancelled")} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "重试导出" }));
+
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
 });

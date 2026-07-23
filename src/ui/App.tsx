@@ -6,6 +6,7 @@ import type { AutosaveStatus } from "./editor/SaveIndicator";
 import { EditorPage } from "./editor/EditorPage";
 import { NavigationConfirmDialog } from "./editor/NavigationConfirmDialog";
 import type { WorkspaceSummary } from "./editor/ProjectManager";
+import { ThemeProvider, ThemeSelector } from "./theme/ThemeProvider";
 import "./editor/editor.css";
 
 type WorkspaceResponse = { workspace: VideoWorkspace; missingMediaIds?: string[]; mediaSources?: Record<string, string>; backupAvailable?: boolean };
@@ -26,17 +27,18 @@ async function saveVideoWorkspace(workspace: VideoWorkspace, workspaceId: string
 }
 
 /** 中文注释：空工作区库是首次使用的正常入口，只要求用户命名即将制作的视频。 */
-function WorkspaceLibraryStart({ backupAvailable, error, onCreateWorkspace, onRecover, onRetry }: { backupAvailable: boolean; error: string | null; onCreateWorkspace: (name: string) => void; onRecover: () => void; onRetry: () => void }) {
+function WorkspaceLibraryStart({ backupAvailable, error, onCreateWorkspace, onRecover, onRetry }: { backupAvailable: boolean; error: string | null; onCreateWorkspace: (name: string) => Promise<void>; onRecover: () => void; onRetry: () => void }) {
   const [workspaceName, setWorkspaceName] = useState("");
   return (
     <main className="workspace-start">
       <section aria-label="空工作区库" className="workspace-start__card" role="region">
+        <div className="workspace-start__toolbar"><ThemeSelector /></div>
         <p className="workspace-start__eyebrow">FRAME / FLOW · 本地优先</p>
         <h1>创建第一个视频工作区</h1>
         <p>新建工作区后即可导入素材并开始制作；各工作区的素材和时间轴彼此独立。</p>
         {error ? <><p className="workspace-start__error" role="alert">{error}</p><button onClick={onRetry} type="button">重试</button>{backupAvailable ? <button onClick={onRecover} type="button">从最近备份恢复</button> : null}</> : null}
         <label>视频工作区名称<input aria-label="新建视频工作区名称" onChange={(event) => setWorkspaceName(event.target.value)} placeholder="例如：知识视频" value={workspaceName} /></label>
-        <button className="workspace-start__primary" onClick={() => onCreateWorkspace(workspaceName)} type="button">新建视频工作区</button>
+        <button className="workspace-start__primary" onClick={() => { void onCreateWorkspace(workspaceName).catch(() => undefined); }} type="button">新建视频工作区</button>
       </section>
     </main>
   );
@@ -44,6 +46,11 @@ function WorkspaceLibraryStart({ backupAvailable, error, onCreateWorkspace, onRe
 
 /** 中文注释：App 只协调工作区选择、切换和自动保存状态；编辑器内部操作仍由 EditorPage 与 EditorStore 管理。 */
 export function App() {
+  return <ThemeProvider><AppContent /></ThemeProvider>;
+}
+
+/** 中文注释：应用内容与主题提供器分层，确保启动页和编辑器共用同一主题状态。 */
+function AppContent() {
   const [phase, setPhase] = useState<AppPhase>("loading");
   const [workspace, setWorkspace] = useState<VideoWorkspace | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -133,59 +140,68 @@ export function App() {
   };
 
   /** 中文注释：创建工作区先在服务端校验名称安全与唯一性，再刷新并打开新工作区。 */
-  const createWorkspace = (name: string) => {
+  const createWorkspace = async (name: string): Promise<void> => {
     const normalizedName = name.trim();
     if (!normalizedName) {
       setLoadError("请输入视频工作区名称");
       setBackupAvailable(false);
       setFailedWorkspaceId(null);
       setRecoveryAvailable(false);
-      return;
+      throw new Error("请输入视频工作区名称");
     }
-    void fetch(`/api/workspaces/${encodeURIComponent(normalizedName)}`, {
-      body: JSON.stringify(createEmptyProject()),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    }).then(async (response) => {
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(normalizedName)}`, {
+        body: JSON.stringify(createEmptyProject()),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
       if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "创建视频工作区失败");
-      return refreshWorkspaces(normalizedName);
-    }).catch((error) => {
-      setLoadError(error instanceof Error ? error.message : "创建视频工作区失败");
+      if (!await refreshWorkspaces(normalizedName)) throw new Error("无法读取视频工作区列表");
+    } catch (error) {
+      // 中文注释：编辑器内由发起操作的自定义表单展示失败；只有启动页仍需把失败写入页面级入口。
+      if (phase !== "editor") setLoadError(error instanceof Error ? error.message : "创建视频工作区失败");
       setBackupAvailable(false);
       setFailedWorkspaceId(null);
       setRecoveryAvailable(false);
-    });
+      throw error;
+    }
   };
 
   /** 中文注释：重命名移动整个私有工作区目录，刷新后继续编辑同一份时间轴与素材。 */
-  const renameWorkspace = (currentId: string, nextId: string) => {
-    void fetch(`/api/workspaces/${encodeURIComponent(currentId)}`, {
-      body: JSON.stringify({ name: nextId }),
-      headers: { "Content-Type": "application/json" },
-      method: "PATCH",
-    }).then(async (response) => {
+  const renameWorkspace = async (currentId: string, nextId: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(currentId)}`, {
+        body: JSON.stringify({ name: nextId }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
       if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "重命名视频工作区失败");
-      return refreshWorkspaces(currentId);
-    }).catch((error) => {
-      setLoadError(error instanceof Error ? error.message : "重命名视频工作区失败");
+      if (!await refreshWorkspaces(nextId)) throw new Error("无法读取视频工作区列表");
+    } catch (error) {
+      // 中文注释：重命名失败保留在工作区管理对话框中，避免与工作区加载故障混为同一个全局错误。
       setBackupAvailable(false);
       setFailedWorkspaceId(null);
       setRecoveryAvailable(false);
-    });
+      throw error;
+    }
   };
 
   /** 中文注释：删除当前工作区只影响其私有目录，服务端刷新后自动选择最近编辑的另一个工作区。 */
-  const deleteWorkspace = (currentId: string) => {
-    void fetch(`/api/workspaces/${encodeURIComponent(currentId)}`, { method: "DELETE" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("删除视频工作区失败");
-        return refreshWorkspaces();
-      }).catch((error) => {
-        setLoadError(error instanceof Error ? error.message : "删除视频工作区失败");
-        setBackupAvailable(false);
-        setFailedWorkspaceId(null);
-        setRecoveryAvailable(false);
-      });
+  const deleteWorkspace = async (currentId: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(currentId)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message ?? "删除视频工作区失败");
+      }
+      if (!await refreshWorkspaces()) throw new Error("无法读取视频工作区列表");
+    } catch (error) {
+      // 中文注释：删除失败由确认流程返回管理对话框，当前编辑状态和工作区加载状态都保持不变。
+      setBackupAvailable(false);
+      setFailedWorkspaceId(null);
+      setRecoveryAvailable(false);
+      throw error;
+    }
   };
 
   const openWorkspace = (nextWorkspaceId: string) => {

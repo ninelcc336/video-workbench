@@ -34,6 +34,7 @@ function ParameterControl({
   onChange: (params: Record<string, unknown>) => void;
 }) {
   const value = values[definition.key];
+  const descriptionId = `property-description-${definition.key}`;
 
   const update = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const rawValue = event.target.value;
@@ -53,16 +54,22 @@ function ParameterControl({
     const secondKey = isPosition ? "y" : "height";
     const firstLabel = isPosition ? "X" : "宽度";
     const secondLabel = isPosition ? "Y" : "高度";
+    const firstMin = isPosition ? definition.minX ?? 0 : definition.minWidth ?? 0;
+    const firstMax = isPosition ? definition.maxX ?? 1 : definition.maxWidth ?? 1;
+    const secondMin = isPosition ? definition.minY ?? 0 : definition.minHeight ?? 0;
+    const secondMax = isPosition ? definition.maxY ?? 1 : definition.maxHeight ?? 1;
     return (
-      <fieldset className="property-fieldset">
+      <fieldset className="property-fieldset" data-property-type={definition.type}>
         <legend>{definition.label}</legend>
+        {definition.description ? <p className="property-control__description" id={descriptionId}>{definition.description}</p> : null}
         <div className="property-grid property-grid--two">
           <label>
             <span>{firstLabel}</span>
             <input
               aria-label={`${definition.label}${firstLabel}`}
-              max={1}
-              min={0}
+              aria-describedby={definition.description ? descriptionId : undefined}
+              max={firstMax}
+              min={firstMin}
               onChange={(event) => onChange(updateObjectParam(values, definition.key, firstKey, Number(event.target.value)))}
               step={0.01}
               type="number"
@@ -73,8 +80,9 @@ function ParameterControl({
             <span>{secondLabel}</span>
             <input
               aria-label={`${definition.label}${secondLabel}`}
-              max={1}
-              min={0}
+              aria-describedby={definition.description ? descriptionId : undefined}
+              max={secondMax}
+              min={secondMin}
               onChange={(event) => onChange(updateObjectParam(values, definition.key, secondKey, Number(event.target.value)))}
               step={0.01}
               type="number"
@@ -87,19 +95,21 @@ function ParameterControl({
   }
 
   return (
-    <label className="property-control">
+    <label className={`property-control property-control--${definition.type}`} data-property-type={definition.type}>
       <span>{definition.label}</span>
+      {definition.description ? <small className="property-control__description" id={descriptionId}>{definition.description}</small> : null}
       {definition.type === "text" && (
-        <input maxLength={definition.maxLength} onChange={update} type="text" value={String(value ?? "")} />
+        <input aria-describedby={definition.description ? descriptionId : undefined} maxLength={definition.maxLength} onChange={update} type="text" value={String(value ?? "")} />
       )}
       {definition.type === "color" && (
         <span className="color-input">
-          <input aria-label={definition.label} onChange={update} type="color" value={String(value ?? definition.defaultValue)} />
-          <code>{String(value ?? definition.defaultValue)}</code>
+          <input aria-describedby={definition.description ? descriptionId : undefined} aria-label={definition.label} onChange={update} type="color" value={String(value ?? definition.defaultValue)} />
+          <code aria-live="polite">{String(value ?? definition.defaultValue)}</code>
         </span>
       )}
       {definition.type === "number" && (
         <input
+          aria-describedby={definition.description ? descriptionId : undefined}
           aria-label={definition.label}
           max={definition.max}
           min={definition.min}
@@ -110,12 +120,15 @@ function ParameterControl({
         />
       )}
       {definition.type === "select" && (
-        <select aria-label={definition.label} onChange={update} value={String(value ?? definition.defaultValue)}>
+        <select aria-describedby={definition.description ? descriptionId : undefined} aria-label={definition.label} onChange={update} value={String(value ?? definition.defaultValue)}>
           {definition.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       )}
       {definition.type === "boolean" && (
-        <input aria-label={definition.label} checked={Boolean(value)} onChange={update} type="checkbox" />
+        <span className="property-toggle">
+          <input aria-describedby={definition.description ? descriptionId : undefined} aria-label={definition.label} checked={Boolean(value)} onChange={update} type="checkbox" />
+          <span aria-hidden="true" className="property-toggle__track" />
+        </span>
       )}
     </label>
   );

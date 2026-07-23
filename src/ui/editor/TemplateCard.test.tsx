@@ -8,6 +8,7 @@ import { TemplateCard } from "./TemplateCard";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 function createTemplate(render: TemplateDefinition["render"]): TemplateDefinition {
@@ -69,5 +70,32 @@ describe("特效模板卡片", () => {
 
     act(() => vi.advanceTimersByTime(100));
     expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+  });
+
+  it("系统要求减少动态效果时保留代表帧而不启动短动效", () => {
+    vi.useFakeTimers();
+    const renderTemplate = vi.fn(() => <span />);
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      addEventListener: vi.fn(),
+      matches: true,
+      removeEventListener: vi.fn(),
+    })));
+
+    render(<TemplateCard template={createTemplate(renderTemplate)} />);
+    fireEvent.mouseEnter(screen.getByRole("article"));
+    act(() => vi.advanceTimersByTime(150));
+
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+  });
+
+  it("拖放过程中提供抓取状态，结束后恢复正常卡片状态", () => {
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() } as unknown as DataTransfer;
+    render(<TemplateCard template={createTemplate(() => <span />)} />);
+    const card = screen.getByRole("article");
+
+    fireEvent.dragStart(card, { dataTransfer });
+    expect(card.classList.contains("template-card--dragging")).toBe(true);
+    fireEvent.dragEnd(card);
+    expect(card.classList.contains("template-card--dragging")).toBe(false);
   });
 });

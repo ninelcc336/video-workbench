@@ -1,6 +1,7 @@
-import { useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as Select from "@radix-ui/react-select";
+import { useEffect, useState, type RefObject } from "react";
 import type { EditProject, ExportSettings } from "../../domain/project/model";
-import type { RenderJobStatus } from "../../server/render/render-job";
 import {
   buildExportSettings,
   EXPORT_PRESETS,
@@ -10,19 +11,9 @@ import {
 export type ExportDialogProps = {
   open: boolean;
   project: EditProject;
-  outputPath?: string;
-  renderStatus?: RenderJobStatus;
-  error?: string;
   onSubmit: (settings: ExportSettings) => void;
   onClose: () => void;
-};
-
-const renderStatusLabels: Record<RenderJobStatus, string> = {
-  preparing: "准备中",
-  rendering: "渲染中",
-  completed: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
+  returnFocusRef?: RefObject<HTMLButtonElement | null>;
 };
 
 /** 中文注释：非标准项目比例需要作为对话框的当前项目选项保留，不能强行映射到标准预设。 */
@@ -36,58 +27,85 @@ function getExportPresetName(project: EditProject): ExportDialogPresetName {
   return preset ? preset[0] as ExportPresetName : "project";
 }
 
-/** 中文注释：导出对话框只提交规格，实际渲染沿用既有 /api/render 路由。 */
-export function ExportDialog({
-  open,
-  project,
-  outputPath,
-  renderStatus,
-  error,
-  onSubmit,
-  onClose,
-}: ExportDialogProps) {
-  if (!open) return null;
-
-  return <ExportDialogContent {...{ project, outputPath, renderStatus, error, onSubmit, onClose }} />;
+/** 中文注释：自定义选择器中的项目规格沿用标准预设的展示格式，让用户在提交前能直接确认画面尺寸。 */
+function getPresetLabel(presetName: ExportDialogPresetName, project: EditProject): string {
+  if (presetName === "project") return `当前项目（${project.export.width}×${project.export.height}）`;
+  return EXPORT_PRESETS[presetName].label;
 }
 
-function ExportDialogContent({
-  project,
-  outputPath,
-  renderStatus,
-  error,
-  onSubmit,
-  onClose,
-}: Omit<ExportDialogProps, "open">) {
+/** 中文注释：导出对话框只提交规格，实际渲染沿用既有 /api/render 路由。 */
+export function ExportDialog({ open, project, onSubmit, onClose, returnFocusRef }: ExportDialogProps) {
   const [selectedPreset, setSelectedPreset] = useState<ExportDialogPresetName>(() => getExportPresetName(project));
-  // 中文注释：非标准比例没有对应预设时，提交项目自身规格，避免自动横屏比例被导出表单覆盖。
+
+  useEffect(() => {
+    // 中文注释：每次重新打开均从当前视频工作区快照恢复规格，取消过的临时选择不能污染下一次导出。
+    if (open) setSelectedPreset(getExportPresetName(project));
+  }, [open, project]);
+
+  /** 中文注释：选择变化只影响这次导出快照；不修改用户正在编辑的视频工作区。 */
+  const selectPreset = (presetName: string) => setSelectedPreset(presetName as ExportDialogPresetName);
+
+  /** 中文注释：非标准比例提交项目自身规格，避免自定义画布在导出时被表单覆盖。 */
   const submit = () => onSubmit(selectedPreset === "project" ? project.export : buildExportSettings(selectedPreset, project));
 
+  /** 中文注释：关闭应用内导出对话框后返回顶栏入口，保持键盘工作流的连续性。 */
+  const restoreExportTriggerFocus = (event: Event) => {
+    event.preventDefault();
+    window.setTimeout(() => returnFocusRef?.current?.focus(), 0);
+  };
+
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="export-dialog-title">
-      <h2 id="export-dialog-title">导出视频</h2>
-      <label>
-        画面规格
-        <select
-          value={selectedPreset}
-          aria-label="画面规格"
-          onChange={(event) => setSelectedPreset(event.target.value as ExportDialogPresetName)}
-        >
-          {selectedPreset === "project" && <option value="project">当前项目（{project.export.width}×{project.export.height}）</option>}
-          {Object.entries(EXPORT_PRESETS).map(([value, preset]) => (
-            <option key={value} value={value}>{preset.label}</option>
-          ))}
-        </select>
-      </label>
-      <p>格式：MP4　帧率：{project.export.fps}fps</p>
-      {outputPath ? <p>输出路径：{outputPath}</p> : null}
-      {renderStatus ? <p role="status">渲染状态：{renderStatusLabels[renderStatus]}</p> : null}
-      {error ? <p role="alert">{error}</p> : null}
-      <div>
-        <button type="button" onClick={onClose}>取消</button>
-        <button type="button" onClick={submit}>开始导出</button>
-      </div>
-    </div>
+    <Dialog.Root onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }} open={open}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="export-dialog__overlay" />
+        <Dialog.Content aria-describedby="export-dialog-description" className="export-dialog__content" onCloseAutoFocus={restoreExportTriggerFocus}>
+          <div aria-hidden="true" className="export-dialog__signal">↗</div>
+          <div className="export-dialog__copy">
+            <p className="export-dialog__eyebrow">MP4 导出</p>
+            <Dialog.Title>导出视频</Dialog.Title>
+            <Dialog.Description id="export-dialog-description">
+              选择画面规格后，将以当前视频工作区快照在本地生成 MP4 文件。导出期间仍可继续编辑。
+            </Dialog.Description>
+          </div>
+          <label className="export-dialog__field">
+            <span>画面规格</span>
+            <Select.Root onValueChange={selectPreset} value={selectedPreset}>
+              <Select.Trigger aria-label="画面规格" className="export-dialog__select">
+                <Select.Value>{getPresetLabel(selectedPreset, project)}</Select.Value>
+                <Select.Icon aria-hidden="true" className="export-dialog__select-icon">⌄</Select.Icon>
+              </Select.Trigger>
+              <Select.Portal>
+                <Select.Content className="export-dialog__select-content" position="popper">
+                  <Select.Viewport>
+                    {selectedPreset === "project" ? (
+                      <Select.Item className="export-dialog__select-item" value="project">
+                        <Select.ItemText>{getPresetLabel("project", project)}</Select.ItemText>
+                      </Select.Item>
+                    ) : null}
+                    {Object.entries(EXPORT_PRESETS).map(([value, preset]) => (
+                      <Select.Item className="export-dialog__select-item" key={value} value={value}>
+                        <Select.ItemText>{preset.label}</Select.ItemText>
+                      </Select.Item>
+                    ))}
+                  </Select.Viewport>
+                </Select.Content>
+              </Select.Portal>
+            </Select.Root>
+          </label>
+          <dl className="export-dialog__specifications">
+            <div><dt>格式</dt><dd>MP4</dd></div>
+            <div><dt>帧率</dt><dd>{project.export.fps} fps</dd></div>
+            <div><dt>输出位置</dt><dd>此视频工作区的本地导出库</dd></div>
+          </dl>
+          <div className="export-dialog__actions">
+            <Dialog.Close asChild>
+              <button className="export-dialog__cancel" type="button">取消</button>
+            </Dialog.Close>
+            <button className="export-dialog__confirm" onClick={submit} type="button">开始导出</button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

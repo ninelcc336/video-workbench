@@ -330,6 +330,22 @@ describe("画布特效选区", () => {
     expect(clip.params.position).toEqual({ x: 0.5, y: 0.5 });
   });
 
+  it("选区与调整手柄使用主题化样式类，动态样式只保留画布坐标", () => {
+    render(
+      <CanvasSelection
+        isSelectedClipActive
+        project={createEmptyProject()}
+        selectedClip={createEffectClip()}
+      />,
+    );
+
+    const selection = screen.getByLabelText("拖动特效位置");
+    const handle = screen.getByRole("button", { name: "调整特效右下角大小" });
+    expect(selection.classList.contains("canvas-selection")).toBe(true);
+    expect(selection.style.border).toBe("");
+    expect(handle.classList.contains("canvas-selection__handle--se")).toBe(true);
+  });
+
   it("移动到画布外时限制位置，调整尺寸时不超过画布", () => {
     const clip = createEffectClip();
     const onChangeParams = vi.fn();

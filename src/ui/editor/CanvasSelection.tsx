@@ -241,19 +241,6 @@ export function CanvasSelection({
     };
   };
 
-  const handleStyle = (handle: ResizeHandle): React.CSSProperties => ({
-    position: "absolute",
-    width: 12,
-    height: 12,
-    border: "2px solid #ffffff",
-    borderRadius: 3,
-    background: "#e3f26a",
-    boxShadow: "0 1px 6px #0009",
-    cursor: `${handle}-resize`,
-    ...(handle.includes("n") ? { top: -6 } : { bottom: -6 }),
-    ...(handle.includes("w") ? { left: -6 } : { right: -6 }),
-  });
-
   return (
     <div
       aria-label="特效选区"
@@ -261,12 +248,6 @@ export function CanvasSelection({
       onMouseDown={(event) => startDrag("move", event)}
       ref={canvasRef}
       role="group"
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: 4,
-      }}
     >
       <div
         aria-label="拖动特效位置"
@@ -274,26 +255,18 @@ export function CanvasSelection({
         onMouseDown={(event) => startDrag("move", event)}
         role="presentation"
         style={{
-          position: "absolute",
           left: `${values.position.x * 100}%`,
           top: `${values.position.y * 100}%`,
           width: `${values.size.width * 100}%`,
           height: `${values.size.height * 100}%`,
-          border: "1px solid #e3f26a",
-          borderRadius: 5,
-          boxShadow: "0 0 0 1px #111312, 0 0 16px #e3f26a66",
-          transform: "translate(-50%, -50%)",
-          cursor: "move",
-          // 中文注释：位置移动由预览命中层统一处理，避免已选底层特效遮挡上层命中；控制点仍可单独接收事件。
-          pointerEvents: "none",
         }}
       >
         {(Object.keys({ nw: true, ne: true, sw: true, se: true }) as ResizeHandle[]).map((handle) => (
           <button
             aria-label={`调整特效${handle === "nw" ? "左上" : handle === "ne" ? "右上" : handle === "sw" ? "左下" : "右下"}角大小`}
+            className={`canvas-selection__handle canvas-selection__handle--${handle}`}
             key={handle}
             onMouseDown={(event) => startDrag(handle, event)}
-            style={handleStyle(handle)}
             type="button"
           />
         ))}

@@ -12,8 +12,10 @@ import { clampPreviewFrame } from "../preview/PreviewPlayer";
 import { findNearestLegalVideoStart } from "../../domain/editor/clip-ranges";
 import { createAutosaveController, SaveIndicator, type AutosaveStatus, useAutosaveState } from "./SaveIndicator";
 import { ExportDialog } from "./ExportDialog";
+import { PresetDialog } from "./PresetDialog";
 import { ResetProjectDialog } from "./ResetProjectDialog";
 import { RenderStatus } from "./RenderStatus";
+import { VideoTemplateDialog } from "./VideoTemplateDialog";
 import { MediaBin } from "./MediaBin";
 import { PreviewCanvas } from "./PreviewCanvas";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -23,6 +25,9 @@ import { importMediaFile, readVideoDimensions } from "./media-import";
 import { getAvailableEffectTrackId } from "./effect-track-layout";
 import { EditorPanelLayout } from "./EditorPanelLayout";
 import { ProjectManager, type WorkspaceSummary } from "./ProjectManager";
+import { ThemeSelector } from "../theme/ThemeProvider";
+import { applyPreset, type Preset } from "../../domain/assets/preset-model";
+import { applyVideoTemplate, createVideoTemplate, type VideoTemplate } from "../../domain/assets/video-template-model";
 import "./editor.css";
 
 export type EditorPageProps = {
@@ -59,6 +64,16 @@ function createId(prefix: string): string {
 function getClip(project: EditProject, id: string | null): EffectClip | null {
   if (!id) return null;
   return project.effectClips.find((clip) => clip.id === id) ?? null;
+}
+
+/** 中文注释：旧特效模板可能已经从注册表移除，资产入口仍应能打开并显示安全回退名称。 */
+function getEffectTemplateName(clip: EffectClip | null): string {
+  if (!clip) return "当前特效";
+  try {
+    return getTemplate(clip.templateId, clip.templateVersion).name;
+  } catch {
+    return "当前特效";
+  }
 }
 
 type ClipboardClip =
@@ -104,7 +119,14 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [missingMediaIds, setMissingMediaIds] = useState(initialMissingMediaIds);
   const [notice, setNotice] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [videoTemplateOpen, setVideoTemplateOpen] = useState(false);
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [videoTemplates, setVideoTemplates] = useState<VideoTemplate[]>([]);
+  const [presetError, setPresetError] = useState<string | undefined>();
+  const [videoTemplateError, setVideoTemplateError] = useState<string | undefined>();
   const [renderSnapshot, setRenderSnapshot] = useState<import("../../server/render/render-job").RenderJobSnapshot | null>(null);
+  const exportTriggerRef = useRef<HTMLButtonElement>(null);
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
@@ -138,6 +160,10 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setRenderSnapshot(null);
     setRenderJobId(null);
     setNotice(null);
+    setPresets([]);
+    setVideoTemplates([]);
+    setPresetError(undefined);
+    setVideoTemplateError(undefined);
   }, [store]);
 
   useEffect(() => () => {
@@ -150,6 +176,20 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     void fetch(`${workspaceApi}/media`).then((response) => response.ok ? response.json() : [])
       .then((loadedMedia) => setMediaAssets(loadedMedia as MediaAsset[]))
       .catch(() => undefined);
+  }, [store, workspaceApi]);
+
+  useEffect(() => {
+    // 中文注释：个人预设和视频模板均属于当前视频工作区，切换工作区时必须重新获取，不能复用上一个工作区的资产列表。
+    void Promise.all([
+      fetch(`${workspaceApi}/presets`).then((response) => response.ok ? response.json() : []),
+      fetch(`${workspaceApi}/video-templates`).then((response) => response.ok ? response.json() : []),
+    ]).then(([loadedPresets, loadedVideoTemplates]) => {
+      // 中文注释：接口异常或旧服务返回非数组时安全展示空资产库，避免一个加载响应破坏整个编辑器页面。
+      setPresets(Array.isArray(loadedPresets) ? loadedPresets as Preset[] : []);
+      setVideoTemplates(Array.isArray(loadedVideoTemplates) ? loadedVideoTemplates as VideoTemplate[] : []);
+    }).catch(() => {
+      // 中文注释：资产库加载失败不阻塞视频工作区编辑；用户打开相应对话框后仍会收到后续操作的明确反馈。
+    });
   }, [store, workspaceApi]);
 
   useEffect(() => {
@@ -170,6 +210,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
 
   const visibleProject = previewProject ?? project;
   const selectedEffectClip = getClip(visibleProject, selectedClipId);
+  const selectedStoredEffectClip = getClip(project, selectedClipId);
 
   /** 中文注释：拖动特效期间只更新页面级临时项目，让预览、选区和属性面板共享同一结果。 */
   const previewEffectParams = (clipId: string, params: Record<string, unknown>) => {
@@ -263,27 +304,44 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       setMissingMediaIds((current) => current.filter((id) => id !== mediaId));
       setRelinkedMediaId(mediaId);
       setNotice("素材已重新关联，原有时间轴和特效布局保持不变。");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "重新关联素材失败"); }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "重新关联素材失败";
+      setNotice(message);
+      throw new Error(message);
+    }
   };
 
   /** 中文注释：素材重命名只更新展示名，项目快照继续使用稳定 mediaId。 */
-  const renameMedia = (mediaId: string, name: string) => {
-    void fetch(`${workspaceApi}/media/${encodeURIComponent(mediaId)}`, { body: JSON.stringify({ name }), headers: { "Content-Type": "application/json" }, method: "PATCH" })
-      .then(async (response) => { if (!response.ok) throw new Error("素材重命名失败"); const asset = await response.json() as MediaAsset; setMediaAssets((current) => current.map((item) => item.id === mediaId ? asset : item)); })
-      .catch((error) => setNotice(error instanceof Error ? error.message : "素材重命名失败"));
+  const renameMedia = async (mediaId: string, name: string) => {
+    try {
+      const response = await fetch(`${workspaceApi}/media/${encodeURIComponent(mediaId)}`, { body: JSON.stringify({ name }), headers: { "Content-Type": "application/json" }, method: "PATCH" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message ?? "素材重命名失败");
+      }
+      const asset = await response.json() as MediaAsset;
+      setMediaAssets((current) => current.map((item) => item.id === mediaId ? asset : item));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "素材重命名失败";
+      setNotice(message);
+      throw new Error(message);
+    }
   };
 
   /** 中文注释：删除操作只检查当前工作区时间轴引用，其他工作区无法共享该素材。 */
-  const deleteMedia = (mediaId: string) => {
-    void fetch(`${workspaceApi}/media/${encodeURIComponent(mediaId)}`, { method: "DELETE" })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await response.json().catch(() => null) as { message?: string } | null;
-          throw new Error(body?.message ?? "素材删除失败");
-        }
-        setMediaAssets((current) => current.filter((item) => item.id !== mediaId));
-      })
-      .catch((error) => setNotice(error instanceof Error ? error.message : "素材删除失败"));
+  const deleteMedia = async (mediaId: string) => {
+    try {
+      const response = await fetch(`${workspaceApi}/media/${encodeURIComponent(mediaId)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message ?? "素材删除失败");
+      }
+      setMediaAssets((current) => current.filter((item) => item.id !== mediaId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "素材删除失败";
+      setNotice(message);
+      throw new Error(message);
+    }
   };
 
   /** 中文注释：撤销重新关联恢复服务端保存的上一份素材，并重新标记预览资源。 */
@@ -445,11 +503,109 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setRenderSnapshot(null);
   };
 
+  /** 中文注释：保存个人预设只发送当前选中特效的稳定项目快照，临时过程预览不写入资产库。 */
+  const savePreset = async (name: string) => {
+    if (!selectedStoredEffectClip) {
+      setPresetError("请先在时间轴或过程预览中选择一个特效片段。");
+      return;
+    }
+    try {
+      const response = await fetch(`${workspaceApi}/presets`, {
+        body: JSON.stringify({
+          name,
+          params: selectedStoredEffectClip.params,
+          templateId: selectedStoredEffectClip.templateId,
+          templateVersion: selectedStoredEffectClip.templateVersion,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const body = await response.json().catch(() => null) as Preset | { message?: string } | null;
+      if (!response.ok || !body || !("id" in body)) throw new Error((body && "message" in body ? body.message : undefined) ?? "个人预设保存失败");
+      setPresets((current) => [...current, body]);
+      setPresetOpen(false);
+      setPresetError(undefined);
+      setNotice(`已保存个人预设“${body.name}”。`);
+    } catch (error) {
+      setPresetError(error instanceof Error ? error.message : "个人预设保存失败");
+    }
+  };
+
+  /** 中文注释：套用仍由领域层校验模板兼容性；不兼容旧预设会安全回退，并将结果明确告知创作者。 */
+  const applySelectedPreset = (preset: Preset) => {
+    if (!selectedStoredEffectClip) {
+      setPresetError("请先选择一个要套用个人预设的特效片段。");
+      return;
+    }
+    try {
+      const compatible = applyPreset(store, preset, selectedStoredEffectClip.id);
+      setNotice(compatible ? `已将“${preset.name}”套用到当前特效片段。` : `“${preset.name}”与当前特效不兼容，已应用安全默认参数。`);
+      setPresetError(undefined);
+    } catch (error) {
+      setPresetError(error instanceof Error ? error.message : "个人预设套用失败");
+    }
+  };
+
+  /** 中文注释：删除个人预设只影响资产库列表，已保存的工作区快照和已套用片段参数保持不变。 */
+  const deletePreset = async (preset: Preset) => {
+    try {
+      const response = await fetch(`${workspaceApi}/presets/${encodeURIComponent(preset.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "个人预设删除失败");
+      setPresets((current) => current.filter((item) => item.id !== preset.id));
+      setNotice(`已删除个人预设“${preset.name}”。`);
+    } catch (error) {
+      setPresetError(error instanceof Error ? error.message : "个人预设删除失败");
+    }
+  };
+
+  /** 中文注释：视频模板从当前项目的特效片段生成相对布局，视频素材和其时间轴片段不会写入模板。 */
+  const saveVideoTemplate = async (name: string) => {
+    try {
+      const template = createVideoTemplate(createId("video-template"), name, project);
+      const response = await fetch(`${workspaceApi}/video-templates`, {
+        body: JSON.stringify(template),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const body = await response.json().catch(() => null) as VideoTemplate | { message?: string } | null;
+      if (!response.ok || !body || !("id" in body)) throw new Error((body && "message" in body ? body.message : undefined) ?? "视频模板保存失败");
+      setVideoTemplates((current) => [...current, body]);
+      setVideoTemplateOpen(false);
+      setVideoTemplateError(undefined);
+      setNotice(`已保存视频模板“${body.name}”。`);
+    } catch (error) {
+      setVideoTemplateError(error instanceof Error ? error.message : "视频模板保存失败");
+    }
+  };
+
+  /** 中文注释：套用视频模板在播放头位置新增一组特效片段；领域命令保证它可作为单次编辑撤销。 */
+  const applySelectedVideoTemplate = (template: VideoTemplate) => {
+    try {
+      applyVideoTemplate(store, template, currentFrame, (index) => createId(`effect-template-${index}`));
+      setNotice(`已在播放头位置新增“${template.name}”的 ${template.effectClips.length} 个特效片段。`);
+      setVideoTemplateError(undefined);
+    } catch (error) {
+      setVideoTemplateError(error instanceof Error ? error.message : "视频模板套用失败");
+    }
+  };
+
+  /** 中文注释：删除视频模板只移除可复用布局资产，当前时间轴上已经新增的特效片段不会被反向修改。 */
+  const deleteVideoTemplate = async (template: VideoTemplate) => {
+    try {
+      const response = await fetch(`${workspaceApi}/video-templates/${encodeURIComponent(template.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "视频模板删除失败");
+      setVideoTemplates((current) => current.filter((item) => item.id !== template.id));
+      setNotice(`已删除视频模板“${template.name}”。`);
+    } catch (error) {
+      setVideoTemplateError(error instanceof Error ? error.message : "视频模板删除失败");
+    }
+  };
+
   return (
     <main className="editor-shell">
       <header className="editor-topbar">
         <div className="brand-lockup"><span className="brand-mark">✦</span><div><h1>Frame / Flow</h1><span>本地视频特效编辑器</span></div></div>
-          <div className="topbar-actions"><ProjectManager workspaceId={activeWorkspaceId} workspaces={workspaces ?? projects} onCreate={onCreateWorkspace ?? onCreateProject ?? (() => undefined)} onDelete={onDeleteWorkspace ?? onDeleteProject ?? (() => undefined)} onOpen={onOpenWorkspace ?? onOpenProject ?? (() => undefined)} onRename={onRenameWorkspace ?? onRenameProject ?? (() => undefined)} /><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={redo} type="button">↷</button><button aria-label="重置视频工作区" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置工作区" type="button">↺</button><SaveIndicator onRetry={() => void autosave.retry()} state={autosaveState} /><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} type="button">导出视频 <span>↗</span></button></div>
+          <div className="topbar-actions"><ThemeSelector /><ProjectManager workspaceId={activeWorkspaceId} workspaces={workspaces ?? projects} onCreate={onCreateWorkspace ?? onCreateProject ?? (() => undefined)} onDelete={onDeleteWorkspace ?? onDeleteProject ?? (() => undefined)} onOpen={onOpenWorkspace ?? onOpenProject ?? (() => undefined)} onRename={onRenameWorkspace ?? onRenameProject ?? (() => undefined)} /><button className="asset-trigger" onClick={() => { setPresetError(selectedStoredEffectClip ? undefined : "请先选择一个特效片段，再保存或套用个人预设。"); setPresetOpen(true); }} type="button">个人预设</button><button className="asset-trigger" onClick={() => { setVideoTemplateError(undefined); setVideoTemplateOpen(true); }} type="button">视频模板</button><button aria-label="撤销" className="icon-button" onClick={undo} type="button">↶</button><button aria-label="重做" className="icon-button" onClick={redo} type="button">↷</button><button aria-label="重置视频工作区" className="icon-button" onClick={() => setResetDialogOpen(true)} title="重置工作区" type="button">↺</button><SaveIndicator onRetry={() => void autosave.retry()} state={autosaveState} /><button aria-label={missingMediaIds.length > 0 ? "导出视频（存在缺失素材）" : "导出视频"} className="export-button" disabled={missingMediaIds.length > 0} onClick={() => setExportOpen(true)} ref={exportTriggerRef} type="button">导出视频 <span>↗</span></button></div>
         </header>
         {projectError ? <div aria-label="视频工作区错误" className="workspace-error" role="alert"><span>{projectError}</span><button onClick={onRetryProject} type="button">重试</button>{backupAvailable && onRecoverProject ? <button onClick={onRecoverProject} type="button">从最近备份恢复</button> : null}<button onClick={onDismissProjectError} type="button">返回编辑</button></div> : null}
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
@@ -461,7 +617,9 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => void cancelRender()} onDismiss={dismissRenderStatus} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
-      <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} renderStatus={renderSnapshot?.status} error={renderSnapshot?.error?.message} />
+      <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} returnFocusRef={exportTriggerRef} />
+      <PresetDialog canApply={Boolean(selectedStoredEffectClip)} canSave={Boolean(selectedStoredEffectClip)} error={presetError} onApply={applySelectedPreset} onClose={() => { setPresetOpen(false); setPresetError(undefined); }} onDelete={deletePreset} onSave={savePreset} open={presetOpen} presets={presets} templateName={getEffectTemplateName(selectedStoredEffectClip)} />
+      <VideoTemplateDialog effectCount={project.effectClips.length} error={videoTemplateError} onApply={applySelectedVideoTemplate} onClose={() => { setVideoTemplateOpen(false); setVideoTemplateError(undefined); }} onDelete={deleteVideoTemplate} onSave={saveVideoTemplate} open={videoTemplateOpen} templates={videoTemplates} />
     </main>
   );
 }

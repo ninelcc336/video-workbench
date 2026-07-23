@@ -124,6 +124,7 @@ export function TimelineClip({
   return (
     <button
       aria-label={`${label}，${kind === "video" ? "视频" : "特效"}片段`}
+      aria-pressed={selected}
       className={`timeline-clip ${kind}-clip${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
       onClick={() => onSelect(clip.id)}
       onMouseDown={(event) => beginDrag("move", event)}

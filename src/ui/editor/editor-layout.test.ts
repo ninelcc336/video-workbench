@@ -31,6 +31,16 @@ describe("编辑器视口滚动边界", () => {
     expect(editorCss).toMatch(/\*::\-webkit\-scrollbar-thumb:active\s*\{[^}]*background:\s*var\(--scrollbar-thumb-active\)/s);
     expect(editorCss).not.toMatch(/\*::\-webkit\-scrollbar\s*\{[^}]*display:\s*none/s);
   });
+
+  it("为时间轴的关键编辑状态和 1024px 桌面密度提供主题化视觉契约", () => {
+    // 中文注释：该契约防止时间轴回退成原生边框，或窄桌面下重新出现顶栏溢出。
+    expect(editorCss).toMatch(/\.timeline-ruler__gutter\s*\{[^}]*position:\s*sticky/s);
+    expect(editorCss).toMatch(/\.timeline-track__label\s*\{[^}]*position:\s*sticky/s);
+    expect(editorCss).toMatch(/\.timeline-clip\.video-clip\s*\{[^}]*background:/s);
+    expect(editorCss).toMatch(/\.timeline-clip\.selected,[^{]*\[aria-pressed="true"\]\s*\{[^}]*box-shadow:/s);
+    expect(editorCss).toMatch(/\.timeline-playhead::before\s*\{[^}]*border-bottom:\s*8px\s+solid\s+var\(--color-playhead\)/s);
+    expect(editorCss).toMatch(/@media\s*\(max-width:\s*1100px\)\s*\{[^}]*\.editor-topbar\s*\{[^}]*min-height:\s*64px/s);
+  });
 });
 
 describe("编辑器三栏布局宽度", () => {

@@ -89,6 +89,7 @@ describe("基础时间轴", () => {
 
     expect(onSelectClip).toHaveBeenCalledWith("effect-1");
     expect(clip.className).toContain("selected");
+    expect(clip.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("拖动片段会发出移动命令，裁剪结果不会产生负时长", () => {
