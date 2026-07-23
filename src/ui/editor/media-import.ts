@@ -70,6 +70,7 @@ export async function importMediaFile(
   file: File,
   fetcher: (input: string, init?: RequestInit) => Promise<Response> = fetch,
   readDimensions: VideoDimensionReader = readVideoDimensions,
+  endpoint = "/api/workspace/media",
 ): Promise<ImportedMediaAsset> {
   const dimensions = await readDimensions(file);
   const form = new FormData();
@@ -79,7 +80,7 @@ export async function importMediaFile(
   if (dimensions.height !== undefined) form.append("height", String(dimensions.height));
   if (dimensions.fps !== undefined) form.append("fps", String(dimensions.fps));
   if (dimensions.fpsWasFallback !== undefined) form.append("fpsWasFallback", String(dimensions.fpsWasFallback));
-  const response = await fetcher("/api/workspace/media", { method: "POST", body: form });
+  const response = await fetcher(endpoint, { method: "POST", body: form });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { message?: string } | null;
     throw new Error(body?.message ?? "视频素材导入失败");

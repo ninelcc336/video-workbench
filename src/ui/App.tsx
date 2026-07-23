@@ -1,194 +1,222 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEditorStore } from "../domain/editor/editor-store";
 import { createEmptyProject } from "../domain/project/factories";
-import type { EditProject } from "../domain/project/model";
+import type { VideoWorkspace } from "../domain/workspace/model";
 import type { AutosaveStatus } from "./editor/SaveIndicator";
 import { EditorPage } from "./editor/EditorPage";
 import { NavigationConfirmDialog } from "./editor/NavigationConfirmDialog";
-import type { ProjectSummary } from "./editor/ProjectManager";
+import type { WorkspaceSummary } from "./editor/ProjectManager";
 import "./editor/editor.css";
 
-type ProjectResponse = { backupAvailable?: boolean; project: EditProject; missingMediaIds?: string[]; mediaSources?: Record<string, string> };
+type WorkspaceResponse = { workspace: VideoWorkspace; missingMediaIds?: string[]; mediaSources?: Record<string, string>; backupAvailable?: boolean };
 type AppPhase = "loading" | "empty" | "editor" | "error";
 type PendingNavigation = { destination: string; execute: () => void } | null;
 
-/** 中文注释：保存项目只通过稳定项目名称写入固定本地项目库，浏览器永远不接触目录路径。 */
-async function saveLocalProject(project: EditProject, projectId: string): Promise<void> {
-  const response = await fetch(`/api/workspace/projects/${encodeURIComponent(projectId)}`, { body: JSON.stringify(project), headers: { "Content-Type": "application/json" }, method: "PUT" });
+/** 中文注释：工作区快照只通过稳定工作区名称保存，浏览器不会接触或选择实际存储目录。 */
+async function saveVideoWorkspace(workspace: VideoWorkspace, workspaceId: string): Promise<void> {
+  const response = await fetch(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
+    body: JSON.stringify(workspace),
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(body?.message ?? "本地项目保存失败");
+    throw new Error(body?.message ?? "视频工作区保存失败");
   }
 }
 
-/** 中文注释：空项目库是正常首次状态，只提供命名创建入口而不展示任何存储目录细节。 */
-function ProjectLibraryStart({ backupAvailable, error, onCreateProject, onRecoverProject, onRetry }: { backupAvailable: boolean; error: string | null; onCreateProject: (name: string) => void; onRecoverProject: () => void; onRetry: () => void }) {
-  const [projectName, setProjectName] = useState("");
+/** 中文注释：空工作区库是首次使用的正常入口，只要求用户命名即将制作的视频。 */
+function WorkspaceLibraryStart({ backupAvailable, error, onCreateWorkspace, onRecover, onRetry }: { backupAvailable: boolean; error: string | null; onCreateWorkspace: (name: string) => void; onRecover: () => void; onRetry: () => void }) {
+  const [workspaceName, setWorkspaceName] = useState("");
   return (
     <main className="workspace-start">
-      <section className="workspace-start__card" role="region" aria-label="空项目库">
+      <section aria-label="空工作区库" className="workspace-start__card" role="region">
         <p className="workspace-start__eyebrow">FRAME / FLOW · 本地优先</p>
-        <h1>创建第一个编辑项目</h1>
-        <p>本地项目库已准备好。新建项目后，即可导入视频素材并开始编辑。</p>
-        {error ? <p className="workspace-start__error" role="alert">{error}</p> : null}
-        {error ? <button onClick={onRetry} type="button">重试</button> : null}
-        {error && backupAvailable ? <button onClick={onRecoverProject} type="button">从最近备份恢复</button> : null}
-        <label>编辑项目名称<input aria-label="新建编辑项目名称" onChange={(event) => setProjectName(event.target.value)} placeholder="例如：知识视频" value={projectName} /></label>
-        <button className="workspace-start__primary" onClick={() => onCreateProject(projectName)} type="button">新建编辑项目</button>
+        <h1>创建第一个视频工作区</h1>
+        <p>新建工作区后即可导入素材并开始制作；各工作区的素材和时间轴彼此独立。</p>
+        {error ? <><p className="workspace-start__error" role="alert">{error}</p><button onClick={onRetry} type="button">重试</button>{backupAvailable ? <button onClick={onRecover} type="button">从最近备份恢复</button> : null}</> : null}
+        <label>视频工作区名称<input aria-label="新建视频工作区名称" onChange={(event) => setWorkspaceName(event.target.value)} placeholder="例如：知识视频" value={workspaceName} /></label>
+        <button className="workspace-start__primary" onClick={() => onCreateWorkspace(workspaceName)} type="button">新建视频工作区</button>
       </section>
     </main>
   );
 }
 
-/** 中文注释：App 只协调固定项目库启动、项目导航与恢复，具体编辑能力仍由 EditorPage 承担。 */
+/** 中文注释：App 只协调工作区选择、切换和自动保存状态；编辑器内部操作仍由 EditorPage 与 EditorStore 管理。 */
 export function App() {
   const [phase, setPhase] = useState<AppPhase>("loading");
-  const [project, setProject] = useState<EditProject | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [workspace, setWorkspace] = useState<VideoWorkspace | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [missingMediaIds, setMissingMediaIds] = useState<string[]>([]);
   const [mediaSources, setMediaSources] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [backupAvailable, setBackupAvailable] = useState(false);
-  const [retryProjectId, setRetryProjectId] = useState<string | null>(null);
+  const [failedWorkspaceId, setFailedWorkspaceId] = useState<string | null>(null);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("idle");
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation>(null);
-  const activeProjectRef = useRef<EditProject | null>(null);
+  const activeWorkspaceRef = useRef<VideoWorkspace | null>(null);
 
   useEffect(() => {
-    // 中文注释：读取失败时用 ref 判断是否仍有可继续编辑的项目，避免错误覆盖当前内容。
-    activeProjectRef.current = project;
-  }, [project]);
+    activeWorkspaceRef.current = workspace;
+  }, [workspace]);
 
-  /** 中文注释：成功后一次性替换项目快照和素材地址；失败时保留当前编辑器并提供恢复入口。 */
-  const loadProject = useCallback(async (nextProjectId: string): Promise<boolean> => {
-    setRetryProjectId(nextProjectId);
+  /** 中文注释：成功加载时一次替换快照和私有素材地址；失败不覆盖正在编辑的另一个工作区。 */
+  const loadWorkspace = useCallback(async (nextWorkspaceId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/workspace/projects/${encodeURIComponent(nextProjectId)}`);
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(nextWorkspaceId)}`);
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { backupAvailable?: boolean; message?: string } | null;
-        setBackupAvailable(Boolean(body?.backupAvailable));
-        throw new Error(body?.message ?? "无法读取编辑项目");
+        const body = await response.json().catch(() => null) as { backupAvailable?: boolean; code?: string; message?: string } | null;
+        const canRecover = body?.code === "corrupt_project" && body.backupAvailable === true;
+        setBackupAvailable(canRecover);
+        setFailedWorkspaceId(canRecover ? nextWorkspaceId : null);
+        setRecoveryAvailable(canRecover);
+        throw new Error(body?.message ?? "无法读取视频工作区");
       }
-      const value = await response.json() as ProjectResponse;
-      setProject(value.project);
-      setProjectId(nextProjectId);
+      const value = await response.json() as WorkspaceResponse;
+      setWorkspace(value.workspace);
+      setWorkspaceId(nextWorkspaceId);
       setMediaSources(value.mediaSources ?? {});
       setMissingMediaIds(value.missingMediaIds ?? []);
+      setBackupAvailable(value.backupAvailable === true);
+      setFailedWorkspaceId(null);
+      setRecoveryAvailable(false);
       setLoadError(null);
-      setBackupAvailable(false);
-      setRetryProjectId(null);
       setPhase("editor");
       return true;
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "无法读取编辑项目");
-      if (!activeProjectRef.current) setPhase("error");
+      setLoadError(error instanceof Error ? error.message : "无法读取视频工作区");
+      if (!activeWorkspaceRef.current) setPhase("error");
       return false;
     }
   }, []);
 
-  /** 中文注释：固定项目库按仓储排序返回项目；没有项目时进入可操作的空项目库状态。 */
-  const refreshProjects = useCallback(async (preferredProjectId?: string): Promise<boolean> => {
+  /** 中文注释：工作区列表按服务端最近编辑顺序返回，空列表直接进入创建首个视频的状态。 */
+  const refreshWorkspaces = useCallback(async (preferredWorkspaceId?: string): Promise<boolean> => {
     try {
-      const response = await fetch("/api/workspace/projects");
+      const response = await fetch("/api/workspaces");
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { message?: string } | null;
-        throw new Error(body?.message ?? "无法读取编辑项目列表");
+        throw new Error(body?.message ?? "无法读取视频工作区列表");
       }
-      const loaded = await response.json() as ProjectSummary[];
-      setProjects(loaded);
+      const loaded = await response.json() as WorkspaceSummary[];
+      setWorkspaces(loaded);
       if (loaded.length === 0) {
-        setProject(null);
-        setProjectId(null);
-        setLoadError(null);
+        setWorkspace(null);
+        setWorkspaceId(null);
+        setBackupAvailable(false);
+        setFailedWorkspaceId(null);
+        setRecoveryAvailable(false);
         setPhase("empty");
         return true;
       }
-      return await loadProject(loaded.find((item) => item.id === preferredProjectId)?.id ?? loaded[0].id);
+      return loadWorkspace(loaded.find((item) => item.id === preferredWorkspaceId)?.id ?? loaded[0].id);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "无法读取编辑项目列表");
+      setLoadError(error instanceof Error ? error.message : "无法读取视频工作区列表");
+      setBackupAvailable(false);
+      setFailedWorkspaceId(null);
+      setRecoveryAvailable(false);
       setPhase("error");
       return false;
     }
-  }, [loadProject]);
+  }, [loadWorkspace]);
 
   useEffect(() => {
-    // 中文注释：首次启动直接读取固定项目库，不再依赖最近目录或目录选择。
-    void refreshProjects();
-  }, [refreshProjects]);
+    void refreshWorkspaces();
+  }, [refreshWorkspaces]);
 
-  /** 中文注释：仅在自动保存尚未稳定时确认项目切换，取消后选择器保持当前项目。 */
+  /** 中文注释：只有保存尚未稳定时才拦截工作区切换，正常保存完成后 A/B 可直接切换。 */
   const requestNavigation = (destination: string, execute: () => void) => {
     if (autosaveStatus === "saving" || autosaveStatus === "error") setPendingNavigation({ destination, execute });
     else execute();
   };
 
-  /** 中文注释：新建项目会裁剪输入；路径安全与大小写冲突仍由服务端统一裁决。 */
-  const createProject = (name: string) => {
+  /** 中文注释：创建工作区先在服务端校验名称安全与唯一性，再刷新并打开新工作区。 */
+  const createWorkspace = (name: string) => {
     const normalizedName = name.trim();
     if (!normalizedName) {
-      setLoadError("请输入编辑项目名称");
+      setLoadError("请输入视频工作区名称");
+      setBackupAvailable(false);
+      setFailedWorkspaceId(null);
+      setRecoveryAvailable(false);
       return;
     }
-    void fetch(`/api/workspace/projects/${encodeURIComponent(normalizedName)}`, { body: JSON.stringify(createEmptyProject()), headers: { "Content-Type": "application/json" }, method: "POST" })
+    void fetch(`/api/workspaces/${encodeURIComponent(normalizedName)}`, {
+      body: JSON.stringify(createEmptyProject()),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "创建视频工作区失败");
+      return refreshWorkspaces(normalizedName);
+    }).catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "创建视频工作区失败");
+      setBackupAvailable(false);
+      setFailedWorkspaceId(null);
+      setRecoveryAvailable(false);
+    });
+  };
+
+  /** 中文注释：重命名移动整个私有工作区目录，刷新后继续编辑同一份时间轴与素材。 */
+  const renameWorkspace = (currentId: string, nextId: string) => {
+    void fetch(`/api/workspaces/${encodeURIComponent(currentId)}`, {
+      body: JSON.stringify({ name: nextId }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "重命名视频工作区失败");
+      return refreshWorkspaces(currentId);
+    }).catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "重命名视频工作区失败");
+      setBackupAvailable(false);
+      setFailedWorkspaceId(null);
+      setRecoveryAvailable(false);
+    });
+  };
+
+  /** 中文注释：删除当前工作区只影响其私有目录，服务端刷新后自动选择最近编辑的另一个工作区。 */
+  const deleteWorkspace = (currentId: string) => {
+    void fetch(`/api/workspaces/${encodeURIComponent(currentId)}`, { method: "DELETE" })
       .then(async (response) => {
-        if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "创建编辑项目失败");
-        return refreshProjects(normalizedName);
-      })
-      .catch((error) => setLoadError(error instanceof Error ? error.message : "创建编辑项目失败"));
+        if (!response.ok) throw new Error("删除视频工作区失败");
+        return refreshWorkspaces();
+      }).catch((error) => {
+        setLoadError(error instanceof Error ? error.message : "删除视频工作区失败");
+        setBackupAvailable(false);
+        setFailedWorkspaceId(null);
+        setRecoveryAvailable(false);
+      });
   };
 
-  /** 中文注释：重命名后重新读取排序后的项目列表，项目 JSON 与素材 ID 不在浏览器中重写。 */
-  const renameProject = (currentId: string, nextProjectId: string) => {
-    void fetch(`/api/workspace/projects/${encodeURIComponent(currentId)}`, { body: JSON.stringify({ name: nextProjectId }), headers: { "Content-Type": "application/json" }, method: "PATCH" })
+  const openWorkspace = (nextWorkspaceId: string) => {
+    if (nextWorkspaceId === workspaceId) return;
+    requestNavigation(nextWorkspaceId, () => { void loadWorkspace(nextWorkspaceId); });
+  };
+
+  /** 中文注释：恢复 API 只替换失败工作区自身的快照，成功后重新走标准读取流程以同步素材状态。 */
+  const recoverWorkspace = () => {
+    const targetWorkspaceId = failedWorkspaceId;
+    if (!targetWorkspaceId || !recoveryAvailable) return;
+    void fetch(`/api/workspaces/${encodeURIComponent(targetWorkspaceId)}/recover`, { method: "POST" })
       .then(async (response) => {
-        if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "重命名编辑项目失败");
-        return refreshProjects(nextProjectId.trim());
-      })
-      .catch((error) => setLoadError(error instanceof Error ? error.message : "重命名编辑项目失败"));
+        if (!response.ok) {
+          const body = await response.json().catch(() => null) as { message?: string } | null;
+          throw new Error(body?.message ?? "无法从最近备份恢复视频工作区");
+        }
+        await loadWorkspace(targetWorkspaceId);
+      }).catch((error) => setLoadError(error instanceof Error ? error.message : "无法从最近备份恢复视频工作区"));
   };
 
-  /** 中文注释：删除后按仓储最近更新时间自动打开下一项目；最后一项删除后显示空项目库状态。 */
-  const deleteProject = (currentId: string) => {
-    void fetch(`/api/workspace/projects/${encodeURIComponent(currentId)}`, { method: "DELETE" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("删除编辑项目失败");
-        return refreshProjects();
-      })
-      .catch((error) => setLoadError(error instanceof Error ? error.message : "删除编辑项目失败"));
-  };
+  const store = useMemo(() => workspace ? createEditorStore(workspace) : null, [workspace]);
 
-  const openProject = (nextProjectId: string) => {
-    if (nextProjectId === projectId) return;
-    requestNavigation(nextProjectId, () => { void loadProject(nextProjectId); });
-  };
+  /** 中文注释：保存回调只在工作区切换时更新，避免自动保存状态本身触发编辑器控制器重建并反复延后保存。 */
+  const saveCurrentWorkspace = useCallback((snapshot: VideoWorkspace): Promise<void> => {
+    if (!workspaceId) return Promise.reject(new Error("当前没有可保存的视频工作区"));
+    return saveVideoWorkspace(snapshot, workspaceId);
+  }, [workspaceId]);
 
-  /** 中文注释：恢复目标始终是刚刚读取失败的项目，避免把当前仍在编辑的项目误写为备份内容。 */
-  const recoverProject = () => {
-    const recoveryProjectId = retryProjectId ?? projectId;
-    if (!recoveryProjectId) return;
-    void fetch(`/api/workspace/projects/${encodeURIComponent(recoveryProjectId)}?recover=backup`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error("备份恢复失败");
-        await loadProject(recoveryProjectId);
-      })
-      .catch((error) => setLoadError(error instanceof Error ? error.message : "备份恢复失败"));
-  };
+  if (phase === "loading") return <main className="workspace-start"><p>正在读取视频工作区…</p></main>;
+  if (phase === "empty" || phase === "error" || !workspace || !store || !workspaceId) return <WorkspaceLibraryStart backupAvailable={recoveryAvailable && backupAvailable} error={loadError} onCreateWorkspace={createWorkspace} onRecover={recoverWorkspace} onRetry={() => void refreshWorkspaces()} />;
 
-  /** 中文注释：项目库初始化失败时先请求服务端重试迁移，再重新读取项目列表，不创建虚假的空项目。 */
-  const retryProjectLibrary = () => {
-    void fetch("/api/workspace/retry-initialization", { method: "POST" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(((await response.json().catch(() => null)) as { message?: string } | null)?.message ?? "本地项目库仍不可用");
-        return refreshProjects();
-      })
-      .catch((error) => setLoadError(error instanceof Error ? error.message : "本地项目库仍不可用"));
-  };
-
-  const store = useMemo(() => project ? createEditorStore(project) : null, [project]);
-
-  if (phase === "loading") return <main className="workspace-start"><p>正在读取本地项目库…</p></main>;
-  if (phase === "empty" || phase === "error" || !project || !store || !projectId) return <ProjectLibraryStart backupAvailable={backupAvailable} error={loadError} onCreateProject={createProject} onRecoverProject={recoverProject} onRetry={retryProjectLibrary} />;
-
-  return <><EditorPage backupAvailable={backupAvailable} mediaSources={mediaSources} missingMediaIds={missingMediaIds} onAutosaveStatusChange={setAutosaveStatus} onCreateProject={createProject} onDeleteProject={deleteProject} onDismissProjectError={() => setLoadError(null)} onOpenProject={openProject} onRecoverProject={recoverProject} onRenameProject={renameProject} onRetryProject={() => { if (retryProjectId) void loadProject(retryProjectId); }} onSaveProject={(snapshot) => saveLocalProject(snapshot, projectId)} projectError={loadError} projectId={projectId} projects={projects} store={store} /><NavigationConfirmDialog destination={pendingNavigation?.destination ?? ""} onCancel={() => setPendingNavigation(null)} onConfirm={() => { const action = pendingNavigation?.execute; setPendingNavigation(null); action?.(); }} open={pendingNavigation !== null} /></>;
+  return <><EditorPage backupAvailable={recoveryAvailable && backupAvailable} mediaSources={mediaSources} missingMediaIds={missingMediaIds} onAutosaveStatusChange={setAutosaveStatus} onCreateWorkspace={createWorkspace} onDeleteWorkspace={deleteWorkspace} onDismissProjectError={() => { setLoadError(null); setBackupAvailable(false); setFailedWorkspaceId(null); setRecoveryAvailable(false); }} onOpenWorkspace={openWorkspace} onRecoverProject={recoverWorkspace} onRenameWorkspace={renameWorkspace} onRetryProject={() => void loadWorkspace(workspaceId)} onSaveProject={saveCurrentWorkspace} projectError={loadError} store={store} workspaceId={workspaceId} workspaces={workspaces} /><NavigationConfirmDialog destination={pendingNavigation?.destination ?? ""} onCancel={() => setPendingNavigation(null)} onConfirm={() => { const action = pendingNavigation?.execute; setPendingNavigation(null); action?.(); }} open={pendingNavigation !== null} /></>;
 }

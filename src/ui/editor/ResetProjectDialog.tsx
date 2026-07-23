@@ -16,7 +16,7 @@ export function ResetProjectDialog({ open, onOpenChange, onConfirm }: ResetProje
           <div aria-hidden="true" className="reset-dialog__signal">↺</div>
           <div className="reset-dialog__copy">
             <p className="reset-dialog__eyebrow">需确认的编辑操作</p>
-            <AlertDialog.Title>重置此编辑项目？</AlertDialog.Title>
+          <AlertDialog.Title>重置此视频工作区？</AlertDialog.Title>
             <AlertDialog.Description>
               时间轴片段、画布和导出规格将恢复初始状态。本地导入的视频文件会保留，且重置后仍可撤销。
             </AlertDialog.Description>

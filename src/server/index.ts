@@ -1,40 +1,41 @@
 import express from "express";
 import { getHealthStatus } from "./health";
 import { createRenderRouter } from "./render/render-routes";
-import { createWorkspaceAdapter, getFixedProjectLibraryRoot, WorkspaceError } from "./workspace/workspace-adapter";
-import { createWorkspaceRouter } from "./workspace/workspace-routes";
-import { WorkspaceRegistry } from "./workspace/workspace-registry";
+import { getFixedProjectLibraryRoot } from "./workspace/workspace-adapter";
+import { ProjectRepository } from "./workspace/project-repository";
+import { VideoWorkspaceAdapter } from "./workspace/video-workspace-adapter";
+import { createVideoWorkspaceRouter } from "./workspace/video-workspace-routes";
+import { getWorkspacePaths, WorkspaceError } from "./workspace/workspace-paths";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4173);
-const recentWorkspaces = await new WorkspaceRegistry().list();
-// 中文注释：旧最近目录仅在升级时提供一次性迁移来源，应用之后始终使用固定本地项目库。
-const workspace = createWorkspaceAdapter(getFixedProjectLibraryRoot());
-let projectLibraryInitializationError: WorkspaceError | null = null;
+const libraryRoot = getFixedProjectLibraryRoot();
+const workspace = new VideoWorkspaceAdapter(libraryRoot);
+let workspaceInitializationError: WorkspaceError | null = null;
 
-/** 中文注释：启动与重试复用同一初始化流程，迁移失败时服务仍存活并把错误交给页面恢复。 */
-async function initializeProjectLibrary(): Promise<void> {
+/** 中文注释：启动时只在新工作区库为空时迁移旧共享项目库，避免覆盖用户已创建的独立工作区。 */
+async function initializeVideoWorkspaces(): Promise<void> {
   try {
-    await workspace.initializeFixedProjectLibrary(recentWorkspaces.map((workspace) => workspace.rootPath));
-    projectLibraryInitializationError = null;
+    await workspace.initialize();
+    if ((await workspace.listWorkspaces()).length === 0 && (await new ProjectRepository(getWorkspacePaths(libraryRoot)).listProjects()).length > 0) {
+      await workspace.migrateLegacyLibrary(getWorkspacePaths(libraryRoot));
+    }
+    workspaceInitializationError = null;
   } catch (error) {
-    projectLibraryInitializationError = error instanceof WorkspaceError
+    workspaceInitializationError = error instanceof WorkspaceError
       ? error
-      : new WorkspaceError("project_library_unavailable", "本地项目库暂时不可用，请检查数据后重试", error);
-    throw projectLibraryInitializationError;
+      : new WorkspaceError("project_library_unavailable", "视频工作区暂时不可用，请检查数据后重试", error);
+    throw workspaceInitializationError;
   }
 }
 
-await initializeProjectLibrary().catch(() => undefined);
+await initializeVideoWorkspaces().catch(() => undefined);
 
 app.use(express.json());
 app.get("/api/health", (_request, response) => {
   response.json(getHealthStatus());
 });
-app.use("/api/workspace", createWorkspaceRouter(workspace, {
-  getInitializationError: () => projectLibraryInitializationError,
-  retryInitialization: initializeProjectLibrary,
-}));
+app.use("/api", createVideoWorkspaceRouter(workspace));
 app.use(createRenderRouter({ workspace }));
 const server = app.listen(port, () => console.log(`本地视频特效服务已启动：http://localhost:${port}`));
 

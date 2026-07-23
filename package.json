@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "tsx src/server/index.ts",
+    "dev:server": "tsx watch src/server/index.ts",
     "dev:all": "concurrently -k \"npm run dev:server\" \"npm run dev -- --host 127.0.0.1\"",
     "test": "vitest run src",
     "test:render-smoke": "tsx scripts/render-smoke.ts",

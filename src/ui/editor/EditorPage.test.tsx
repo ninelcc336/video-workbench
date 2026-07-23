@@ -8,7 +8,7 @@ import { EditorPage } from "./EditorPage";
 
 const importMediaFile = vi.hoisted(() => vi.fn());
 
-vi.mock("./media-import", () => ({ importMediaFile }));
+vi.mock("./media-import", () => ({ importMediaFile, readVideoDimensions: vi.fn() }));
 vi.mock("./PreviewCanvas", () => ({
   // 中文注释：本用例只验证页面导入事件到编辑器快照的桥接，不依赖 Remotion 的浏览器运行时。
   PreviewCanvas: ({ currentFrame, onSelectClip }: { currentFrame?: number; onSelectClip?: (clipId: string | null) => void }) => (
@@ -47,23 +47,22 @@ afterEach(() => {
 
 describe("编辑项目的素材导入", () => {
   // 中文注释：用两个 Store 模拟从一个工作区切换到另一个工作区的页面生命周期。
-  it("切换到新工作区提供的编辑器快照后重新加载素材、预设和视频模板", async () => {
+  it("切换到新工作区提供的编辑器快照后只重新加载该工作区素材", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => [],
     } as Response);
     const firstStore = createEditorStore(createEmptyProject());
     const secondStore = createEditorStore(createEmptyProject({ width: 1920, height: 1080 }));
-    const { rerender } = render(<EditorPage store={firstStore} />);
+    const { rerender } = render(<EditorPage store={firstStore} workspaceId="视频 A" />);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    rerender(<EditorPage store={secondStore} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    rerender(<EditorPage store={secondStore} workspaceId="视频 B" />);
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
-    expect(fetchMock.mock.calls.slice(3).map(([url]) => url)).toEqual([
-      "/api/workspace/presets",
-      "/api/workspace/video-templates",
-      "/api/workspace/media",
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/workspaces/%E8%A7%86%E9%A2%91%20A/media",
+      "/api/workspaces/%E8%A7%86%E9%A2%91%20B/media",
     ]);
   });
 
@@ -90,13 +89,13 @@ describe("编辑项目的素材导入", () => {
   it("确认重置后清空时间轴、恢复默认画布并将播放头归零", async () => {
     const store = createLandscapeProjectStore();
 
-    render(<EditorPage store={store} />);
+    render(<EditorPage store={store} workspaceId="横屏视频" />);
     fireEvent.click(screen.getByRole("button", { name: "定位播放头" }));
     expect(screen.getByTestId("preview-canvas").dataset.currentFrame).toBe("10");
 
-    fireEvent.click(screen.getByRole("button", { name: "重置编辑项目" }));
+    fireEvent.click(screen.getByRole("button", { name: "重置视频工作区" }));
     // 中文注释：危险操作先在页面内显示可访问的确认弹窗，避免原生确认框打断编辑器视觉体验。
-    expect(screen.getByRole("alertdialog", { name: "重置此编辑项目？" })).toBeTruthy();
+    expect(screen.getByRole("alertdialog", { name: "重置此视频工作区？" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
 
     await waitFor(() => {
@@ -125,7 +124,7 @@ describe("编辑项目的素材导入", () => {
     render(<EditorPage store={store} />);
     // 中文注释：取消确认属于无副作用路径，既不能清空时间轴，也不能改变页面播放头。
     fireEvent.click(screen.getByRole("button", { name: "定位播放头" }));
-    fireEvent.click(screen.getByRole("button", { name: "重置编辑项目" }));
+    fireEvent.click(screen.getByRole("button", { name: "重置视频工作区" }));
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
 
     expect(store.getSnapshot().videoClips).toHaveLength(1);

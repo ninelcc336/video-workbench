@@ -1,6 +1,6 @@
 # 固定本地项目库与项目优先导航
 
-Status: ready-for-agent
+Status: wontfix
 
 ## Problem Statement
 
@@ -73,3 +73,4 @@ Status: ready-for-agent
 - 本规格遵守 ADR-0025：固定本地项目库取代用户可切换目录。
 - “本地项目库”是内部持久化集合；“编辑项目”是用户进行创作和管理的工作对象。
 - 旧的工作区导航规格已被本规格替代。
+- 2026-07-23：本规格已被“隔离视频工作区”模型替代。该模型不再使用编辑项目或共享素材，详见 ADR-0026 与 `.scratch/isolated-video-workspaces/`。
