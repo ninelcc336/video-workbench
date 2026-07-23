@@ -117,13 +117,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 
 .editor-shell { width: 100%; height: 100vh; height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--color-canvas); color: var(--color-text); }
-.editor-topbar { min-height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
-.brand-lockup, .topbar-actions, .library-section__heading, .editor-notice, .template-card__content, .preview-panel__toolbar, .timeline-panel__header { display: flex; align-items: center; }
+.editor-topbar { min-height: 72px; display: flex; align-items: center; gap: 18px; padding: 0 28px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+.brand-lockup, .topbar-workspace, .topbar-actions, .topbar-theme, .library-section__heading, .editor-notice, .template-card__content, .preview-panel__toolbar, .timeline-panel__header { display: flex; align-items: center; }
 .brand-lockup { gap: 12px; }
 .brand-mark { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 10px; color: var(--color-accent-foreground); background: var(--color-accent); font-size: 18px; box-shadow: 0 0 24px var(--color-accent-soft); }
 .brand-lockup h1 { margin: 0; letter-spacing: -.04em; font-size: 17px; line-height: 1; }
 .brand-lockup span:not(.brand-mark) { display: block; margin-top: 5px; color: var(--color-text-subtle); font-size: 11px; letter-spacing: .08em; }
-.topbar-actions { gap: 9px; }
+/* 中文注释：工作区入口固定在左端；中部工具可缩小并滚动，主题切换始终保持在最右侧。 */
+.topbar-workspace { min-width: 0; flex: 0 1 auto; gap: 18px; }
+.topbar-actions { min-width: 0; flex: 1 1 auto; justify-content: flex-end; gap: 9px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+.topbar-actions::-webkit-scrollbar { display: none; }
+.topbar-actions > * { flex: 0 0 auto; }
+.topbar-theme { flex: 0 0 auto; }
 /* 中文注释：月亮/太阳按钮不占用顶栏文案空间，用图形和悬浮说明直观表达主题切换。 */
 .theme-toggle { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--color-border-strong); border-radius: 9px; color: var(--color-text-muted); background: var(--color-field); box-shadow: inset 0 1px color-mix(in srgb, var(--color-white) 5%, transparent); transition: color .18s ease, background-color .18s ease, border-color .18s ease, transform .18s ease; }
 .theme-toggle:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-field-hover); transform: translateY(-1px); }
@@ -151,7 +156,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .project-select__item[data-highlighted], .workspace-select__item[data-highlighted] { color: var(--color-accent-foreground); background: var(--color-accent); }
 .workspace-select__item small { color: inherit; opacity: .65; font-size: 9px; }
 .project-manager { position: relative; }
-.project-manager__button { width: auto; padding: 0 9px; font-size: 10px; }
+.project-manager__button { width: auto; min-width: 82px; padding: 0 9px; font-size: 10px; white-space: nowrap; }
 .project-manager__panel { position: absolute; z-index: 25; top: 42px; left: 0; display: grid; width: 260px; gap: 10px; border: 1px solid var(--color-border-strong); border-radius: 10px; padding: 12px; background: var(--color-surface); box-shadow: 0 16px 40px var(--color-shadow); }
 .project-manager__panel label { display: grid; gap: 5px; color: var(--color-text-muted); font-size: 10px; }
 .project-manager__panel input { border: 1px solid var(--color-border); border-radius: 7px; padding: 8px; color: var(--color-text-strong); background: var(--color-field); }
@@ -466,16 +471,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 
 /* 中文注释：1024px 宽度仍维持三栏，但压缩顶栏和面板留白，避免产生页面级横向溢出。 */
 @media (max-width: 1100px) {
-  .editor-topbar { min-height: 64px; padding-inline: 16px; }
+  .editor-topbar { min-height: 64px; gap: 10px; padding-inline: 16px; }
   .brand-lockup { gap: 8px; }
   .brand-mark { width: 28px; height: 28px; border-radius: 8px; font-size: 15px; }
   .brand-lockup span:not(.brand-mark) { display: none; }
+  .topbar-workspace { gap: 10px; }
   .topbar-actions { gap: 5px; }
   .theme-toggle { width: 30px; height: 30px; border-radius: 8px; }
   .project-select__trigger, .workspace-select__trigger { min-width: 118px; padding-left: 8px; padding-right: 28px; }
   .project-select__icon, .workspace-select__icon { right: 7px; }
   .asset-trigger { padding-inline: 8px; }
   .icon-button { width: 30px; height: 30px; }
+  /* 中文注释：工作区管理是文字按钮，不能继承图标按钮的 30px 固定宽度。 */
+  .project-manager__button { width: auto; min-width: 78px; }
   .export-button { padding: 9px 11px; }
   .library-section { padding-inline: 14px; }
   .preview-panel__toolbar { padding-inline: 14px; }
