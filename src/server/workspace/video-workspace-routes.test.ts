@@ -50,6 +50,18 @@ afterEach(async () => {
 });
 
 describe("视频工作区 HTTP 路由", () => {
+  // 中文注释：浏览器 multipart 会以 UTF-8 发送中文文件名，路由必须在 Multer 的 Latin-1 默认解码后还原展示名称。
+  it("导入中文文件名时保留 UTF-8 展示名称", async () => {
+    const adapter = new VideoWorkspaceAdapter(await createTemporaryRoot());
+    await adapter.initialize();
+    await adapter.createWorkspace("中文素材工作区", createEmptyProject());
+    const baseUrl = await createTestServer(adapter);
+
+    const asset = await importMedia(baseUrl, "中文素材工作区", "旅行片段.mp4");
+
+    expect(asset.originalName).toBe("旅行片段.mp4");
+  });
+
   it("素材列表、读取与删除都严格限定在请求的工作区", async () => {
     const adapter = new VideoWorkspaceAdapter(await createTemporaryRoot());
     await adapter.initialize();

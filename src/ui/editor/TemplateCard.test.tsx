@@ -36,7 +36,7 @@ describe("特效模板卡片", () => {
     expect(screen.getByRole("article").getAttribute("draggable")).toBe("true");
   });
 
-  it("模板缩略图默认停在首帧，鼠标悬浮后才推进动效帧", () => {
+  it("模板缩略图默认展示代表帧，鼠标悬浮后才从首帧播放动效", () => {
     vi.useFakeTimers();
     const renderTemplate = vi.fn(() => <span />);
 
@@ -44,7 +44,7 @@ describe("特效模板卡片", () => {
     const initialCallCount = renderTemplate.mock.calls.length;
 
     act(() => vi.advanceTimersByTime(50));
-    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 5 }));
     expect(renderTemplate.mock.calls.length).toBe(initialCallCount);
 
     fireEvent.mouseEnter(screen.getByRole("article"));
@@ -54,7 +54,7 @@ describe("特效模板卡片", () => {
     expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 1 }));
   });
 
-  it("鼠标移出后停止预览并回到首帧", () => {
+  it("鼠标移出后停止预览并回到代表帧", () => {
     vi.useFakeTimers();
     const renderTemplate = vi.fn(() => <span />);
 
@@ -66,10 +66,10 @@ describe("特效模板卡片", () => {
     expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 2 }));
 
     fireEvent.mouseLeave(card);
-    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 5 }));
 
     act(() => vi.advanceTimersByTime(100));
-    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 5 }));
   });
 
   it("系统要求减少动态效果时保留代表帧而不启动短动效", () => {
@@ -85,7 +85,14 @@ describe("特效模板卡片", () => {
     fireEvent.mouseEnter(screen.getByRole("article"));
     act(() => vi.advanceTimersByTime(150));
 
-    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 0 }));
+    expect(renderTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ frame: 5 }));
+  });
+
+  it("不再显示悬停预览提示", () => {
+    render(<TemplateCard template={createTemplate(() => <span />)} />);
+
+    expect(screen.queryByText("悬停预览")).toBeNull();
+    expect(screen.queryByText("代表帧")).toBeNull();
   });
 
   it("拖放过程中提供抓取状态，结束后恢复正常卡片状态", () => {

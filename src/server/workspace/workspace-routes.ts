@@ -4,6 +4,7 @@ import { createEmptyProject } from "../../domain/project/factories";
 import type { VideoTemplate } from "../../domain/assets/video-template-model";
 import type { EditProject } from "../../domain/project/model";
 import { WorkspaceAdapter, WorkspaceError } from "./workspace-adapter";
+import { decodeUploadedFileName } from "./upload-filename";
 
 export type WorkspaceRouterOptions = {
   /** 中文注释：固定项目库启动失败时由宿主提供当前错误，避免路由伪造空列表。 */
@@ -158,7 +159,7 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter, options: Worksp
       const asset = await adapter.importMedia({
         buffer: uploadedFile.buffer,
         mimeType: uploadedFile.mimetype,
-        originalName: uploadedFile.originalname,
+        originalName: decodeUploadedFileName(uploadedFile.originalname),
         size: uploadedFile.size,
         metadata: Number.isFinite(durationInSeconds) && durationInSeconds > 0
           && Number.isInteger(width) && width > 0
@@ -212,7 +213,7 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter, options: Worksp
       }
       response.json(await adapter.relinkMedia(routeParam(request.params.mediaId), {
         buffer: uploadedFile.buffer,
-        originalName: uploadedFile.originalname,
+        originalName: decodeUploadedFileName(uploadedFile.originalname),
         mimeType: uploadedFile.mimetype,
         size: uploadedFile.size,
       }));

@@ -4,6 +4,7 @@ import { createEmptyProject } from "../../domain/project/factories";
 import type { VideoWorkspace } from "../../domain/workspace/model";
 import { VideoWorkspaceAdapter } from "./video-workspace-adapter";
 import { WorkspaceError } from "./workspace-paths";
+import { decodeUploadedFileName } from "./upload-filename";
 
 /** 中文注释：统一将工作区领域错误转换为浏览器可展示的 HTTP 响应。 */
 function sendWorkspaceError(response: Response, error: unknown): void {
@@ -123,7 +124,7 @@ export function createVideoWorkspaceRouter(adapter: VideoWorkspaceAdapter): Rout
         buffer: file.buffer,
         metadata: readUploadMetadata(request.body ?? {}),
         mimeType: file.mimetype,
-        originalName: file.originalname,
+        originalName: decodeUploadedFileName(file.originalname),
         size: file.size,
       }));
     } catch (error) { sendWorkspaceError(response, error); }
@@ -157,7 +158,7 @@ export function createVideoWorkspaceRouter(adapter: VideoWorkspaceAdapter): Rout
       response.json(await adapter.relinkMedia(routeParam(request.params.workspaceId), routeParam(request.params.mediaId), {
         buffer: file.buffer,
         mimeType: file.mimetype,
-        originalName: file.originalname,
+        originalName: decodeUploadedFileName(file.originalname),
         size: file.size,
       }));
     } catch (error) { sendWorkspaceError(response, error); }

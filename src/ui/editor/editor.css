@@ -220,10 +220,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .workspace-dialog__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 .workspace-dialog__danger, .media-item__remove { border: 1px solid var(--color-danger); border-radius: 9px; padding: 9px 13px; color: var(--color-danger-text); background: var(--color-danger-surface); font-size: 12px; font-weight: 800; }
 .workspace-dialog__danger:hover, .media-item__remove:hover { filter: brightness(.96); }
-.workspace-dialog__error, .media-bin__error { margin: 0; border: 1px solid var(--color-danger); border-radius: 8px; padding: 8px 10px; color: var(--color-danger-text); background: var(--color-danger-surface); font-size: 11px; line-height: 1.5; }
+.workspace-dialog__error { margin: 0; border: 1px solid var(--color-danger); border-radius: 8px; padding: 8px 10px; color: var(--color-danger-text); background: var(--color-danger-surface); font-size: 11px; line-height: 1.5; }
 /* 中文注释：素材行在紧凑左栏中将文本信息和破坏性动作分离，避免误触相邻的重命名操作。 */
-.media-item > div:first-of-type { min-width: 0; flex: 1; }
-.media-item__actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.media-item__details { min-width: 0; flex: 1; }
+/* 中文注释：默认让素材名称占满卡片；管理操作仅在鼠标悬浮或键盘聚焦卡片时浮现，避免紧凑左栏长期拥挤。 */
+.media-item__actions { position: absolute; z-index: 1; top: 50%; right: 9px; display: flex; align-items: center; gap: 5px; padding-left: 18px; opacity: 0; pointer-events: none; transform: translateY(-50%) translateX(4px); transition: opacity .14s ease, transform .14s ease; background: linear-gradient(90deg, transparent, var(--color-surface-raised) 18px); }
+.media-item:hover .media-item__actions, .media-item:focus-within .media-item__actions { opacity: 1; pointer-events: auto; transform: translateY(-50%); }
 .media-item__actions button, .media-item strong + small + button { border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 5px 7px; color: var(--color-text-muted); background: var(--color-field); font-size: 10px; }
 .media-item__actions .media-item__remove { border-color: var(--color-danger); padding: 5px 7px; color: var(--color-danger-text); background: var(--color-danger-surface); }
 @keyframes reset-dialog-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -246,12 +248,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .upload-button { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--color-border-strong); border-radius: 10px; padding: 11px 10px; color: var(--color-text-muted); background: var(--color-surface-raised); font-size: 12px; }
 .upload-button:hover { border-color: var(--color-accent); color: var(--color-accent); background: var(--color-field-hover); }
 .upload-button span { color: var(--color-accent); font-size: 18px; }
-.media-list, .template-list { display: grid; gap: 8px; margin-top: 15px; }
-.media-item { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface-raised); }
+.media-list { display: grid; gap: 8px; margin-top: 15px; }
+/* 中文注释：模板卡片以 210px 为基准宽度弹性换行；拖宽素材库时优先补齐新列，窄到容不下基准宽度时才收缩以避免横向滚动。 */
+.template-list { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px; margin-top: 15px; }
+.media-item { position: relative; display: flex; min-height: 64px; align-items: center; gap: 9px; padding: 10px 9px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface-raised); }
 .media-item__index { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 7px; color: var(--color-accent-foreground); background: var(--color-accent); font-size: 10px; font-weight: 900; }
 .media-item strong, .media-item small { display: block; }
 .media-item strong { color: var(--color-text-strong); font-size: 11px; }
 .media-item small { margin-top: 4px; color: var(--color-text-subtle); font-size: 10px; }
+.media-item__details { border: 0; padding: 0; text-align: left; background: transparent; }
+.media-item__details:not(div) { cursor: pointer; }
+.media-item__details:not(div):hover strong, .media-item__details:not(div):focus-visible strong { color: var(--color-accent); }
 .muted-copy, .error-copy, .panel-subtitle { color: var(--color-text-subtle); font-size: 11px; line-height: 1.7; }
 .section-divider { height: 1px; margin: 0 18px; background: var(--color-border); }
 .category-tabs { display: flex; gap: 5px; margin: 0 -4px 12px; overflow-x: auto; padding: 2px 4px 5px; scrollbar-width: none; }
@@ -260,17 +267,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .category-tabs button:hover, .category-tabs button:focus-visible { border-color: var(--color-border); color: var(--color-text-strong); background: var(--color-field-hover); }
 .category-tabs button.active { border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border)); color: var(--color-accent-foreground); background: var(--color-accent); font-weight: 800; box-shadow: 0 3px 12px var(--color-accent-soft); }
 .template-list { min-height: 72px; }
-.template-card { position: relative; overflow: hidden; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-surface-raised); box-shadow: 0 3px 12px var(--color-shadow); transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
+/* 中文注释：固定基础卡片宽度，避免侧栏变宽时单张预览被拉伸；max-width 保障最窄侧栏下仍可完整显示。 */
+.template-card { position: relative; flex: 0 0 210px; width: 210px; max-width: 100%; overflow: hidden; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-surface-raised); box-shadow: 0 3px 12px var(--color-shadow); transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
 .template-card:hover, .template-card:focus-within { border-color: var(--color-accent); transform: translateY(-2px); box-shadow: 0 10px 22px var(--color-shadow); }
 .template-card--dragging { border-color: var(--color-accent); opacity: .64; transform: scale(.98); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .template-card__preview { position: relative; display: grid; height: 88px; place-items: center; overflow: hidden; color: var(--color-accent); background: radial-gradient(circle at 76% 24%, var(--color-accent-soft), transparent 37%), linear-gradient(135deg, var(--color-template-a), var(--color-canvas)); }
 .template-card__preview::after { position: absolute; inset: 0; border-bottom: 1px solid var(--color-border); content: ""; pointer-events: none; }
 .template-card__preview > div { z-index: 1; }
-.template-card__preview-hint { position: absolute; z-index: 2; right: 7px; bottom: 7px; border: 1px solid color-mix(in srgb, var(--color-white) 20%, transparent); border-radius: 999px; padding: 3px 6px; color: var(--color-white); background: var(--color-overlay); font-size: 9px; line-height: 1; letter-spacing: .04em; pointer-events: none; }
-.template-card__content { align-items: flex-end; justify-content: space-between; gap: 8px; padding: 11px; }
+.template-card__content { align-items: flex-end; justify-content: space-between; gap: 8px; padding: 11px 15px 11px 11px; }
+/* 中文注释：信息区允许在固定宽度卡片中收缩，让右侧操作区始终留在内容边界内。 */
+.template-card__details { min-width: 0; flex: 1; }
 .template-card strong { color: var(--color-text-strong); font-size: 11px; }
 .template-card p { overflow: hidden; max-width: 155px; margin: 4px 0 0; color: var(--color-text-subtle); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.template-card__actions { display: flex; gap: 5px; }
+/* 中文注释：操作区单独保留右侧安全距离，避免 flex 文本区变化时“添加”按钮重新贴近卡片边缘。 */
+.template-card__actions { display: flex; gap: 5px; padding-right: 8px; }
 .template-card button { flex: 0 0 auto; border: 1px solid var(--color-border-strong); border-radius: 7px; padding: 6px 8px; color: var(--color-accent); background: transparent; font-size: 10px; font-weight: 700; transition: color .16s ease, background-color .16s ease, border-color .16s ease, transform .16s ease; }
 .template-card button:hover, .template-card button:focus-visible { border-color: var(--color-accent); color: var(--color-accent-foreground); background: var(--color-accent); transform: translateY(-1px); }
 .preview-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; background: var(--color-canvas); }

@@ -27,6 +27,17 @@ afterEach(() => {
 });
 
 describe("素材库管理流程", () => {
+  // 中文注释：素材即使未被当前时间轴引用，仍必须能从唯一的素材库入口重新加入主视频轨道。
+  it("点击工作区素材可重新添加到时间轴，且不重复渲染素材列表", () => {
+    const onAddMedia = vi.fn();
+    render(<MediaBin mediaAssets={[mediaAsset]} onAddMedia={onAddMedia} project={createEmptyProject()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "添加“已引用.mp4”到时间轴" }));
+
+    expect(onAddMedia).toHaveBeenCalledWith(mediaAsset);
+    expect(screen.queryByRole("heading", { name: "工作区素材" })).toBeNull();
+  });
+
   // 中文注释：缺失素材不仅阻止导出，还必须提供无需浏览器原生确认框的修复入口。
   it("显示缺失素材提示并通过应用内确认进入重新关联", () => {
     const project = createReferencedProject();
@@ -63,6 +74,18 @@ describe("素材库管理流程", () => {
     expect(screen.getByText("该素材仍被当前时间轴引用。确认后会请求移除，服务端将保护仍在使用的素材。")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     expect(onDeleteMedia).not.toHaveBeenCalled();
+  });
+
+  // 中文注释：页面顶部已经统一展示操作失败原因，素材库不能再额外插入一条重复错误提示。
+  it("移除素材失败后不在左侧素材库重复显示错误", async () => {
+    const onDeleteMedia = vi.fn().mockRejectedValue(new Error("素材仍被当前视频工作区引用"));
+    render(<MediaBin mediaAssets={[mediaAsset]} onDeleteMedia={onDeleteMedia} project={createReferencedProject()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "移除" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认移除" }));
+
+    await waitFor(() => expect(onDeleteMedia).toHaveBeenCalledWith("referenced-media"));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   // 中文注释：用户确认重新关联后才打开系统文件选择器，所选文件仍通过当前工作区的稳定 mediaId 提交。

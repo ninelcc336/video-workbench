@@ -261,31 +261,35 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setSelectedClipId(clip.id);
   };
 
+  /** 中文注释：素材库与导入完成后共用同一上轨命令，确保删掉时间轴片段后仍可从素材库重新添加。 */
+  const addMediaToTimeline = (asset: MediaAsset) => {
+    const lastFrame = Math.max(0, ...project.videoClips.map((clip) => clip.fromFrame + clip.durationInFrames));
+    const clipFps = project.videoClips.length === 0 && asset.fps ? Math.max(1, Math.round(asset.fps)) : project.settings.fps;
+    const clip: VideoClip = {
+      id: createId("video"),
+      mediaId: asset.id,
+      fromFrame: lastFrame,
+      sourceStartFrame: 0,
+      // 中文注释：历史素材缺少元数据时保留 5 秒兼容时长，避免阻断重新上轨。
+      durationInFrames: Math.max(1, Math.round((asset.durationInSeconds ?? 5) * clipFps)),
+      audioEnabled: true,
+    };
+    const sourceDimensions = asset.width && asset.height
+      ? { width: asset.width, height: asset.height, fps: asset.fps }
+      : undefined;
+    // 中文注释：首次从素材库上轨的素材此前没有预览地址，因此在同一交互中补齐稳定工作区 URL。
+    setMediaSources((current) => ({ ...current, [asset.id]: `${workspaceApi}/media/${encodeURIComponent(asset.id)}` }));
+    dispatch({ type: "add-video-clip", clip, sourceDimensions });
+    setSelectedClipId(clip.id);
+  };
+
   const importMedia = async (file: File) => {
     try {
       const asset = await importMediaFile(file, fetch, readVideoDimensions, `${workspaceApi}/media`);
-      const lastFrame = Math.max(0, ...project.videoClips.map((clip) => clip.fromFrame + clip.durationInFrames));
-      const clipFps = project.videoClips.length === 0 && asset.fps ? Math.max(1, Math.round(asset.fps)) : project.settings.fps;
-      const clip: VideoClip = {
-        id: createId("video"),
-        mediaId: asset.id,
-        fromFrame: lastFrame,
-        sourceStartFrame: 0,
-        // 中文注释：优先使用素材真实时长，旧服务没有元数据时才用 5 秒兼容值。
-        durationInFrames: Math.max(1, Math.round((asset.durationInSeconds ?? 5) * clipFps)),
-        audioEnabled: true,
-      };
-      // 中文注释：预览也使用工作区稳定地址，关闭页面后项目仍可由素材 ID 恢复。
-      setMediaSources((current) => ({ ...current, [asset.id]: `${workspaceApi}/media/${encodeURIComponent(asset.id)}` }));
       setMediaAssets((current) => [...current.filter((item) => item.id !== asset.id), asset]);
       setMissingMediaIds((current) => current.filter((mediaId) => mediaId !== asset.id));
-      // 中文注释：素材原始尺寸随首次导入命令传入，由领域层安全决定是否匹配横屏编辑项目。
       if (asset.fpsWasFallback) setNotice("无法读取素材帧率，已按 30fps 导入。");
-      dispatch({
-        type: "add-video-clip",
-        clip,
-        sourceDimensions: { width: asset.width, height: asset.height, fps: asset.fps },
-      });
+      addMediaToTimeline(asset);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "视频素材导入失败");
     }
@@ -617,7 +621,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         {projectError ? <div aria-label="视频工作区错误" className="workspace-error" role="alert"><span>{projectError}</span><button onClick={onRetryProject} type="button">重试</button>{backupAvailable && onRecoverProject ? <button onClick={onRecoverProject} type="button">从最近备份恢复</button> : null}<button onClick={onDismissProjectError} type="button">返回编辑</button></div> : null}
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <EditorPanelLayout>
-        <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
+        <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onAddMedia={addMediaToTimeline} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={commitEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>

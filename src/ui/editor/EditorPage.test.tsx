@@ -127,6 +127,27 @@ describe("编辑项目的素材导入", () => {
     expect(store.getSnapshot().videoClips).toHaveLength(1);
   });
 
+  // 中文注释：删除时间轴使用记录不应删除工作区素材，用户可直接从唯一素材库入口重新上轨。
+  it("删除视频片段后可从素材库重新添加同一素材", async () => {
+    const store = createLandscapeProjectStore();
+    store.dispatch({ type: "delete-video-clip", clipId: "video-1" });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).endsWith("/media")) {
+        return {
+          json: async () => [{ id: "media-1", originalName: "可重新添加.mp4", fileName: "media-1.mp4", relativePath: "media/media-1.mp4", mimeType: "video/mp4", sizeBytes: 1, importedAt: "2026-07-24T00:00:00.000Z", durationInSeconds: 1, width: 1920, height: 1080, fps: 30 }],
+          ok: true,
+        } as Response;
+      }
+      return { json: async () => [], ok: true } as Response;
+    });
+
+    render(<EditorPage store={store} />);
+    fireEvent.click(await screen.findByRole("button", { name: "添加“可重新添加.mp4”到时间轴" }));
+
+    await waitFor(() => expect(store.getSnapshot().videoClips).toEqual([expect.objectContaining({ mediaId: "media-1", fromFrame: 0 })]));
+    expect(screen.queryByRole("heading", { name: "工作区素材" })).toBeNull();
+  });
+
   it("确认重置后清空时间轴、恢复默认画布并将播放头归零", async () => {
     const store = createLandscapeProjectStore();
 

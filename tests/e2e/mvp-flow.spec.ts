@@ -332,6 +332,62 @@ test("1024×768 保持三栏时间轴工作流可访问", async ({ page }) => {
   await expectDesktopEditorLayout(page, 1024, 768);
 });
 
+test("拖宽素材库时特效卡片保持基准宽度并自动补齐新列", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await prepareProjectLibrary(page);
+  await page.goto("/");
+
+  const cards = page.locator(".template-card");
+  await expect(cards.first()).toBeVisible();
+  const initialMetrics = await cards.evaluateAll((elements) => {
+    const [first, second] = elements.map((element) => element.getBoundingClientRect());
+    return { firstWidth: first?.width ?? 0, isSingleColumn: first?.top !== second?.top };
+  });
+  expect(initialMetrics.firstWidth).toBe(210);
+  expect(initialMetrics.isSingleColumn).toBe(true);
+
+  const handle = page.getByRole("separator", { name: "调整素材库宽度" });
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error("未找到素材库宽度调整手柄");
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 200, handleBox.y + handleBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+
+  // 中文注释：拖宽后同一行应容纳两张固定宽度卡片，且模板列表不产生横向溢出。
+  const expandedMetrics = await cards.evaluateAll((elements) => {
+    const [first, second] = elements.map((element) => element.getBoundingClientRect());
+    const list = document.querySelector<HTMLElement>(".template-list");
+    return {
+      firstWidth: first?.width ?? 0,
+      isMultipleColumns: first?.top === second?.top,
+      listClientWidth: list?.clientWidth ?? 0,
+      listScrollWidth: list?.scrollWidth ?? 0,
+      secondWidth: second?.width ?? 0,
+    };
+  });
+  expect(expandedMetrics.firstWidth).toBe(210);
+  expect(expandedMetrics.secondWidth).toBe(210);
+  expect(expandedMetrics.isMultipleColumns).toBe(true);
+  expect(expandedMetrics.listScrollWidth).toBeLessThanOrEqual(expandedMetrics.listClientWidth);
+});
+
+test("特效卡片添加按钮保留清晰的右侧操作留白", async ({ page }) => {
+  await prepareProjectLibrary(page);
+  await page.goto("/");
+
+  const firstCard = page.locator(".template-card").first();
+  await expect(firstCard).toBeVisible();
+  const rightGap = await firstCard.evaluate((card) => {
+    const button = card.querySelector("button");
+    if (!button) return 0;
+    return card.getBoundingClientRect().right - button.getBoundingClientRect().right;
+  });
+
+  // 中文注释：操作按钮的边缘留白独立于文案区宽度，卡片收缩或换列时仍保持可辨识的安全距离。
+  expect(rightGap).toBeGreaterThanOrEqual(20);
+});
+
 type DesktopCreationVariant = { height: number; theme: "dark" | "light"; width: number };
 
 const desktopCreationVariants: DesktopCreationVariant[] = [

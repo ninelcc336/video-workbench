@@ -14,6 +14,11 @@ const categoryLabels: Record<TemplateCategory, string> = {
   transition: "片段转场",
 };
 
+/** 中文注释：静止缩略图取片段中点，避开多数模板第 0 帧的入场前空白状态，同时保留完整的特效内容。 */
+function getRepresentativePreviewFrame(durationInFrames: number): number {
+  return Math.max(0, Math.floor(Math.max(1, durationInFrames) / 2));
+}
+
 /** 中文注释：尊重系统减少动态效果偏好，避免模板列表在辅助场景中持续刷新动效。 */
 function usePrefersReducedMotion(): boolean {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
@@ -34,13 +39,14 @@ function usePrefersReducedMotion(): boolean {
 
 /** 中文注释：模板卡片用模板自身的 Remotion 渲染函数做短预览，避免维护第二套视觉实现。 */
 export function TemplateCard({ template, onAddTemplate }: TemplateCardProps) {
-  const [frame, setFrame] = useState(0);
+  const representativeFrame = getRepresentativePreviewFrame(template.defaultDurationInFrames);
+  const [frame, setFrame] = useState(representativeFrame);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
-    // 中文注释：模板卡片默认停在首帧，只有鼠标悬浮时才创建预览计时器，避免左侧列表同时消耗动画资源。
+    // 中文注释：卡片默认显示代表帧，只有鼠标悬浮或键盘聚焦时才创建预览计时器，避免左侧列表同时消耗动画资源。
     if (!isHovered || prefersReducedMotion) return undefined;
 
     const timer = window.setInterval(() => {
@@ -51,23 +57,25 @@ export function TemplateCard({ template, onAddTemplate }: TemplateCardProps) {
 
   useEffect(() => {
     // 中文注释：系统要求减少动态效果时立刻回到代表帧，保证预览不会在无意中继续播放。
-    if (prefersReducedMotion) setFrame(0);
-  }, [prefersReducedMotion]);
+    if (prefersReducedMotion) setFrame(representativeFrame);
+  }, [prefersReducedMotion, representativeFrame]);
 
-  /** 中文注释：鼠标移入开始预览，保留当前首帧状态以便从头播放。 */
+  /** 中文注释：鼠标移入从首帧播放，让用户能观察完整入场动画。 */
   const handleMouseEnter = () => {
+    if (prefersReducedMotion) return;
     setFrame(0);
     setIsHovered(true);
   };
 
-  /** 中文注释：鼠标移出立即停止预览并回到首帧，保证未悬浮卡片始终静止。 */
+  /** 中文注释：鼠标移出立即停止预览并回到代表帧，保证未悬浮卡片展示可识别的特效内容。 */
   const handleMouseLeave = () => {
     setIsHovered(false);
-    setFrame(0);
+    setFrame(representativeFrame);
   };
 
   /** 中文注释：键盘焦点与鼠标悬浮复用同一预览节奏，让非鼠标用户也能先看到模板效果。 */
   const handleFocus = () => {
+    if (prefersReducedMotion) return;
     setFrame(0);
     setIsHovered(true);
   };
@@ -108,10 +116,9 @@ export function TemplateCard({ template, onAddTemplate }: TemplateCardProps) {
         <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden" }}>
           {preview}
         </div>
-        <span aria-hidden="true" className="template-card__preview-hint">{prefersReducedMotion ? "代表帧" : "悬停预览"}</span>
       </div>
       <div className="template-card__content">
-        <div>
+        <div className="template-card__details">
           <strong>{template.name}</strong>
           <p>{categoryLabels[template.category]} · {template.description}</p>
         </div>

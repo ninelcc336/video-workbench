@@ -7,6 +7,7 @@ import type { MediaAsset } from "../../server/workspace/media-repository";
 export type MediaBinProps = {
   project: EditProject;
   onImportMedia?: (file: File) => void | Promise<void>;
+  onAddMedia?: (asset: MediaAsset) => void;
   missingMediaIds?: string[];
   mediaAssets?: MediaAsset[];
   onRelinkMedia?: (mediaId: string, file: File) => void | Promise<void>;
@@ -24,7 +25,7 @@ function getMediaOperationError(error: unknown, fallback: string): string {
 }
 
 /** 中文注释：素材库只负责选择本地文件并展示已加入当前工作区的素材，不直接调用文件系统。 */
-export function MediaBin({ project, onImportMedia, missingMediaIds = [], mediaAssets = [], onRelinkMedia, onRenameMedia, onDeleteMedia, relinkedMediaId, onUndoRelinkMedia }: MediaBinProps) {
+export function MediaBin({ project, onImportMedia, onAddMedia, missingMediaIds = [], mediaAssets = [], onRelinkMedia, onRenameMedia, onDeleteMedia, relinkedMediaId, onUndoRelinkMedia }: MediaBinProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const relinkInputRef = useRef<HTMLInputElement>(null);
   const [renameAsset, setRenameAsset] = useState<MediaAsset | null>(null);
@@ -104,10 +105,17 @@ export function MediaBin({ project, onImportMedia, missingMediaIds = [], mediaAs
 
   /** 中文注释：当前时间轴引用仅用于解释删除风险，是否允许删除仍交由服务端按当前工作区校验。 */
   const isReferenced = (mediaId: string) => project.videoClips.some((clip) => clip.mediaId === mediaId);
+  // 中文注释：一个素材可在时间轴使用多次，素材库只保留一张卡片并显示当前引用次数。
+  const referenceCount = (mediaId: string) => project.videoClips.filter((clip) => clip.mediaId === mediaId).length;
+  // 中文注释：历史项目可能仍引用已不存在的元数据；把它们合并到同一素材库中，保留重新关联入口而不再拆出第二个列表。
+  const missingAssets = project.videoClips
+    .filter((clip) => !mediaAssets.some((asset) => asset.id === clip.mediaId))
+    .filter((clip, index, clips) => clips.findIndex((candidate) => candidate.mediaId === clip.mediaId) === index)
+    .map((clip, index) => ({ id: clip.mediaId, originalName: `视频片段 ${index + 1}` }));
 
   return (
     <section className="library-section media-bin">
-      <div className="library-section__heading"><div><span className="eyebrow">01 / 素材</span><h2>素材库</h2></div><span className="count-badge">{project.videoClips.length}</span></div>
+      <div className="library-section__heading"><div><span className="eyebrow">01 / 素材</span><h2>素材库</h2></div><span className="count-badge">{mediaAssets.length + missingAssets.length}</span></div>
       <input
         accept="video/*"
         className="visually-hidden"
@@ -134,22 +142,21 @@ export function MediaBin({ project, onImportMedia, missingMediaIds = [], mediaAs
         <span>＋</span> 导入视频素材
       </button>
       <div className="media-list">
-        {project.videoClips.map((clip, index) => {
-          const asset = mediaAssets.find((item) => item.id === clip.mediaId);
-          const isMissing = missingMediaIds.includes(clip.mediaId);
-          const relinkTarget: MediaTarget = asset ?? { id: clip.mediaId, originalName: `视频片段 ${index + 1}` };
+        {mediaAssets.map((asset, index) => {
+          const isMissing = missingMediaIds.includes(asset.id);
+          const references = referenceCount(asset.id);
           return (
-            <div className={`media-item${isMissing ? " media-item--missing" : ""}`} key={clip.id}>
+            <div className={`media-item${isMissing ? " media-item--missing" : ""}`} key={asset.id}>
               <span className="media-item__index">{String(index + 1).padStart(2, "0")}</span>
-              <div><strong>{asset?.originalName ?? `视频片段 ${index + 1}`}</strong><small>{isMissing ? "素材缺失" : asset?.durationInSeconds ? `${asset.durationInSeconds.toFixed(1)} 秒 · ${asset.width}×${asset.height} · ${asset.fps ?? 30}fps` : `${(clip.durationInFrames / project.settings.fps).toFixed(1)} 秒`}</small>{isMissing ? <button type="button" onClick={() => { setOperationError(null); setRelinkAsset(relinkTarget); }}>重新关联</button> : null}</div>
+              {isMissing ? <div className="media-item__details"><strong>{asset.originalName}</strong><small>素材缺失</small><button type="button" onClick={() => { setOperationError(null); setRelinkAsset(asset); }}>重新关联</button></div> : <button aria-label={`添加“${asset.originalName}”到时间轴`} className="media-item__details" onClick={() => onAddMedia?.(asset)} type="button"><strong>{asset.originalName}</strong><small>{asset.durationInSeconds ? `${asset.durationInSeconds.toFixed(1)} 秒 · ${asset.width}×${asset.height} · ${asset.fps ?? 30}fps` : "时长未知"} · {references > 0 ? `已添加 ${references} 次` : "点击添加到时间轴"}</small></button>}
+              <div className="media-item__actions"><button type="button" onClick={() => requestRename(asset)}>重命名</button><button className="media-item__remove" type="button" onClick={() => { setOperationError(null); setDeleteAsset(asset); }}>移除</button></div>
             </div>
           );
         })}
+        {missingAssets.map((asset, index) => <div className="media-item media-item--missing" key={asset.id}><span className="media-item__index">{String(mediaAssets.length + index + 1).padStart(2, "0")}</span><div className="media-item__details"><strong>{asset.originalName}</strong><small>素材缺失</small><button type="button" onClick={() => { setOperationError(null); setRelinkAsset(asset); }}>重新关联</button></div></div>)}
         {missingMediaIds.length > 0 && <p role="status" className="editor-notice">素材缺失，修复后才能导出视频。</p>}
-        {project.videoClips.length === 0 && <p className="muted-copy">先导入一段视频，开始制作当前视频工作区。</p>}
+        {mediaAssets.length === 0 && missingAssets.length === 0 && <p className="muted-copy">导入视频后，点击素材即可添加到主视频轨道。</p>}
       </div>
-      {mediaAssets.length > 0 ? <section aria-label="工作区素材" className="media-list"><h3>工作区素材</h3>{mediaAssets.map((asset) => <div className="media-item" key={asset.id}><div><strong>{asset.originalName}</strong><small>{asset.sizeBytes ? `${Math.round(asset.sizeBytes / 1024)} KB` : "大小未知"}</small></div><div className="media-item__actions"><button type="button" onClick={() => requestRename(asset)}>重命名</button><button className="media-item__remove" type="button" onClick={() => { setOperationError(null); setDeleteAsset(asset); }}>移除</button></div></div>)}</section> : null}
-      {operationError ? <p className="media-bin__error" role="alert">{operationError}</p> : null}
       {relinkedMediaId ? <p role="status" className="editor-notice">素材已重新关联。<button type="button" onClick={() => void onUndoRelinkMedia?.(relinkedMediaId)}>撤销重新关联</button></p> : null}
 
       <Dialog.Root onOpenChange={(open) => { if (!open) { setRenameAsset(null); setOperationError(null); } }} open={renameAsset !== null}>
