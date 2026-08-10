@@ -2,17 +2,21 @@ import type { EditorStore } from "../editor/editor-store";
 import type { EditProject, ExportSettings } from "../project/model";
 import { getTemplate, normalizeParams } from "../templates/registry";
 
+/** 中文注释：预设范围决定套用时是否保留当前特效片段的内容参数。 */
+export type PresetScope = "style" | "full";
+
 /** 中文注释：个人预设只引用特效模板，并保存用户主动调整的参数。 */
 export type Preset = {
   id: string;
   templateId: string;
   templateVersion: number;
   name: string;
+  scope: PresetScope;
   params: Record<string, unknown>;
 };
 
 /** 中文注释：仓储写入的结构不包含 ID，ID 由文件名提供，避免重复保存资产元数据。 */
-export type SerializedPreset = Omit<Preset, "id">;
+export type SerializedPreset = Omit<Preset, "id" | "scope"> & { scope?: PresetScope };
 
 export type ExportPresetName = "vertical" | "horizontal" | "square";
 
@@ -34,6 +38,7 @@ export function createPreset(
   templateVersion: number,
   name: string,
   params: Record<string, unknown>,
+  scope: PresetScope = "full",
 ): Preset {
   if (!id.trim() || !templateId.trim()) {
     throw new Error("预设 ID 和特效模板 ID 不能为空");
@@ -44,24 +49,67 @@ export function createPreset(
   if (!name.trim()) {
     throw new Error("预设名称不能为空");
   }
+  if (scope !== "style" && scope !== "full") {
+    throw new Error("预设范围无效");
+  }
 
   return {
     id,
     templateId,
     templateVersion,
     name: name.trim(),
+    scope,
     params: cloneParams(params),
   };
 }
 
-/** 中文注释：序列化时明确白名单，防止把编辑项目或媒体路径混入个人预设。 */
+/**
+ * 中文注释：序列化时明确白名单，防止把编辑项目或媒体路径混入个人预设。
+ * 完整预设沿用缺省范围的旧 JSON 形状；只有样式预设需要显式写出 scope。
+ */
 export function serializePreset(preset: Preset): SerializedPreset {
   return {
     templateId: preset.templateId,
     templateVersion: preset.templateVersion,
     name: preset.name,
+    ...(preset.scope === "style" ? { scope: "style" as const } : {}),
     params: cloneParams(preset.params),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 中文注释：读取个人预设的持久化数据；旧文件缺少 scope 时按完整预设恢复，不能丢弃内容参数。
+ * 数据结构或范围非法时抛错，由资产仓储转换为对应的读取错误。
+ */
+export function deserializePreset(value: unknown, presetId: string): Preset {
+  if (
+    !isRecord(value) ||
+    typeof value.templateId !== "string" ||
+    !Number.isInteger(value.templateVersion) ||
+    typeof value.name !== "string" ||
+    !isRecord(value.params)
+  ) {
+    throw new Error(`个人预设“${presetId}”的数据格式无效`);
+  }
+
+  const scope = value.scope === undefined ? "full" : value.scope;
+  if (scope !== "style" && scope !== "full") {
+    throw new Error(`个人预设“${presetId}”的范围无效`);
+  }
+  const templateVersion = value.templateVersion as number;
+
+  return createPreset(
+    presetId,
+    value.templateId,
+    templateVersion,
+    value.name,
+    value.params,
+    scope,
+  );
 }
 
 /** 中文注释：应用预设只能走 EditorStore 的公共命令，因此自动进入撤销历史。 */

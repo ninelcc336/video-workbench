@@ -33,6 +33,16 @@ const projectSchema = z.object({
       id: z.string().min(1),
       templateId: z.string().min(1),
       templateVersion: z.number().int().positive(),
+      effectFamilyId: z.string().min(1).optional(),
+      startingStyleId: z.string().min(1).optional(),
+      placement: z.union([
+        z.object({ type: z.literal("range") }),
+        z.object({
+          type: z.literal("boundary"),
+          beforeVideoClipId: z.string().min(1),
+          afterVideoClipId: z.string().min(1),
+        }),
+      ]).optional(),
       trackId: z.string().min(1),
       fromFrame: z.number().int().nonnegative(),
       durationInFrames: z.number().int().positive(),

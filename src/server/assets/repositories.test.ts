@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -45,6 +45,30 @@ describe("个人资产仓储", () => {
       params: { text: "知识点" },
     });
     await expect(presetRepository.listPresets()).resolves.toHaveLength(1);
+  });
+
+  it("兼容读取缺少范围字段的旧个人预设，并按完整预设保留内容", async () => {
+    const { root, presetRepository } = await createRepositories();
+    const legacyPresetPath = join(root, "presets", "legacy-preset.json");
+    await writeFile(
+      legacyPresetPath,
+      `${JSON.stringify({
+        templateId: "card-overlay",
+        templateVersion: 1,
+        name: "旧版卡片",
+        params: { text: "保留旧文案" },
+      })}\n`,
+      "utf8",
+    );
+
+    await expect(presetRepository.loadPreset("legacy-preset")).resolves.toEqual({
+      id: "legacy-preset",
+      templateId: "card-overlay",
+      templateVersion: 1,
+      name: "旧版卡片",
+      scope: "full",
+      params: { text: "保留旧文案" },
+    });
   });
 
   it("保存并读取视频模板，内容只包含相对特效布局", async () => {

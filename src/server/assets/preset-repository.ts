@@ -7,37 +7,14 @@ import {
 } from "../workspace/workspace-paths";
 import {
   createPreset,
+  deserializePreset,
   serializePreset,
   type Preset,
-  type SerializedPreset,
 } from "../../domain/assets/preset-model";
 
 function presetFilePath(paths: WorkspacePaths, presetId: string): string {
   // 中文注释：资产 ID 只能作为文件名，阻止路径穿越读取工作区外文件。
   return join(paths.presets, `${assertSafePathSegment(presetId, "预设 ID")}.json`);
-}
-
-function parsePreset(value: unknown, presetId: string): Preset {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    typeof (value as SerializedPreset).templateId !== "string" ||
-    !Number.isInteger((value as SerializedPreset).templateVersion) ||
-    typeof (value as SerializedPreset).name !== "string" ||
-    typeof (value as SerializedPreset).params !== "object" ||
-    (value as SerializedPreset).params === null ||
-    Array.isArray((value as SerializedPreset).params)
-  ) {
-    throw new Error(`个人预设“${presetId}”的数据格式无效`);
-  }
-  const data = value as SerializedPreset;
-  return createPreset(
-    presetId,
-    data.templateId,
-    data.templateVersion,
-    data.name,
-    data.params,
-  );
 }
 
 /** 中文注释：个人预设仓储只持久化白名单字段，ID 由文件名恢复。 */
@@ -74,7 +51,7 @@ export class PresetRepository {
       throw error;
     }
     try {
-      return parsePreset(JSON.parse(raw), presetId);
+      return deserializePreset(JSON.parse(raw), presetId);
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new Error(`个人预设“${presetId}”的 JSON 文件已损坏`);

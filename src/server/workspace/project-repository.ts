@@ -8,6 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import type { EditProject } from "../../domain/project/model";
+import { deserializeEffectClip } from "../../domain/project/serialization";
 import { validateProject } from "../../domain/project/validation";
 import {
   getWorkspacePaths,
@@ -64,8 +65,15 @@ function migrateProject(value: unknown): { project: EditProject; migrated: boole
     throw new WorkspaceErrorClass("corrupt_project", `不支持的项目数据版本：${String(schemaVersion)}`);
   }
 
+  const effectClips: EditProject["effectClips"] | unknown = Array.isArray(source.effectClips)
+    ? source.effectClips.map(deserializeEffectClip)
+    : source.effectClips;
+
   if (schemaVersion === 1) {
-    return { project: value as EditProject, migrated: false };
+    return {
+      project: { ...(value as EditProject), effectClips: effectClips as EditProject["effectClips"] },
+      migrated: false,
+    };
   }
 
   // 中文注释：早期项目可能没有 sourceStartFrame/audioEnabled/export，补齐安全默认值后再走统一校验。
@@ -86,6 +94,7 @@ function migrateProject(value: unknown): { project: EditProject; migrated: boole
       ...(source as unknown as EditProject),
       schemaVersion: 1,
       videoClips: videoClips as EditProject["videoClips"],
+      effectClips: effectClips as EditProject["effectClips"],
       export: exportSettings as EditProject["export"],
     },
   };

@@ -236,7 +236,7 @@ describe("编辑项目的素材导入", () => {
   });
 
   it("保存、套用和删除个人预设时只更新当前特效参数，并使用应用内确认对话框", async () => {
-    const preset: Preset = { id: "preset-1", name: "强调版", params: { text: "预设文案" }, templateId: "card-overlay", templateVersion: 1 };
+    const preset: Preset = { id: "preset-1", name: "强调版", scope: "full", params: { text: "预设文案" }, templateId: "card-overlay", templateVersion: 1 };
     const store = createEffectProjectStore();
     const fetchMock = mockAssetApi([preset]);
 

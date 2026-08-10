@@ -26,10 +26,28 @@ export type VideoClip = {
   audioEnabled: boolean;
 };
 
+/**
+ * 中文注释：特效片段的放置方式。范围放置沿用旧版时间字段，交界点放置只保存相邻视频片段引用，
+ * 具体起始帧由后续转场模型根据当前时间轴计算，避免移动视频后留下过期坐标。
+ */
+export type EffectClipPlacement =
+  | { type: "range" }
+  | {
+      type: "boundary";
+      beforeVideoClipId: string;
+      afterVideoClipId: string;
+    };
+
 export type EffectClip = {
   id: string;
   templateId: string;
   templateVersion: number;
+  /** 中文注释：新版特效族标识暂时可选，旧模板不会在加载时被静默归入新族。 */
+  effectFamilyId?: string;
+  /** 中文注释：旧模板没有起始样式，兼容读取时使用 legacy-default 来源标记。 */
+  startingStyleId?: string;
+  /** 中文注释：缺少该字段的历史片段按范围放置读取，不改变原有时间范围。 */
+  placement?: EffectClipPlacement;
   trackId: string;
   // 中文注释：特效片段的时间范围使用帧而不是浮点秒，保证拖拽和 Remotion 渲染边界一致。
   fromFrame: number;

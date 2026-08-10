@@ -80,6 +80,41 @@ describe("项目仓储", () => {
     ]);
   });
 
+  it("兼容读取缺少新版元数据的旧特效片段，并保留基础转场的范围放置", async () => {
+    const { adapter, root } = await createTestAdapter();
+    const paths = getWorkspacePaths(root);
+    const legacyProject = {
+      ...createEmptyProject(),
+      effectClips: [
+        {
+          id: "legacy-transition",
+          templateId: "basic-transition",
+          templateVersion: 1,
+          trackId: "effects-1",
+          fromFrame: 45,
+          durationInFrames: 15,
+          params: { style: "fade", color: "#000000" },
+        },
+      ],
+    };
+    await writeFile(
+      projectFilePath(paths, "legacy-effects"),
+      `${JSON.stringify(legacyProject, null, 2)}\n`,
+      "utf8",
+    );
+
+    const loaded = await adapter.loadProject("legacy-effects");
+
+    expect(loaded.effectClips[0]).toMatchObject({
+      templateId: "basic-transition",
+      templateVersion: 1,
+      startingStyleId: "legacy-default",
+      placement: { type: "range" },
+    });
+    expect(loaded.effectClips[0].placement).not.toHaveProperty("beforeVideoClipId");
+    expect(JSON.parse(await readFile(projectFilePath(paths, "legacy-effects"), "utf8"))).toEqual(legacyProject);
+  });
+
   it("使用临时文件替换项目 JSON，并且不留下临时文件", async () => {
     const { adapter, root } = await createTestAdapter();
     const project = createEmptyProject();
