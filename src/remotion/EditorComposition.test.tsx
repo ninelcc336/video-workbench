@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createEmptyProject } from "../domain/project/factories";
 import type { EditProject } from "../domain/project/model";
 import { getTemplate, getTemplateDefaultParams } from "../domain/templates/registry";
+import { registerEffectFamily } from "../domain/templates/effect-family";
+import type { EffectFamilyDefinition } from "../domain/templates/types";
 import {
   EditorComposition,
   getCompositionDurationInFrames,
@@ -119,5 +122,49 @@ describe("共享 Remotion 编辑组合", () => {
     expect(video.props.style).toMatchObject({
       objectFit: "contain",
     });
+  });
+
+  it("新版特效族片段通过统一声明进入编辑组合", () => {
+    const family: EffectFamilyDefinition = {
+      id: "composition-fixture",
+      version: 1,
+      category: "decorative-animation",
+      name: "组合测试族",
+      description: "验证新版族进入 Remotion 组合。",
+      purposeTags: ["highlight"],
+      visualDirections: ["tech-data"],
+      defaultDurationInFrames: 20,
+      parameters: [],
+      startingStyles: [{
+        id: "default",
+        name: "默认",
+        visualDirection: "tech-data",
+        defaultParams: {},
+      }],
+      aspectRatioDefaults: {},
+      migrations: [],
+      render: (props) => createElement("div", { "data-effect-family": props.effectFamilyId }),
+    };
+    registerEffectFamily(family);
+
+    const project = createProject();
+    project.effectClips = [{
+      id: "effect-family-1",
+      templateId: family.id,
+      templateVersion: family.version,
+      effectFamilyId: family.id,
+      startingStyleId: "default",
+      trackId: "effects-1",
+      fromFrame: 0,
+      durationInFrames: 20,
+      params: {},
+    }];
+
+    const { template, renderProps } = getEffectLayerRenderProps(project, project.effectClips[0], 8);
+
+    expect(template.id).toBe(family.id);
+    expect(renderToStaticMarkup(template.render(renderProps))).toContain(
+      `data-effect-family="${family.id}"`,
+    );
   });
 });

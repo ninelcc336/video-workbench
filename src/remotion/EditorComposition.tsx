@@ -1,8 +1,15 @@
 import React from "react";
 import { AbsoluteFill, OffthreadVideo, Sequence, useCurrentFrame } from "remotion";
 import type { EditProject, EffectClip } from "../domain/project/model";
-import { getTemplate, normalizeParams } from "../domain/templates/registry";
-import type { TemplateDefinition, TemplateRenderProps } from "../domain/templates/types";
+// 中文注释：加载旧模板注册副作用，让历史 v1 声明也能通过统一特效族查找入口读取。
+import "../domain/templates/registry";
+import {
+  createEffectRenderInput,
+  createTemplateDefinitionAdapter,
+  getEffectFamily,
+  getAspectRatioForCanvas,
+} from "../domain/templates/effect-family";
+import type { EffectFamilyRenderProps, TemplateDefinition } from "../domain/templates/types";
 import { assertMediaSource, type MediaSources } from "./media";
 
 // 中文注释：预览和导出都通过这个组合消费同一份编辑项目快照。
@@ -38,7 +45,7 @@ export function getCompositionMediaSources(
 
 export type EffectLayerRenderProps = {
   template: TemplateDefinition;
-  renderProps: TemplateRenderProps;
+  renderProps: EffectFamilyRenderProps;
 };
 
 /** 中文注释：把编辑项目中的特效片段转换成模板渲染输入，统一注册表查找、局部帧和参数归一化。 */
@@ -47,21 +54,23 @@ export function getEffectLayerRenderProps(
   clip: EffectClip,
   frame: number,
 ): EffectLayerRenderProps {
-  const template = getTemplate(clip.templateId, clip.templateVersion);
-  const safeFrame = Number.isFinite(frame)
-    ? Math.max(0, Math.min(Math.max(0, clip.durationInFrames - 1), Math.round(frame)))
-    : 0;
+  const family = getEffectFamily(clip.effectFamilyId ?? clip.templateId, clip.templateVersion);
+  const renderInput = createEffectRenderInput({
+    familyId: family.id,
+    version: clip.templateVersion,
+    startingStyleId: clip.startingStyleId ?? "legacy-default",
+    aspectRatio: getAspectRatioForCanvas(project.settings.width, project.settings.height),
+    frame,
+    fps: project.settings.fps,
+    width: project.settings.width,
+    height: project.settings.height,
+    durationInFrames: clip.durationInFrames,
+    params: clip.params,
+  });
 
   return {
-    template,
-    renderProps: {
-      frame: safeFrame,
-      fps: project.settings.fps,
-      width: project.settings.width,
-      height: project.settings.height,
-      durationInFrames: clip.durationInFrames,
-      params: normalizeParams(template, clip.params),
-    },
+    template: createTemplateDefinitionAdapter(family, renderInput.renderProps.startingStyleId),
+    renderProps: renderInput.renderProps,
   };
 }
 

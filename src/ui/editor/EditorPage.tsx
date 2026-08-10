@@ -61,6 +61,18 @@ function createId(prefix: string): string {
   return `${prefix}-${randomUUID}`;
 }
 
+/** 中文注释：新版族适配模板需要把族和起始样式身份一起写入片段，旧模板则返回空对象保持 JSON 形状不变。 */
+function getTemplateFamilyIdentity(
+  template: ReturnType<typeof getTemplate>,
+): Pick<EffectClip, "effectFamilyId" | "startingStyleId"> {
+  return template.effectFamilyId && template.startingStyleId
+    ? {
+        effectFamilyId: template.effectFamilyId,
+        startingStyleId: template.startingStyleId,
+      }
+    : {};
+}
+
 function getClip(project: EditProject, id: string | null): EffectClip | null {
   if (!id) return null;
   return project.effectClips.find((clip) => clip.id === id) ?? null;
@@ -237,6 +249,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       id: createId("effect"),
       templateId: template.id,
       templateVersion: template.version,
+      ...getTemplateFamilyIdentity(template),
       trackId: getAvailableEffectTrackId(project.effectClips, currentFrame, template.defaultDurationInFrames),
       fromFrame: currentFrame,
       durationInFrames: template.defaultDurationInFrames,
@@ -252,6 +265,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       id: createId("effect"),
       templateId: template.id,
       templateVersion: template.version,
+      ...getTemplateFamilyIdentity(template),
       trackId: getAvailableEffectTrackId(project.effectClips, fromFrame, template.defaultDurationInFrames),
       fromFrame,
       durationInFrames: template.defaultDurationInFrames,

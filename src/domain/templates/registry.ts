@@ -9,6 +9,12 @@ import {
   getDefaultParams,
   normalizeParameterValues,
 } from "./parameter-schema";
+import {
+  createTemplateDefinitionAdapter,
+  getEffectFamily,
+  listEffectFamilies,
+  registerLegacyTemplate,
+} from "./effect-family";
 import type {
   TemplateCategory,
   TemplateDefinition,
@@ -27,6 +33,8 @@ export const registerTemplate = (template: TemplateDefinition): void => {
   }
 
   templates.set(key, template);
+  // 中文注释：旧模板继续由原注册表提供兼容类型，同时登记统一族适配器供新版渲染入口读取。
+  registerLegacyTemplate(template);
 };
 
 export const getTemplate = (templateId: string, version?: number): TemplateDefinition => {
@@ -35,12 +43,22 @@ export const getTemplate = (templateId: string, version?: number): TemplateDefin
     if (template) {
       return template;
     }
+    try {
+      return createTemplateDefinitionAdapter(getEffectFamily(templateId, version));
+    } catch {
+      // 中文注释：统一族查找失败后继续走原有错误消息，保持旧调用方的异常契约。
+    }
   } else {
     const candidates = [...templates.values()]
       .filter((template) => template.id === templateId)
       .sort((left, right) => right.version - left.version);
     if (candidates[0]) {
       return candidates[0];
+    }
+    try {
+      return createTemplateDefinitionAdapter(getEffectFamily(templateId));
+    } catch {
+      // 中文注释：统一族查找失败后继续走原有错误消息，保持旧调用方的异常契约。
     }
   }
 
@@ -51,11 +69,20 @@ export const getTemplate = (templateId: string, version?: number): TemplateDefin
   );
 };
 
-export const listTemplates = (category?: TemplateCategory): TemplateSummary[] =>
-  [...templates.values()]
+function toTemplateSummary(template: TemplateDefinition): TemplateSummary {
+  const { parameters: _parameters, render: _render, defaultParams: _defaultParams, ...summary } = template;
+  return summary;
+}
+
+/** 中文注释：旧模板摘要与新版族适配摘要合并，确保现有模板库能发现已注册的新版族。 */
+export const listTemplates = (category?: TemplateCategory): TemplateSummary[] => [
+  ...[...templates.values()]
     .filter((template) => category === undefined || template.category === category)
-    .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-    .map(({ parameters: _parameters, render: _render, ...summary }) => summary);
+    .map(toTemplateSummary),
+  ...listEffectFamilies({ category }).map((summary) =>
+    toTemplateSummary(createTemplateDefinitionAdapter(getEffectFamily(summary.id, summary.version))),
+  ),
+].sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
 
 export const normalizeParams = (
   template: TemplateDefinition,
@@ -64,7 +91,9 @@ export const normalizeParams = (
 
 export const getTemplateDefaultParams = (
   template: TemplateDefinition,
-): Record<string, unknown> => getDefaultParams(template.parameters);
+): Record<string, unknown> => template.defaultParams
+  ? structuredClone(template.defaultParams)
+  : getDefaultParams(template.parameters);
 
 // 中文注释：内置模板在模块加载时注册，后续 UI 只依赖注册表，不直接依赖具体模板文件。
 registerTemplate(CardOverlay.definition);

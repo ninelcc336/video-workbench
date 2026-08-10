@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import {
+  createEffectRenderInput,
+  getEffectFamily,
+  listEffectFamilies,
+  registerEffectFamily,
+} from "./effect-family";
 import {
   getTemplate,
+  getTemplateDefaultParams,
   listTemplates,
   normalizeParams,
   registerTemplate,
 } from "./registry";
-import type { TemplateDefinition } from "./types";
+import type { EffectFamilyDefinition, TemplateDefinition } from "./types";
 
 describe("特效模板注册表", () => {
   it("注册启动时可用的基础模板和科技解说信息叠加模板", () => {
@@ -79,5 +87,66 @@ describe("特效模板注册表", () => {
 
       expect(element).toBeTruthy();
     }
+  });
+
+  it("旧模板通过统一特效族入口按版本生成相同的渲染结果", () => {
+    const template = getTemplate("card-overlay", 1);
+    const family = getEffectFamily("card-overlay", 1);
+    const input = createEffectRenderInput({
+      familyId: family.id,
+      version: family.version,
+      startingStyleId: "legacy-default",
+      aspectRatio: "16:9",
+      frame: 24,
+      fps: 30,
+      width: 1920,
+      height: 1080,
+      durationInFrames: template.defaultDurationInFrames,
+      params: getTemplateDefaultParams(template),
+    });
+
+    expect(family.legacy).toBe(true);
+    expect(listEffectFamilies()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "card-overlay" })]),
+    );
+    expect(renderToStaticMarkup(family.render(input.renderProps))).toContain(
+      `data-template-id="${template.id}"`,
+    );
+  });
+
+  it("旧 registry 兼容门面能发现并创建新版特效族片段", () => {
+    const family: EffectFamilyDefinition = {
+      id: "registry-family-fixture",
+      version: 1,
+      category: "decorative-animation",
+      name: "注册表族测试",
+      description: "验证旧调用方可以通过兼容门面使用新版族。",
+      purposeTags: ["highlight"],
+      visualDirections: ["tech-data"],
+      defaultDurationInFrames: 24,
+      parameters: [],
+      startingStyles: [{
+        id: "default",
+        name: "默认",
+        visualDirection: "tech-data",
+        defaultParams: {},
+      }],
+      aspectRatioDefaults: {},
+      migrations: [],
+      render: () => null,
+    };
+    registerEffectFamily(family);
+
+    const template = getTemplate(family.id, family.version);
+
+    expect(listTemplates("decorative-animation")).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: family.id, version: family.version })]),
+    );
+    expect(template).toMatchObject({
+      effectFamilyId: family.id,
+      startingStyleId: "default",
+      defaultDurationInFrames: family.defaultDurationInFrames,
+    });
+    expect(getTemplateDefaultParams(template)).toEqual({});
   });
 });

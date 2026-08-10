@@ -26,10 +26,18 @@ export function createEffectClipFromTemplate(
     ? Math.max(0, Math.round(dropFrame))
     : 0;
 
+  const familyIdentity = template.effectFamilyId && template.startingStyleId
+    ? {
+        effectFamilyId: template.effectFamilyId,
+        startingStyleId: template.startingStyleId,
+      }
+    : {};
+
   return {
     id: createId("effect"),
     templateId: template.id,
     templateVersion: template.version,
+    ...familyIdentity,
     trackId: "effects-1",
     fromFrame: safeDropFrame,
     durationInFrames: template.defaultDurationInFrames,
