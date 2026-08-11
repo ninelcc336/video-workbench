@@ -1,0 +1,4 @@
+/* 中文注释：该文件冻结应用使用的系统字体栈；实际字体由运行平台按同一声明解析。 */
+:root {
+  --effect-font-system-sans: Arial, "Microsoft YaHei", sans-serif;
+}

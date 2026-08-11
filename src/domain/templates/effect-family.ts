@@ -1,6 +1,4 @@
 import type {
-  AnimationPhaseValue,
-  AnimationStageParameterDefinition,
   AspectRatio,
   EffectFamilyDefinition,
   EffectFamilyMigration,
@@ -13,6 +11,10 @@ import type {
   TemplateRenderProps,
   TemplateCategory,
 } from "./types";
+import {
+  compressAnimationStages as compressStageValue,
+  type AnimationStageInput,
+} from "./animation-stages";
 import {
   getDefaultParams,
   normalizeParameterValuesWithDiagnostics,
@@ -493,17 +495,12 @@ function getContentCapacityWarning(
   return undefined;
 }
 
-/** 中文注释：按 enter、sustain、exit 顺序等比例压缩超出片段的阶段，保留非负帧并报告可解释警告。 */
+/** 中文注释：把共享阶段压缩结果转换为特效族诊断，保持错误和警告仍由深模块统一返回。 */
 function compressAnimationStages(
   parameters: ReadonlyArray<ParameterDefinition>,
   params: Record<string, unknown>,
   durationInFrames: number | undefined,
 ): { params: Record<string, unknown>; warnings: EffectFamilyIssue[] } {
-  if (typeof durationInFrames !== "number" || !Number.isInteger(durationInFrames) || durationInFrames <= 0) {
-    return { params, warnings: [] };
-  }
-  const safeDurationInFrames = durationInFrames;
-
   const nextParams = { ...params };
   const warnings: EffectFamilyIssue[] = [];
   for (const parameter of parameters) {
@@ -511,38 +508,17 @@ function compressAnimationStages(
     const stageValue = params[parameter.key];
     if (typeof stageValue !== "object" || stageValue === null || Array.isArray(stageValue)) continue;
 
-    const phases = parameter.stages
-      .map((stage) => ({ stage, phase: (stageValue as Record<string, unknown>)[stage] }))
-      .filter((item): item is { stage: AnimationStageParameterDefinition["stages"][number]; phase: AnimationPhaseValue } =>
-        typeof item.phase === "object" && item.phase !== null,
-      );
-    const requestedFrames = phases.reduce(
-      (total, { phase }) => total + phase.durationInFrames + phase.delayInFrames,
-      0,
+    const compression = compressStageValue(
+      stageValue as AnimationStageInput,
+      durationInFrames,
     );
-    if (requestedFrames <= safeDurationInFrames) continue;
+    if (!compression.compressed) continue;
 
-    const scale = safeDurationInFrames / requestedFrames;
-    let remainingFrames = safeDurationInFrames;
-    const compressed: Record<string, AnimationPhaseValue> = {};
-    for (const { stage, phase } of phases) {
-      const delayInFrames = Math.min(remainingFrames, Math.max(0, Math.round(phase.delayInFrames * scale)));
-      const duration = Math.min(
-        Math.max(0, remainingFrames - delayInFrames),
-        Math.max(0, Math.round(phase.durationInFrames * scale)),
-      );
-      remainingFrames -= delayInFrames + duration;
-      compressed[stage] = {
-        ...phase,
-        delayInFrames,
-        durationInFrames: duration,
-      };
-    }
-    nextParams[parameter.key] = compressed;
+    nextParams[parameter.key] = compression.stages;
     warnings.push({
       key: parameter.key,
       code: "animation_duration_compressed",
-      message: `动画阶段总时长超过 ${safeDurationInFrames} 帧，已按固定比例压缩`,
+      message: `动画阶段总时长超过 ${durationInFrames ?? "片段"} 帧，已按固定比例压缩`,
     });
   }
 
