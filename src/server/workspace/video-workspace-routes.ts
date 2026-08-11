@@ -168,6 +168,44 @@ export function createVideoWorkspaceRouter(adapter: VideoWorkspaceAdapter): Rout
     try { response.json(await adapter.undoRelinkMedia(routeParam(request.params.workspaceId), routeParam(request.params.mediaId))); } catch (error) { sendWorkspaceError(response, error); }
   });
 
+  router.get("/workspaces/:workspaceId/presets", async (request, response) => {
+    try {
+      response.json(await adapter.listPresets(routeParam(request.params.workspaceId)));
+    } catch (error) { sendWorkspaceError(response, error); }
+  });
+
+  router.post("/workspaces/:workspaceId/presets", async (request, response) => {
+    try {
+      const body = request.body as {
+        effectFamilyId?: string;
+        id?: string;
+        name: string;
+        params: Record<string, unknown>;
+        scope?: "style" | "full";
+        templateId: string;
+        templateVersion: number;
+      };
+      const preset = await adapter.savePreset(
+        routeParam(request.params.workspaceId),
+        body.templateId,
+        body.templateVersion,
+        body.params,
+        body.name,
+        body.id,
+        body.scope,
+        body.effectFamilyId,
+      );
+      response.status(201).json(preset);
+    } catch (error) { sendWorkspaceError(response, error); }
+  });
+
+  router.delete("/workspaces/:workspaceId/presets/:presetId", async (request, response) => {
+    try {
+      await adapter.deletePreset(routeParam(request.params.workspaceId), routeParam(request.params.presetId));
+      response.status(204).end();
+    } catch (error) { sendWorkspaceError(response, error); }
+  });
+
   router.get("/workspaces/:workspaceId/media/:mediaId", async (request, response) => {
     try {
       const workspaceId = routeParam(request.params.workspaceId);

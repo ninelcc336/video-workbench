@@ -1,6 +1,9 @@
+import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../project/model";
+import { registerEffectFamily } from "../templates/effect-family";
+import type { EffectFamilyDefinition } from "../templates/types";
 import { createEditorStore } from "./editor-store";
 
 const videoClip: VideoClip = {
@@ -21,6 +24,104 @@ const effectClip: EffectClip = {
   durationInFrames: 20,
   params: { text: "原文" },
 };
+
+const styleSwitchFamily: EffectFamilyDefinition = {
+  id: "editor-command-style-fixture",
+  version: 1,
+  category: "information-overlay",
+  name: "编辑命令样式测试族",
+  description: "验证样式切换命令的公共行为。",
+  purposeTags: ["测试"],
+  visualDirections: ["简洁信息"],
+  defaultDurationInFrames: 30,
+  parameters: [
+    {
+      key: "text",
+      label: "文字",
+      type: "text",
+      defaultValue: "默认文字",
+      group: "content",
+      level: "basic",
+      styleSwitch: "preserve",
+    },
+    {
+      key: "position",
+      label: "位置",
+      type: "position",
+      defaultValue: { x: 0.5, y: 0.5 },
+      group: "layout",
+      level: "basic",
+      styleSwitch: "preserve",
+    },
+    {
+      key: "color",
+      label: "颜色",
+      type: "color",
+      defaultValue: "#111827",
+      group: "appearance",
+      level: "basic",
+      styleSwitch: "replace",
+    },
+    {
+      key: "animation",
+      label: "动画",
+      type: "select",
+      defaultValue: "fade",
+      options: [{ value: "fade", label: "淡入" }, { value: "slide", label: "滑入" }],
+      group: "animation",
+      level: "advanced",
+      styleSwitch: "replace",
+    },
+  ],
+  startingStyles: [
+    { id: "clean", name: "简洁", visualDirection: "简洁信息", defaultParams: { color: "#111827", animation: "fade" } },
+    { id: "tech", name: "科技", visualDirection: "科技数据", defaultParams: { color: "#38bdf8", animation: "slide" } },
+  ],
+  aspectRatioDefaults: {},
+  migrations: [],
+  render: (props) => createElement("div", { "data-family": props.effectFamilyId }),
+};
+
+const upgradeSourceFamily: EffectFamilyDefinition = {
+  ...styleSwitchFamily,
+  id: "editor-command-upgrade-fixture",
+  parameters: styleSwitchFamily.parameters.filter((parameter) => parameter.key !== "animation"),
+  startingStyles: [{ id: "legacy", name: "旧样式", visualDirection: "简洁信息", defaultParams: {} }],
+};
+
+const upgradeTargetFamily: EffectFamilyDefinition = {
+  ...upgradeSourceFamily,
+  version: 2,
+  parameters: [
+    {
+      key: "headline",
+      label: "新标题",
+      type: "text",
+      defaultValue: "新默认标题",
+      group: "content",
+      level: "basic",
+      styleSwitch: "preserve",
+    },
+    {
+      key: "accent",
+      label: "强调色",
+      type: "color",
+      defaultValue: "#38bdf8",
+      group: "appearance",
+      level: "basic",
+      styleSwitch: "replace",
+    },
+  ],
+  migrations: [{
+    fromVersion: 1,
+    toVersion: 2,
+    migrate: (params) => ({ params: { headline: params.text, accent: params.color } }),
+  }],
+};
+
+registerEffectFamily(styleSwitchFamily);
+registerEffectFamily(upgradeSourceFamily);
+registerEffectFamily(upgradeTargetFamily);
 
 function createStore() {
   return createEditorStore(createEmptyProject());
@@ -168,6 +269,67 @@ describe("命令式编辑器核心", () => {
 
     store.dispatch({ type: "delete-effect-clip", clipId: effectClip.id });
     expect(store.getSnapshot().effectClips).toEqual([]);
+  });
+
+  it("切换起始样式只替换表现参数，并可用一次撤销恢复原片段", () => {
+    const store = createStore();
+    const clip: EffectClip = {
+      id: "style-effect-1",
+      templateId: styleSwitchFamily.id,
+      templateVersion: 1,
+      effectFamilyId: styleSwitchFamily.id,
+      startingStyleId: "clean",
+      trackId: "effects-1",
+      fromFrame: 12,
+      durationInFrames: 18,
+      params: { text: "用户文案", position: { x: 0.2, y: 0.8 }, color: "#111827", animation: "fade" },
+    };
+
+    store.dispatch({ type: "add-effect-clip", clip });
+    store.dispatch({ type: "switch-effect-style", clipId: clip.id, startingStyleId: "tech" });
+
+    expect(store.getSnapshot().effectClips[0]).toEqual({
+      ...clip,
+      startingStyleId: "tech",
+      params: { text: "用户文案", position: { x: 0.2, y: 0.8 }, color: "#38bdf8", animation: "slide" },
+    });
+    expect(store.getSnapshot().effectClips[0].fromFrame).toBe(12);
+    expect(store.getSnapshot().effectClips[0].durationInFrames).toBe(18);
+
+    store.undo();
+    expect(store.getSnapshot().effectClips[0]).toEqual(clip);
+  });
+
+  it("只在显式升级命令后迁移特效版本，并可一次撤销升级", () => {
+    const store = createStore();
+    const clip: EffectClip = {
+      id: "upgrade-effect-1",
+      templateId: upgradeSourceFamily.id,
+      templateVersion: 1,
+      effectFamilyId: upgradeSourceFamily.id,
+      startingStyleId: "legacy",
+      trackId: "effects-1",
+      fromFrame: 24,
+      durationInFrames: 20,
+      params: { text: "旧文案", color: "#ffffff", obsolete: true },
+    };
+
+    store.dispatch({ type: "add-effect-clip", clip });
+    expect(store.getSnapshot().effectClips[0]).toEqual(clip);
+
+    store.dispatch({ type: "upgrade-effect-family", clipId: clip.id, toVersion: 2 });
+    expect(store.getSnapshot().effectClips[0]).toMatchObject({
+      templateVersion: 2,
+      effectFamilyId: upgradeSourceFamily.id,
+      startingStyleId: "legacy",
+      fromFrame: 24,
+      durationInFrames: 20,
+      params: { headline: "旧文案", accent: "#ffffff" },
+    });
+    expect(store.getSnapshot().effectClips[0].params).not.toHaveProperty("obsolete");
+
+    store.undo();
+    expect(store.getSnapshot().effectClips[0]).toEqual(clip);
   });
 
   it("连续编辑后可以撤销和重做，并且新命令会清空重做栈", () => {

@@ -10,6 +10,7 @@ import {
   deserializePreset,
   serializePreset,
   type Preset,
+  type PresetScope,
 } from "../../domain/assets/preset-model";
 
 function presetFilePath(paths: WorkspacePaths, presetId: string): string {
@@ -31,10 +32,12 @@ export class PresetRepository {
     params: Record<string, unknown>,
     name: string,
     presetId?: string,
+    scope: PresetScope = "full",
+    effectFamilyId?: string,
   ): Promise<Preset> {
     // 中文注释：默认 ID 使用随机 UUID；测试或上层需要稳定名称时可以显式传入。
     const resolvedPresetId = presetId ?? crypto.randomUUID();
-    const preset = createPreset(resolvedPresetId, templateId, templateVersion, name, params);
+    const preset = createPreset(resolvedPresetId, templateId, templateVersion, name, params, scope, effectFamilyId);
     await mkdir(this.paths.presets, { recursive: true });
     await writeFile(presetFilePath(this.paths, preset.id), `${JSON.stringify(serializePreset(preset), null, 2)}\n`, "utf8");
     return structuredClone(preset);

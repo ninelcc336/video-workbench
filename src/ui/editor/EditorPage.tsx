@@ -3,6 +3,15 @@ import type { EditorCommand } from "../../domain/editor/commands";
 import type { EditorStore } from "../../domain/editor/editor-store";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
+import {
+  createEffectFamilyInstance,
+  getAspectRatioForCanvas,
+  getEffectFamily,
+  switchStartingStyle,
+  upgradeEffectFamily,
+  type EffectFamilyUpgradeResult,
+  type StartingStyleSwitchResult,
+} from "../../domain/templates/effect-family";
 import { getTemplate } from "../../domain/templates/registry";
 import type { MediaSources } from "../../remotion/media";
 import type { MediaAsset } from "../../server/workspace/media-repository";
@@ -13,6 +22,7 @@ import { findNearestLegalVideoStart } from "../../domain/editor/clip-ranges";
 import { createAutosaveController, SaveIndicator, type AutosaveStatus, useAutosaveState } from "./SaveIndicator";
 import { ExportDialog } from "./ExportDialog";
 import { PresetDialog } from "./PresetDialog";
+import { EffectChangePreviewDialog } from "./EffectChangePreviewDialog";
 import { ResetProjectDialog } from "./ResetProjectDialog";
 import { RenderStatus } from "./RenderStatus";
 import { VideoTemplateDialog } from "./VideoTemplateDialog";
@@ -98,6 +108,45 @@ function getEffectTemplateName(clip: EffectClip | null): string {
   }
 }
 
+type StyleSwitchPreview = {
+  clipId: string;
+  familyName: string;
+  styleName: string;
+  startingStyleId: string;
+  useAspectRatioLayout: boolean;
+  result: StartingStyleSwitchResult;
+};
+
+type UpgradePreview = {
+  clipId: string;
+  familyName: string;
+  result: EffectFamilyUpgradeResult;
+};
+
+/**
+ * 中文注释：页面只按片段保存的族 ID、版本和参数组装计算实例，样式默认值与迁移细节仍由特效族深模块处理。
+ * 历史片段缺少起始样式时仅为本次预览选择族首样式，不回写工作区快照。
+ */
+function getEffectFamilyInstanceForClip(
+  project: EditProject,
+  clip: EffectClip,
+): { family: ReturnType<typeof getEffectFamily>; instance: ReturnType<typeof createEffectFamilyInstance> } {
+  const family = getEffectFamily(clip.effectFamilyId ?? clip.templateId, clip.templateVersion);
+  const startingStyleId = family.startingStyles.some((style) => style.id === clip.startingStyleId)
+    ? clip.startingStyleId as string
+    : family.startingStyles[0]?.id;
+  if (!startingStyleId) throw new Error(`特效族“${family.id}”没有可用的起始样式`);
+  const aspectRatio = getAspectRatioForCanvas(project.settings.width, project.settings.height);
+  return {
+    family,
+    instance: {
+      ...createEffectFamilyInstance(family, startingStyleId, aspectRatio),
+      durationInFrames: clip.durationInFrames,
+      params: structuredClone(clip.params),
+    },
+  };
+}
+
 type ClipboardClip =
   | { kind: "video"; clip: VideoClip }
   | { kind: "effect"; clip: EffectClip };
@@ -151,6 +200,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const exportTriggerRef = useRef<HTMLButtonElement>(null);
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [styleSwitchPreview, setStyleSwitchPreview] = useState<StyleSwitchPreview | null>(null);
+  const [upgradePreview, setUpgradePreview] = useState<UpgradePreview | null>(null);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [relinkedMediaId, setRelinkedMediaId] = useState<string | null>(null);
   const activeWorkspaceId = workspaceId ?? projectId;
@@ -181,6 +232,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setRelinkedMediaId(null);
     setRenderSnapshot(null);
     setRenderJobId(null);
+    setStyleSwitchPreview(null);
+    setUpgradePreview(null);
     setNotice(null);
     setPresets([]);
     setVideoTemplates([]);
@@ -219,14 +272,16 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setCurrentFrame((frame) => clampPreviewFrame(frame, getCompositionDurationInFrames(project)));
   }, [project]);
 
-  const dispatch = (command: EditorCommand) => {
+  const dispatch = (command: EditorCommand): boolean => {
     try {
       // 中文注释：重置后的其他编辑操作会改变历史栈，不能再把其撤销误判为撤销重置。
       if (command.type !== "reset-project") frameBeforeProjectReset.current = null;
       store.dispatch(command);
       setNotice(null);
+      return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "操作失败，请检查时间轴范围");
+      return false;
     }
   };
 
@@ -252,6 +307,103 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const commitEffectParams = (clipId: string, params: Record<string, unknown>) => {
     dispatch({ type: "update-effect-params", clipId, params });
     setPreviewProject(null);
+  };
+
+  /** 中文注释：先计算样式切换差异；存在容量警告或画幅布局覆盖时暂停，交由用户确认是否采用布局。 */
+  const requestStartingStyleSwitch = (clipId: string, startingStyleId: string) => {
+    const clip = getClip(project, clipId);
+    if (!clip) return;
+    try {
+      const { family, instance } = getEffectFamilyInstanceForClip(project, clip);
+      if (instance.startingStyleId === startingStyleId) return;
+      const result = switchStartingStyle(family, instance, startingStyleId);
+      if (result.errors.length > 0) throw new Error(result.errors.map((error) => error.message).join("；"));
+      const style = family.startingStyles.find((candidate) => candidate.id === startingStyleId);
+      if (!style) throw new Error(`未找到特效族起始样式：${family.id}/${startingStyleId}`);
+      if (result.warnings.length > 0 || result.aspectRatioLayoutKeys.length > 0) {
+        setStyleSwitchPreview({
+          clipId,
+          familyName: family.name,
+          styleName: style.name,
+          startingStyleId,
+          useAspectRatioLayout: false,
+          result,
+        });
+        return;
+      }
+      dispatch({ type: "switch-effect-style", clipId, startingStyleId, useAspectRatioLayout: false });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "起始样式切换失败");
+    }
+  };
+
+  /** 中文注释：画幅布局选项只重新计算预览结果，不写入项目，确认时仍由一条命令提交最终选择。 */
+  const updateStyleSwitchLayout = (useAspectRatioLayout: boolean) => {
+    if (!styleSwitchPreview) return;
+    const clip = getClip(project, styleSwitchPreview.clipId);
+    if (!clip) return;
+    try {
+      const { family, instance } = getEffectFamilyInstanceForClip(project, clip);
+      const result = switchStartingStyle(
+        family,
+        instance,
+        styleSwitchPreview.startingStyleId,
+        { useAspectRatioLayout },
+      );
+      if (result.errors.length > 0) {
+        setNotice(result.errors.map((error) => error.message).join("；"));
+        return;
+      }
+      setStyleSwitchPreview((current) => current
+        ? { ...current, result, useAspectRatioLayout }
+        : current);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "画幅布局预览失败");
+    }
+  };
+
+  /** 中文注释：样式确认只提交一次领域命令；警告已经在预览中展示，命令本身不会截断内容。 */
+  const confirmStartingStyleSwitch = () => {
+    if (!styleSwitchPreview) return;
+    const targetStyleId = styleSwitchPreview.result.instance.startingStyleId;
+    if (!dispatch({
+      type: "switch-effect-style",
+      clipId: styleSwitchPreview.clipId,
+      startingStyleId: targetStyleId,
+      useAspectRatioLayout: styleSwitchPreview.useAspectRatioLayout,
+    })) return;
+    setStyleSwitchPreview(null);
+    setNotice(`已切换到“${styleSwitchPreview.styleName}”，原内容和时间范围已保留。`);
+  };
+
+  /** 中文注释：版本升级入口只生成迁移预览，不改动项目；确认时再让 EditorStore 记录单次历史快照。 */
+  const requestEffectUpgrade = (clipId: string) => {
+    const clip = getClip(project, clipId);
+    if (!clip) return;
+    try {
+      const familyId = clip.effectFamilyId ?? clip.templateId;
+      const result = upgradeEffectFamily({
+        familyId,
+        fromVersion: clip.templateVersion,
+        params: clip.params,
+      });
+      const targetFamily = getEffectFamily(familyId, result.toVersion);
+      if (result.toVersion <= clip.templateVersion) {
+        setNotice("当前特效已经是可用的最新版本。");
+        return;
+      }
+      setUpgradePreview({ clipId, familyName: targetFamily.name, result });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "无法预览特效升级");
+    }
+  };
+
+  /** 中文注释：确认升级后关闭预览并提示结果，历史撤销入口仍由顶栏统一提供。 */
+  const confirmEffectUpgrade = () => {
+    if (!upgradePreview) return;
+    if (!dispatch({ type: "upgrade-effect-family", clipId: upgradePreview.clipId, toVersion: upgradePreview.result.toVersion })) return;
+    setUpgradePreview(null);
+    setNotice(`“${upgradePreview.familyName}”已升级到 v${upgradePreview.result.toVersion}，可用撤销恢复旧版本。`);
   };
 
   /** 中文注释：播放头添加接收可选起始样式，保证族内样式选择不会退回第一个默认样式。 */
@@ -532,7 +684,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   };
 
   /** 中文注释：保存个人预设只发送当前选中特效的稳定项目快照，临时过程预览不写入资产库。 */
-  const savePreset = async (name: string) => {
+  const savePreset = async (name: string, scope: "style" | "full" = "full") => {
     if (!selectedStoredEffectClip) {
       setPresetError("请先在时间轴或过程预览中选择一个特效片段。");
       return;
@@ -542,6 +694,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         body: JSON.stringify({
           name,
           params: selectedStoredEffectClip.params,
+          scope,
+          effectFamilyId: selectedStoredEffectClip.effectFamilyId ?? selectedStoredEffectClip.templateId,
           templateId: selectedStoredEffectClip.templateId,
           templateVersion: selectedStoredEffectClip.templateVersion,
         }),
@@ -559,7 +713,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     }
   };
 
-  /** 中文注释：套用仍由领域层校验模板兼容性；不兼容旧预设会安全回退，并将结果明确告知创作者。 */
+  /** 中文注释：套用仍由领域层校验模板兼容性；不兼容预设只提示并保持当前片段不变。 */
   const applySelectedPreset = (preset: Preset) => {
     if (!selectedStoredEffectClip) {
       setPresetError("请先选择一个要套用个人预设的特效片段。");
@@ -567,7 +721,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     }
     try {
       const compatible = applyPreset(store, preset, selectedStoredEffectClip.id);
-      setNotice(compatible ? `已将“${preset.name}”套用到当前特效片段。` : `“${preset.name}”与当前特效不兼容，已应用安全默认参数。`);
+      setNotice(compatible ? `已将“${preset.name}”套用到当前特效片段。` : `“${preset.name}”与当前特效不兼容，未修改当前片段。`);
       setPresetError(undefined);
     } catch (error) {
       setPresetError(error instanceof Error ? error.message : "个人预设套用失败");
@@ -647,13 +801,42 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       <EditorPanelLayout>
         <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onAddMedia={addMediaToTimeline} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} onAddTransitionAtBoundary={addTransitionAtBoundary} onInvalidTransition={() => setNotice("片段转场只能放在相邻视频片段交界点。") } onOpenPresets={() => { setPresetError(selectedStoredEffectClip ? undefined : "请先选择一个特效片段，再保存或套用个人预设。"); setPresetOpen(true); }} selectedEffectFamilyId={selectedEffectClip?.effectFamilyId ?? selectedEffectClip?.templateId ?? null} transitionBoundary={transitionBoundary} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
-        <PropertiesPanel onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
+        <PropertiesPanel onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} onRequestUpgrade={requestEffectUpgrade} onSwitchStartingStyle={requestStartingStyleSwitch} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onDropTransition={addTransitionAtBoundary} onInvalidTemplateDrop={setNotice} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => void cancelRender()} onDismiss={dismissRenderStatus} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} returnFocusRef={exportTriggerRef} />
       <PresetDialog canApply={Boolean(selectedStoredEffectClip)} canSave={Boolean(selectedStoredEffectClip)} error={presetError} onApply={applySelectedPreset} onClose={() => { setPresetOpen(false); setPresetError(undefined); }} onDelete={deletePreset} onSave={savePreset} open={presetOpen} presets={presets} templateName={getEffectTemplateName(selectedStoredEffectClip)} />
+      <EffectChangePreviewDialog
+        aspectRatioLayoutOption={styleSwitchPreview && styleSwitchPreview.result.aspectRatioLayoutKeys.length > 0 ? {
+          checked: styleSwitchPreview.useAspectRatioLayout,
+          label: `采用目标样式的当前画幅布局（${styleSwitchPreview.result.aspectRatioLayoutKeys.join("、")}）`,
+          onChange: updateStyleSwitchLayout,
+        } : undefined}
+        changes={styleSwitchPreview?.result.changes ?? []}
+        confirmLabel="确认切换样式"
+        description={styleSwitchPreview ? `目标样式“${styleSwitchPreview.styleName}”属于“${styleSwitchPreview.familyName}”。原文字、结构化内容、位置、尺寸和时间范围会保留。` : ""}
+        errors={styleSwitchPreview?.result.errors}
+        onClose={() => setStyleSwitchPreview(null)}
+        onConfirm={confirmStartingStyleSwitch}
+        open={styleSwitchPreview !== null}
+        title="预览起始样式切换"
+        warnings={styleSwitchPreview?.result.warnings}
+      />
+      <EffectChangePreviewDialog
+        changes={upgradePreview?.result.changes ?? []}
+        confirmLabel="确认升级特效"
+        defaultedKeys={upgradePreview?.result.defaultedKeys}
+        description={upgradePreview ? `“${upgradePreview.familyName}”将从 v${upgradePreview.result.fromVersion} 迁移到 v${upgradePreview.result.toVersion}。打开历史工作区不会自动执行这次升级。` : ""}
+        droppedKeys={upgradePreview?.result.droppedKeys}
+        errors={upgradePreview?.result.errors}
+        onClose={() => setUpgradePreview(null)}
+        onConfirm={confirmEffectUpgrade}
+        open={upgradePreview !== null}
+        title="预览特效升级"
+        warnings={upgradePreview?.result.warnings}
+      />
       <VideoTemplateDialog effectCount={project.effectClips.length} error={videoTemplateError} onApply={applySelectedVideoTemplate} onClose={() => { setVideoTemplateOpen(false); setVideoTemplateError(undefined); }} onDelete={deleteVideoTemplate} onSave={saveVideoTemplate} open={videoTemplateOpen} templates={videoTemplates} />
     </main>
   );

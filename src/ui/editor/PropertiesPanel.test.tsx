@@ -180,12 +180,20 @@ const structuredPropertiesFamily: EffectFamilyDefinition = {
       styleSwitch: "replace",
     },
   ],
-  startingStyles: [{
-    id: "default",
-    name: "默认",
-    visualDirection: "concise-information",
-    defaultParams: {},
-  }],
+  startingStyles: [
+    {
+      id: "default",
+      name: "默认",
+      visualDirection: "concise-information",
+      defaultParams: {},
+    },
+    {
+      id: "compact",
+      name: "紧凑",
+      visualDirection: "concise-information",
+      defaultParams: { opacity: 0.6 },
+    },
+  ],
   aspectRatioDefaults: {},
   migrations: [],
   render: () => null,
@@ -223,6 +231,22 @@ function createStructuredEffectClip(): EffectClip {
 }
 
 describe("特效参数面板", () => {
+  it("显示特效族起始样式并把切换交给页面命令", () => {
+    const onSwitchStartingStyle = vi.fn();
+
+    render(
+      <PropertiesPanel
+        onSwitchStartingStyle={onSwitchStartingStyle}
+        project={createEmptyProject()}
+        selectedClip={createStructuredEffectClip()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("起始样式"), { target: { value: "compact" } });
+
+    expect(onSwitchStartingStyle).toHaveBeenCalledWith("structured-effect-1", "compact");
+  });
+
   it("根据模板声明显示中文参数控件", () => {
     render(
       <PropertiesPanel

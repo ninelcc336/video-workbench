@@ -292,6 +292,30 @@ describe("特效族公共契约", () => {
     );
   });
 
+  it("确认采用画幅布局时只替换目标样式声明的位置信息", () => {
+    const source = createEffectFamilyInstance("contract-fixture", "clean", "9:16");
+    const switched = switchStartingStyle(
+      "contract-fixture",
+      {
+        ...source,
+        params: {
+          ...source.params,
+          title: "保留的标题",
+          position: { x: 0.2, y: 0.8 },
+        },
+      },
+      "tech",
+      { useAspectRatioLayout: true },
+    );
+
+    expect(switched.aspectRatioLayoutKeys).toEqual(["position"]);
+    expect(switched.useAspectRatioLayout).toBe(true);
+    expect(switched.instance.params).toMatchObject({
+      title: "保留的标题",
+      position: { x: 0.5, y: 0.65 },
+    });
+  });
+
   it("只在显式请求时迁移版本，并返回参数差异和丢弃项", () => {
     const legacyFamily: EffectFamilyDefinition = {
       ...contractFamily,

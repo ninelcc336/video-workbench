@@ -50,6 +50,40 @@ afterEach(async () => {
 });
 
 describe("视频工作区 HTTP 路由", () => {
+  it("在当前视频工作区持久化样式预设的范围和特效族身份", async () => {
+    const adapter = new VideoWorkspaceAdapter(await createTemporaryRoot());
+    await adapter.initialize();
+    await adapter.createWorkspace("预设工作区", createEmptyProject());
+    const baseUrl = await createTestServer(adapter);
+    const workspacePath = encodeURIComponent("预设工作区");
+
+    const saved = await fetch(`${baseUrl}/api/workspaces/${workspacePath}/presets`, {
+      body: JSON.stringify({
+        effectFamilyId: "card-overlay",
+        name: "品牌样式",
+        params: { color: "#38bdf8" },
+        scope: "style",
+        templateId: "card-overlay",
+        templateVersion: 1,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+
+    expect(saved.status).toBe(201);
+    await expect(saved.json()).resolves.toMatchObject({
+      effectFamilyId: "card-overlay",
+      scope: "style",
+      templateId: "card-overlay",
+      templateVersion: 1,
+    });
+
+    const listed = await fetch(`${baseUrl}/api/workspaces/${workspacePath}/presets`);
+    await expect(listed.json()).resolves.toEqual([
+      expect.objectContaining({ effectFamilyId: "card-overlay", name: "品牌样式", scope: "style" }),
+    ]);
+  });
+
   // 中文注释：浏览器 multipart 会以 UTF-8 发送中文文件名，路由必须在 Multer 的 Latin-1 默认解码后还原展示名称。
   it("导入中文文件名时保留 UTF-8 展示名称", async () => {
     const adapter = new VideoWorkspaceAdapter(await createTemporaryRoot());

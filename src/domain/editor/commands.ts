@@ -1,6 +1,13 @@
 import { validateProject } from "../project/validation";
 import { createEmptyProject } from "../project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../project/model";
+import {
+  createEffectFamilyInstance,
+  getAspectRatioForCanvas,
+  getEffectFamily,
+  switchStartingStyle,
+  upgradeEffectFamily,
+} from "../templates/effect-family";
 
 /** 中文注释：视频尺寸只用于导入瞬间判断素材方向，不写入编辑项目持久化快照。 */
 export type VideoDimensions = {
@@ -10,7 +17,11 @@ export type VideoDimensions = {
   fps?: number;
 };
 
-/** 中文注释：编辑器命令只描述用户意图，不携带文件系统或 UI 依赖。 */
+/** 中文注释：样式切换和版本升级各自是一条领域命令，保证用户可以用一次撤销回到操作前的完整片段。 */
+export type EffectFamilyEditorCommand =
+  | { type: "switch-effect-style"; clipId: string; startingStyleId: string; useAspectRatioLayout?: boolean }
+  | { type: "upgrade-effect-family"; clipId: string; toVersion: number };
+
 export type EditorCommand =
   | { type: "reset-project" }
   | { type: "add-video-clip"; clip: VideoClip; sourceDimensions?: VideoDimensions }
@@ -26,7 +37,8 @@ export type EditorCommand =
       type: "update-effect-params";
       clipId: string;
       params: Record<string, unknown>;
-    };
+    }
+  | EffectFamilyEditorCommand;
 
 function copyVideoClip(clip: VideoClip): VideoClip {
   return { ...clip };
@@ -89,6 +101,31 @@ function requireEffectClip(project: EditProject, clipId: string): EffectClip {
     throw new Error(`未找到特效片段：${clipId}`);
   }
   return clip;
+}
+
+/**
+ * 中文注释：根据片段保存的族版本构造切换/升级所需的实例；缺失或过期的样式 ID 只在计算新操作时回退到族首样式，
+ * 不会修改加载中的历史快照，因此打开旧工作区仍保持原版本和原参数。
+ */
+function resolveEffectFamilyInstance(
+  project: EditProject,
+  clip: EffectClip,
+): { family: ReturnType<typeof getEffectFamily>; instance: ReturnType<typeof createEffectFamilyInstance> } {
+  const family = getEffectFamily(clip.effectFamilyId ?? clip.templateId, clip.templateVersion);
+  const aspectRatio = getAspectRatioForCanvas(project.settings.width, project.settings.height);
+  const startingStyleId = family.startingStyles.some((style) => style.id === clip.startingStyleId)
+    ? clip.startingStyleId as string
+    : family.startingStyles[0]?.id;
+  if (!startingStyleId) throw new Error(`特效族“${family.id}”没有可用的起始样式`);
+
+  return {
+    family,
+    instance: {
+      ...createEffectFamilyInstance(family, startingStyleId, aspectRatio),
+      durationInFrames: clip.durationInFrames,
+      params: copyParams(clip.params),
+    },
+  };
 }
 
 /** 中文注释：主视频轨道为空时按真实元数据匹配画布；兼容旧调用只传尺寸的横屏行为。 */
@@ -244,6 +281,62 @@ export function applyCommand(
               }
             : copyEffectClip(clip),
         ),
+      };
+      break;
+    }
+    case "switch-effect-style": {
+      const clip = requireEffectClip(project, command.clipId);
+      const { family, instance } = resolveEffectFamilyInstance(project, clip);
+      const result = switchStartingStyle(family, instance, command.startingStyleId, {
+        useAspectRatioLayout: command.useAspectRatioLayout,
+      });
+      if (result.errors.length > 0) {
+        throw new Error(result.errors.map((error) => error.message).join("；"));
+      }
+      nextProject = {
+        ...project,
+        effectClips: project.effectClips.map((candidate) => candidate.id === clip.id
+          ? {
+              ...copyEffectClip(candidate),
+              effectFamilyId: family.id,
+              startingStyleId: result.instance.startingStyleId,
+              params: copyParams(result.instance.params),
+            }
+          : copyEffectClip(candidate)),
+      };
+      break;
+    }
+    case "upgrade-effect-family": {
+      const clip = requireEffectClip(project, command.clipId);
+      if (!Number.isInteger(command.toVersion) || command.toVersion <= 0) {
+        throw new RangeError("目标特效族版本必须是正整数");
+      }
+      const familyId = clip.effectFamilyId ?? clip.templateId;
+      const result = upgradeEffectFamily({
+        familyId,
+        fromVersion: clip.templateVersion,
+        toVersion: command.toVersion,
+        params: clip.params,
+      });
+      if (!result.valid || result.errors.length > 0) {
+        throw new Error(result.errors.map((error) => error.message).join("；") || "特效升级参数无效");
+      }
+      const targetFamily = getEffectFamily(familyId, result.toVersion);
+      const startingStyleId = targetFamily.startingStyles.some((style) => style.id === clip.startingStyleId)
+        ? clip.startingStyleId as string
+        : targetFamily.startingStyles[0]?.id;
+      if (!startingStyleId) throw new Error(`特效族“${familyId}”升级后没有可用的起始样式`);
+      nextProject = {
+        ...project,
+        effectClips: project.effectClips.map((candidate) => candidate.id === clip.id
+          ? {
+              ...copyEffectClip(candidate),
+              templateVersion: result.toVersion,
+              effectFamilyId: familyId,
+              startingStyleId,
+              params: copyParams(result.params),
+            }
+          : copyEffectClip(candidate)),
       };
       break;
     }

@@ -72,8 +72,14 @@ export type EffectFamilyParameterChange = {
 export type StartingStyleSwitchResult = {
   instance: EffectFamilyInstance;
   changes: EffectFamilyParameterChange[];
+  aspectRatioLayoutKeys: string[];
+  useAspectRatioLayout: boolean;
   errors: EffectFamilyIssue[];
   warnings: EffectFamilyIssue[];
+};
+
+export type StartingStyleSwitchOptions = {
+  useAspectRatioLayout?: boolean;
 };
 
 export type EffectFamilyUpgradeRequest = {
@@ -233,7 +239,11 @@ function inferLegacyParameterMetadata(parameter: ParameterDefinition): EffectPar
   }
 
   const group = parameter.group ?? (
-    parameter.type === "position" || parameter.type === "size" ? "layout" : "appearance"
+    parameter.type === "position" || parameter.type === "size"
+      ? "layout"
+      : parameter.type === "text" || parameter.type === "multiline-text" || parameter.type === "structured-list" || parameter.type === "icon"
+        ? "content"
+        : "appearance"
   );
   const styleSwitch = parameter.styleSwitch ?? (
     group === "content" || parameter.type === "position" || parameter.type === "size"
@@ -501,16 +511,36 @@ function buildStyleDefaults(
   return normalizeParameterValuesWithDiagnostics(family.parameters, defaults).values;
 }
 
+/** 中文注释：只把当前画幅明确声明的位置信息作为可选布局覆盖，避免确认时误重置用户尺寸或其他布局参数。 */
+function getAspectRatioLayoutKeys(
+  family: EffectFamilyDefinition,
+  style: EffectFamilyDefinition["startingStyles"][number],
+  aspectRatio: AspectRatio,
+): string[] {
+  const aspectRatioDefaults = {
+    ...family.aspectRatioDefaults[aspectRatio],
+    ...style.aspectRatioDefaults?.[aspectRatio],
+  };
+  return family.parameters
+    .filter((parameter) => (
+      parameter.group === "layout" &&
+      (parameter.type === "position" || parameter.type === "size") &&
+      Object.prototype.hasOwnProperty.call(aspectRatioDefaults, parameter.key)
+    ))
+    .map((parameter) => parameter.key);
+}
+
 /** 中文注释：内容始终保留，位置和尺寸默认保留，其余参数服从声明的样式切换策略。 */
 function shouldPreserveParameter(
   parameter: EffectFamilyDefinition["parameters"][number],
+  useAspectRatioLayout: boolean,
 ): boolean {
   if (parameter.group === "content") return true;
   if (
     parameter.group === "layout" &&
     (parameter.type === "position" || parameter.type === "size")
   ) {
-    return true;
+    return !useAspectRatioLayout;
   }
   return parameter.styleSwitch === "preserve";
 }
@@ -640,9 +670,12 @@ export function switchStartingStyle(
   family: string | EffectFamilyDefinition,
   instance: EffectFamilyInstance,
   startingStyleId: string,
+  options: StartingStyleSwitchOptions = {},
 ): StartingStyleSwitchResult {
   const resolvedFamily = resolveFamilyVersion(family, instance.version);
   const style = resolveStartingStyle(resolvedFamily, startingStyleId);
+  const aspectRatioLayoutKeys = getAspectRatioLayoutKeys(resolvedFamily, style, instance.aspectRatio);
+  const useAspectRatioLayout = options.useAspectRatioLayout === true;
   const targetValidation = validateEffectFamilyParams(
     resolvedFamily,
     buildStyleDefaults(resolvedFamily, style, instance.aspectRatio),
@@ -664,7 +697,10 @@ export function switchStartingStyle(
 
   for (const parameter of resolvedFamily.parameters) {
     const previousValue = sourceParams[parameter.key];
-    const preserve = shouldPreserveParameter(parameter);
+    const preserve = shouldPreserveParameter(
+      parameter,
+      useAspectRatioLayout && aspectRatioLayoutKeys.includes(parameter.key),
+    );
     const nextValue = preserve
       ? cloneValue(previousValue ?? targetDefaults[parameter.key])
       : cloneValue(targetDefaults[parameter.key]);
@@ -690,6 +726,8 @@ export function switchStartingStyle(
       params: nextParams,
     },
     changes,
+    aspectRatioLayoutKeys,
+    useAspectRatioLayout,
     errors: [...sourceValidation.errors, ...targetValidation.errors],
     warnings,
   };

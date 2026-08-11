@@ -1,7 +1,7 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useRef, useState } from "react";
-import type { Preset } from "../../domain/assets/preset-model";
+import type { Preset, PresetScope } from "../../domain/assets/preset-model";
 
 export type PresetDialogProps = {
   open: boolean;
@@ -11,7 +11,7 @@ export type PresetDialogProps = {
   error?: string;
   canSave?: boolean;
   canApply?: boolean;
-  onSave: (name: string) => void | Promise<void>;
+  onSave: (name: string, scope: PresetScope) => void | Promise<void>;
   onApply?: (preset: Preset) => void;
   onDelete?: (preset: Preset) => void | Promise<void>;
   onClose: () => void;
@@ -32,6 +32,7 @@ export function PresetDialog({
   onClose,
 }: PresetDialogProps) {
   const [name, setName] = useState(initialName);
+  const [scope, setScope] = useState<PresetScope>("full");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [pendingDeletePreset, setPendingDeletePreset] = useState<Preset | null>(null);
@@ -46,6 +47,7 @@ export function PresetDialog({
   useEffect(() => {
     if (open) {
       setName(initialName);
+      setScope("full");
       setIsSaving(false);
       setIsDeleting(false);
     }
@@ -56,7 +58,7 @@ export function PresetDialog({
     if (!name.trim() || isSaving) return;
     setIsSaving(true);
     try {
-      await onSave(name.trim());
+      await onSave(name.trim(), scope);
     } finally {
       setIsSaving(false);
     }
@@ -89,6 +91,13 @@ export function PresetDialog({
             <span>预设名称</span>
             <input aria-describedby={error ? "preset-dialog-error" : undefined} autoFocus disabled={isSaving} onChange={(event) => setName(event.target.value)} placeholder="例如：知识点强调" value={name} />
           </label>
+          <label className="asset-dialog__field">
+            <span>预设范围</span>
+            <select aria-label="预设范围" disabled={isSaving} onChange={(event) => setScope(event.target.value as PresetScope)} value={scope}>
+              <option value="style">样式预设：保留当前内容</option>
+              <option value="full">完整预设：恢复内容和表现</option>
+            </select>
+          </label>
           {error ? <p className="asset-dialog__error" id="preset-dialog-error" role="alert">{error}</p> : null}
           <div className="asset-dialog__actions">
             <Dialog.Close asChild><button className="asset-dialog__cancel" disabled={isSaving} type="button">取消</button></Dialog.Close>
@@ -100,7 +109,10 @@ export function PresetDialog({
               <ul className="asset-dialog__list">
                 {presets.map((preset) => (
                   <li key={preset.id}>
-                    <button className="asset-dialog__apply" disabled={!canApply} onClick={() => onApply?.(preset)} type="button">套用“{preset.name}”</button>
+                    <button aria-label={`套用“${preset.name}”`} className="asset-dialog__apply" disabled={!canApply} onClick={() => onApply?.(preset)} type="button">
+                      <strong>套用“{preset.name}”</strong>
+                      <span>{preset.scope === "style" ? "样式预设 · 保留当前内容" : "完整预设 · 恢复全部参数"}</span>
+                    </button>
                     <button aria-label={`删除个人预设${preset.name}`} className="asset-dialog__delete" disabled={isDeleting} onClick={() => setPendingDeletePreset(preset)} type="button">删除</button>
                   </li>
                 ))}

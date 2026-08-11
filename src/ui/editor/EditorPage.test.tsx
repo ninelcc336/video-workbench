@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
+import { createElement } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditorStore } from "../../domain/editor/editor-store";
 import type { Preset } from "../../domain/assets/preset-model";
 import type { VideoTemplate } from "../../domain/assets/video-template-model";
 import { createEmptyProject } from "../../domain/project/factories";
+import { registerEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { EditorPage } from "./EditorPage";
 
@@ -31,6 +34,51 @@ vi.mock("./Timeline", () => ({
   ),
 }));
 
+const pageStyleFamily: EffectFamilyDefinition = {
+  id: "editor-page-style-fixture",
+  version: 1,
+  category: "information-overlay",
+  name: "页面样式测试族",
+  description: "验证属性面板到编辑命令的样式切换。",
+  purposeTags: ["测试"],
+  visualDirections: ["简洁信息"],
+  defaultDurationInFrames: 30,
+  parameters: [
+    { key: "text", label: "文字", type: "text", defaultValue: "默认文字", group: "content", level: "basic", styleSwitch: "preserve" },
+    { key: "position", label: "位置", type: "position", defaultValue: { x: 0.5, y: 0.5 }, group: "layout", level: "basic", styleSwitch: "preserve" },
+    { key: "color", label: "颜色", type: "color", defaultValue: "#111827", group: "appearance", level: "basic", styleSwitch: "replace" },
+  ],
+  startingStyles: [
+    { id: "clean", name: "简洁", visualDirection: "简洁信息", defaultParams: { color: "#111827" } },
+    { id: "tech", name: "科技", visualDirection: "科技数据", defaultParams: { color: "#38bdf8" } },
+  ],
+  aspectRatioDefaults: { "9:16": { position: { x: 0.5, y: 0.65 } } },
+  migrations: [],
+  render: (props) => createElement("div", { "data-family": props.effectFamilyId }),
+};
+
+const pageUpgradeSourceFamily: EffectFamilyDefinition = {
+  ...pageStyleFamily,
+  id: "editor-page-upgrade-fixture",
+  parameters: pageStyleFamily.parameters.filter((parameter) => parameter.key !== "position"),
+  startingStyles: [{ id: "clean", name: "简洁", visualDirection: "简洁信息", defaultParams: {} }],
+  aspectRatioDefaults: {},
+};
+
+const pageUpgradeTargetFamily: EffectFamilyDefinition = {
+  ...pageUpgradeSourceFamily,
+  version: 2,
+  parameters: [
+    { key: "headline", label: "新标题", type: "text", defaultValue: "默认标题", group: "content", level: "basic", styleSwitch: "preserve" },
+    { key: "accent", label: "强调色", type: "color", defaultValue: "#38bdf8", group: "appearance", level: "basic", styleSwitch: "replace" },
+  ],
+  migrations: [{ fromVersion: 1, toVersion: 2, migrate: (params) => ({ params: { headline: params.text, accent: params.color } }) }],
+};
+
+registerEffectFamily(pageStyleFamily);
+registerEffectFamily(pageUpgradeSourceFamily);
+registerEffectFamily(pageUpgradeTargetFamily);
+
 /** 中文注释：集中构造重置场景的横屏项目，避免多个交互用例复制相同的视频时间轴夹具。 */
 function createLandscapeProjectStore() {
   const store = createEditorStore(createEmptyProject({ width: 1920, height: 1080, fps: 30 }));
@@ -47,6 +95,26 @@ function createEffectProjectStore() {
   store.dispatch({
     type: "add-effect-clip",
     clip: { durationInFrames: 20, fromFrame: 6, id: "effect-1", params: { text: "原始文案" }, templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" },
+  });
+  return store;
+}
+
+/** 中文注释：构造带新版族身份的页面夹具，验证样式和升级操作不会丢失时间轴字段。 */
+function createFamilyProjectStore(familyId: string, version: number, startingStyleId: string, params: Record<string, unknown>) {
+  const store = createEditorStore(createEmptyProject());
+  store.dispatch({
+    type: "add-effect-clip",
+    clip: {
+      durationInFrames: 20,
+      effectFamilyId: familyId,
+      fromFrame: 6,
+      id: "effect-1",
+      params,
+      startingStyleId,
+      templateId: familyId,
+      templateVersion: version,
+      trackId: "effects-1",
+    },
   });
   return store;
 }
@@ -233,6 +301,47 @@ describe("编辑项目的素材导入", () => {
     fireEvent.click(screen.getByRole("button", { name: "从预览选择特效" }));
 
     await waitFor(() => expect(screen.getByTestId("selected-clip-id").textContent).toBe("effect-1"));
+  });
+
+  it("从属性面板切换起始样式，并用一次撤销恢复参数", async () => {
+    const store = createFamilyProjectStore(pageStyleFamily.id, 1, "clean", {
+      color: "#111827",
+      position: { x: 0.2, y: 0.8 },
+      text: "页面中的文案",
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ json: async () => [], ok: true } as Response);
+
+    render(<EditorPage store={store} />);
+    fireEvent.click(screen.getByRole("button", { name: "从预览选择特效" }));
+    fireEvent.change(screen.getByLabelText("起始样式"), { target: { value: "tech" } });
+    expect(screen.getByRole("dialog", { name: "预览起始样式切换" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: /采用目标样式的当前画幅布局/iu }));
+    fireEvent.click(screen.getByRole("button", { name: "确认切换样式" }));
+
+    await waitFor(() => expect(store.getSnapshot().effectClips[0]).toMatchObject({
+      startingStyleId: "tech",
+      fromFrame: 6,
+      durationInFrames: 20,
+      params: { color: "#38bdf8", position: { x: 0.5, y: 0.65 }, text: "页面中的文案" },
+    }));
+    store.undo();
+    expect(store.getSnapshot().effectClips[0]).toMatchObject({ startingStyleId: "clean", params: { color: "#111827", position: { x: 0.2, y: 0.8 }, text: "页面中的文案" } });
+  });
+
+  it("预览并确认显式特效升级，随后可一次撤销版本迁移", async () => {
+    const store = createFamilyProjectStore(pageUpgradeSourceFamily.id, 1, "clean", { color: "#ffffff", text: "旧版本内容" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ json: async () => [], ok: true } as Response);
+
+    render(<EditorPage store={store} />);
+    fireEvent.click(screen.getByRole("button", { name: "从预览选择特效" }));
+    fireEvent.click(screen.getByRole("button", { name: "预览特效升级 · v2" }));
+    expect(screen.getByRole("dialog", { name: "预览特效升级" })).toBeTruthy();
+    expect(screen.getByText("headline")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认升级特效" }));
+
+    await waitFor(() => expect(store.getSnapshot().effectClips[0]).toMatchObject({ templateVersion: 2, params: { accent: "#ffffff", headline: "旧版本内容" } }));
+    store.undo();
+    expect(store.getSnapshot().effectClips[0]).toMatchObject({ templateVersion: 1, params: { color: "#ffffff", text: "旧版本内容" } });
   });
 
   it("保存、套用和删除个人预设时只更新当前特效参数，并使用应用内确认对话框", async () => {

@@ -1,7 +1,10 @@
+import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "../project/factories";
 import type { EffectClip } from "../project/model";
 import { createEditorStore } from "../editor/editor-store";
+import { registerEffectFamily } from "../templates/effect-family";
+import type { EffectFamilyDefinition } from "../templates/types";
 import {
   applyPreset,
   buildExportSettings,
@@ -19,6 +22,52 @@ const effectClip: EffectClip = {
   durationInFrames: 30,
   params: { text: "原文", position: { x: 0.5, y: 0.5 } },
 };
+
+const presetFamily: EffectFamilyDefinition = {
+  id: "preset-scope-fixture",
+  version: 1,
+  category: "information-overlay",
+  name: "预设范围测试族",
+  description: "验证样式预设与完整预设的参数边界。",
+  purposeTags: ["测试"],
+  visualDirections: ["简洁信息"],
+  defaultDurationInFrames: 30,
+  parameters: [
+    {
+      key: "text",
+      label: "文字",
+      type: "text",
+      defaultValue: "默认文字",
+      group: "content",
+      level: "basic",
+      styleSwitch: "preserve",
+    },
+    {
+      key: "position",
+      label: "位置",
+      type: "position",
+      defaultValue: { x: 0.5, y: 0.5 },
+      group: "layout",
+      level: "basic",
+      styleSwitch: "preserve",
+    },
+    {
+      key: "color",
+      label: "颜色",
+      type: "color",
+      defaultValue: "#111827",
+      group: "appearance",
+      level: "basic",
+      styleSwitch: "replace",
+    },
+  ],
+  startingStyles: [{ id: "default", name: "默认", visualDirection: "简洁信息", defaultParams: {} }],
+  aspectRatioDefaults: {},
+  migrations: [],
+  render: (props) => createElement("div", { "data-family": props.effectFamilyId }),
+};
+
+registerEffectFamily(presetFamily);
 
 describe("个人预设模型", () => {
   it("只序列化模板引用、名称和深拷贝后的参数", () => {
@@ -54,6 +103,93 @@ describe("个人预设模型", () => {
 
     store.undo();
     expect(store.getSnapshot().effectClips[0].params).toEqual(effectClip.params);
+  });
+
+  it("预设特效族或版本不兼容时不修改当前片段，也不新增撤销历史", () => {
+    const incompatiblePreset = createPreset(
+      "incompatible-preset",
+      "another-effect-family",
+      1,
+      "不兼容预设",
+      { text: "不应写入" },
+    );
+    const store = createEditorStore({
+      ...createEmptyProject(),
+      effectClips: [effectClip],
+    });
+    const before = store.getSnapshot();
+
+    expect(applyPreset(store, incompatiblePreset, effectClip.id)).toBe(false);
+    expect(store.getSnapshot()).toEqual(before);
+    store.undo();
+    expect(store.getSnapshot()).toEqual(before);
+  });
+
+  it("样式预设只保存表现参数，套用时保留当前内容并进入一次撤销历史", () => {
+    const clip: EffectClip = {
+      id: "preset-effect-1",
+      templateId: presetFamily.id,
+      templateVersion: 1,
+      effectFamilyId: presetFamily.id,
+      startingStyleId: "default",
+      trackId: "effects-1",
+      fromFrame: 8,
+      durationInFrames: 24,
+      params: { text: "当前文案", position: { x: 0.2, y: 0.8 }, color: "#111827" },
+    };
+    const stylePreset = createPreset(
+      "style-preset-1",
+      presetFamily.id,
+      1,
+      "品牌样式",
+      { text: "不应覆盖", position: { x: 0.7, y: 0.3 }, color: "#38bdf8" },
+      "style",
+      presetFamily.id,
+    );
+    const store = createEditorStore({ ...createEmptyProject(), effectClips: [clip] });
+
+    expect(serializePreset(stylePreset)).toEqual({
+      effectFamilyId: presetFamily.id,
+      templateId: presetFamily.id,
+      templateVersion: 1,
+      name: "品牌样式",
+      scope: "style",
+      params: { position: { x: 0.7, y: 0.3 }, color: "#38bdf8" },
+    });
+
+    applyPreset(store, stylePreset, clip.id);
+    expect(store.getSnapshot().effectClips[0].params).toEqual({
+      text: "当前文案",
+      position: { x: 0.7, y: 0.3 },
+      color: "#38bdf8",
+    });
+    store.undo();
+    expect(store.getSnapshot().effectClips[0]).toEqual(clip);
+  });
+
+  it("旧版模板创建样式预设时也不会持久化文字内容", () => {
+    const preset = createPreset(
+      "legacy-style-preset",
+      "card-overlay",
+      1,
+      "旧版品牌样式",
+      { text: "当前文案", color: "#38bdf8", position: { x: 0.2, y: 0.8 } },
+      "style",
+    );
+
+    expect(preset.params).not.toHaveProperty("text");
+    expect(preset.params).toEqual({ color: "#38bdf8", position: { x: 0.2, y: 0.8 } });
+  });
+
+  it("无法解析特效族时拒绝创建样式预设，避免把未知内容写入样式范围", () => {
+    expect(() => createPreset(
+      "unknown-style-preset",
+      "missing-effect-family",
+      1,
+      "未知样式",
+      { text: "不能安全判断" },
+      "style",
+    )).toThrow("未找到特效族");
   });
 
   it.each([

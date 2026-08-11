@@ -40,6 +40,10 @@ export type PropertiesPanelProps = {
   /** 中文注释：连续控件手势只更新过程预览，不直接增加编辑历史。 */
   onPreviewParams?: (clipId: string, params: Record<string, unknown>) => void;
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
+  /** 中文注释：样式选择只向页面命令层发送族内样式身份，面板不直接修改项目快照。 */
+  onSwitchStartingStyle?: (clipId: string, startingStyleId: string) => void;
+  /** 中文注释：显式升级入口只请求预览，确认后的版本迁移由页面通过一次命令提交。 */
+  onRequestUpgrade?: (clipId: string) => void;
 };
 
 type EditorMode = "basic" | "advanced";
@@ -1141,6 +1145,8 @@ export function PropertiesPanel({
   paramsSnapshot,
   onPreviewParams,
   onChangeParams,
+  onSwitchStartingStyle,
+  onRequestUpgrade,
 }: PropertiesPanelProps) {
   const [mode, setMode] = useState<EditorMode>("basic");
   const [openGroups, setOpenGroups] = useState<Record<ParameterGroup, boolean>>({
@@ -1166,6 +1172,23 @@ export function PropertiesPanel({
   } catch {
     return <aside className="panel properties-panel"><div className="panel-heading"><span className="eyebrow">Inspector</span><h2>特效参数</h2></div><p className="error-copy">找不到这个特效模板，请重新选择。</p></aside>;
   }
+
+  let family: ReturnType<typeof getEffectFamily> | null = null;
+  try {
+    family = getEffectFamily(selectedClip.effectFamilyId ?? template.id, selectedClip.templateVersion);
+  } catch {
+    // 中文注释：没有新版族元数据的外部旧模板继续显示原有参数面板，不阻断历史片段编辑。
+  }
+  const styleId = family?.startingStyles.find((style) => style.id === selectedClip.startingStyleId)?.id
+    ?? family?.startingStyles[0]?.id;
+  const latestFamily = family ? (() => {
+    try {
+      return getEffectFamily(family.id);
+    } catch {
+      return family;
+    }
+  })() : null;
+  const canUpgrade = Boolean(latestFamily && family && latestFamily.version > family.version && onRequestUpgrade);
 
   const rawParams = paramsSnapshot ?? selectedClip.params;
   const parameters = getPanelParameters(template);
@@ -1218,6 +1241,19 @@ export function PropertiesPanel({
         <span className="eyebrow">Inspector / {template.category === "transition" ? "转场" : "特效"}</span>
         <h2>特效参数</h2>
         <p className="panel-subtitle">{template.name}</p>
+        {family && family.startingStyles.length > 1 && styleId ? (
+          <label className="properties-style-select">
+            <span>起始样式</span>
+            <select aria-label="起始样式" onChange={(event) => onSwitchStartingStyle?.(selectedClip.id, event.target.value)} value={styleId}>
+              {family.startingStyles.map((style) => <option key={style.id} value={style.id}>{style.name}</option>)}
+            </select>
+          </label>
+        ) : null}
+        {canUpgrade ? (
+          <button className="properties-upgrade" onClick={() => onRequestUpgrade?.(selectedClip.id)} type="button">
+            预览特效升级 · v{latestFamily?.version}
+          </button>
+        ) : null}
         <div aria-label="特效参数编辑模式" className="properties-mode" role="group">
           <span className="properties-mode__label">{advanced ? "高级参数" : "基础参数"}</span>
           <button aria-expanded={advanced} aria-controls="advanced-property-groups" className="properties-mode__toggle" onClick={() => setMode(advanced ? "basic" : "advanced")} type="button">

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
+import { LEGACY_DEFAULT_STARTING_STYLE_ID } from "../../domain/project/serialization";
 import { createWorkspaceAdapter } from "./workspace-adapter";
 import { VideoWorkspaceAdapter } from "./video-workspace-adapter";
 import { VideoWorkspaceRepository } from "./video-workspace-repository";
@@ -38,6 +39,35 @@ describe("视频工作区仓储", () => {
     await expect(mediaA.getMediaAsset(asset.id)).resolves.toMatchObject({ id: asset.id });
     await expect(mediaB.getMediaAsset(asset.id)).resolves.toBeNull();
     expect((await stat(join(repository.getWorkspacePaths("视频 A").media, asset.fileName))).isFile()).toBe(true);
+  });
+
+  it("读取视频工作区时补齐旧特效片段元数据，但不改写模板版本和原始快照", async () => {
+    const root = await createTemporaryRoot("legacy-video-workspace-");
+    const repository = new VideoWorkspaceRepository(root);
+    await repository.initialize();
+    const legacyWorkspace = {
+      ...createEmptyProject(),
+      effectClips: [{
+        durationInFrames: 15,
+        fromFrame: 12,
+        id: "legacy-effect",
+        params: { text: "历史内容" },
+        templateId: "card-overlay",
+        templateVersion: 1,
+        trackId: "effects-1",
+      }],
+    };
+    await repository.createWorkspace("旧视频", legacyWorkspace);
+
+    const loaded = await repository.loadWorkspace("旧视频");
+
+    expect(loaded.effectClips[0]).toMatchObject({
+      startingStyleId: LEGACY_DEFAULT_STARTING_STYLE_ID,
+      placement: { type: "range" },
+      templateVersion: 1,
+      params: { text: "历史内容" },
+    });
+    expect(JSON.parse(await readFile(join(repository.getWorkspacePaths("旧视频").root, "workspace.json"), "utf8"))).toEqual(legacyWorkspace);
   });
 
   it("迁移共享素材时为每个引用工作区复制一份文件", async () => {

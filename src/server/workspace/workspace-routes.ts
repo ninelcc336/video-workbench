@@ -232,8 +232,8 @@ export function createWorkspaceRouter(adapter: WorkspaceAdapter, options: Worksp
 
   router.post("/presets", async (request: Request, response: Response) => {
     try {
-      const body = request.body as { templateId: string; templateVersion: number; params: Record<string, unknown>; name: string; id?: string };
-      const preset = await adapter.savePreset(body.templateId, body.templateVersion, body.params, body.name, body.id);
+      const body = request.body as { effectFamilyId?: string; templateId: string; templateVersion: number; params: Record<string, unknown>; name: string; id?: string; scope?: "style" | "full" };
+      const preset = await adapter.savePreset(body.templateId, body.templateVersion, body.params, body.name, body.id, body.scope, body.effectFamilyId);
       response.status(201).json(preset);
     } catch (error) { sendWorkspaceError(response, error); }
   });

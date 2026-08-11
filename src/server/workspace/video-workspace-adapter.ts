@@ -1,4 +1,6 @@
 import { pathToFileURL } from "node:url";
+import { PresetRepository } from "../assets/preset-repository";
+import type { Preset, PresetScope } from "../../domain/assets/preset-model";
 import type { VideoWorkspace } from "../../domain/workspace/model";
 import type { MediaAsset, MediaImportFile } from "./media-repository";
 import { VideoWorkspaceRepository, type VideoWorkspaceSummary } from "./video-workspace-repository";
@@ -126,6 +128,37 @@ export class VideoWorkspaceAdapter {
       if (path) sources[mediaId] = pathToFileURL(path).href;
     }
     return sources;
+  }
+
+  /** 中文注释：预设资产必须先确认工作区快照存在，再使用该工作区私有目录，避免路径参数创建孤立资产。 */
+  private async getPresetRepository(workspaceId: string): Promise<PresetRepository> {
+    await this.repository.loadWorkspace(workspaceId);
+    return new PresetRepository(this.repository.getWorkspacePaths(workspaceId));
+  }
+
+  /** 中文注释：返回当前视频工作区的个人预设，旧 JSON 的完整预设兼容由领域模型负责。 */
+  async listPresets(workspaceId: string): Promise<Preset[]> {
+    return (await this.getPresetRepository(workspaceId)).listPresets();
+  }
+
+  /** 中文注释：保存个人预设时透传范围和特效族身份，仓储负责白名单序列化与旧格式兼容。 */
+  async savePreset(
+    workspaceId: string,
+    templateId: string,
+    templateVersion: number,
+    params: Record<string, unknown>,
+    name: string,
+    presetId?: string,
+    scope?: PresetScope,
+    effectFamilyId?: string,
+  ): Promise<Preset> {
+    const repository = await this.getPresetRepository(workspaceId);
+    return repository.savePreset(templateId, templateVersion, params, name, presetId, scope, effectFamilyId);
+  }
+
+  /** 中文注释：删除只作用于当前视频工作区，已套用到片段的参数不会被反向修改。 */
+  async deletePreset(workspaceId: string, presetId: string): Promise<void> {
+    return (await this.getPresetRepository(workspaceId)).deletePreset(presetId);
   }
 
   /** 中文注释：仅在基础设施或迁移测试中暴露私有路径，用户界面不得显示此信息。 */

@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { EditProject } from "../../domain/project/model";
+import { deserializeEffectClip } from "../../domain/project/serialization";
 import { validateProject } from "../../domain/project/validation";
 import { MediaRepository } from "./media-repository";
 import { ProjectRepository } from "./project-repository";
@@ -134,7 +135,14 @@ export class VideoWorkspaceRepository {
       throw error;
     }
     try {
-      const workspace: unknown = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
+      // 中文注释：视频工作区也必须走统一片段反序列化，补齐兼容元数据但不迁移模板版本或参数。
+      const workspace: unknown = parsed && typeof parsed === "object" && Array.isArray((parsed as { effectClips?: unknown }).effectClips)
+        ? {
+            ...(parsed as Record<string, unknown>),
+            effectClips: (parsed as { effectClips: unknown[] }).effectClips.map(deserializeEffectClip),
+          }
+        : parsed;
       this.assertValidWorkspace(workspace);
       return workspace;
     } catch (error) {
