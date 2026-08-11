@@ -233,8 +233,7 @@ describe("基础时间轴", () => {
       />,
     );
 
-    const effectTrack = screen.getByText("特效轨道 1").parentElement?.querySelector(".timeline-track__content") as HTMLElement;
-    expect(effectTrack).toBeTruthy();
+    const effectTrack = screen.getByRole("region", { name: "特效轨道 1放置区" });
     (effectTrack as HTMLElement).getBoundingClientRect = () => ({
       bottom: 100,
       height: 56,
@@ -252,6 +251,97 @@ describe("基础时间轴", () => {
     fireEvent(effectTrack, dropEvent);
 
     expect(onDropTemplate).toHaveBeenCalledWith(template, 25);
+  });
+
+  it("非法位置拖入片段转场时只提示，不把它创建成普通范围特效", () => {
+    const onDropTemplate = vi.fn();
+    const onInvalidTemplateDrop = vi.fn();
+    const template = getTemplate("basic-transition", 1);
+    const values = new Map<string, string>([
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ templateId: template.id, templateVersion: template.version })],
+    ]);
+    const dataTransfer = {
+      dropEffect: "none",
+      getData: (type: string) => values.get(type) ?? "",
+    } as unknown as DataTransfer;
+
+    render(
+      <Timeline
+        onDropTemplate={onDropTemplate}
+        onInvalidTemplateDrop={onInvalidTemplateDrop}
+        pixelsPerFrame={10}
+        project={createTimelineProject()}
+        selectedClipId={null}
+      />,
+    );
+
+    const effectTrack = screen.getByRole("region", { name: "特效轨道 1放置区" });
+    effectTrack.getBoundingClientRect = () => ({
+      bottom: 100,
+      height: 56,
+      left: 100,
+      right: 1100,
+      top: 0,
+      width: 1000,
+      x: 100,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const dropEvent = createEvent.drop(effectTrack, { dataTransfer });
+    Object.defineProperty(dropEvent, "clientX", { value: 350 });
+    fireEvent(effectTrack, dropEvent);
+
+    expect(onDropTemplate).not.toHaveBeenCalled();
+    expect(onInvalidTemplateDrop).toHaveBeenCalledWith("片段转场只能放在相邻视频片段交界点。");
+  });
+
+  it("拖入片段转场到合法交界点时传递前后视频片段身份", () => {
+    const onDropTransition = vi.fn();
+    const template = getTemplate("basic-transition", 1);
+    const project = createTimelineProject();
+    project.videoClips.push({
+      ...project.videoClips[0],
+      id: "video-2",
+      fromFrame: 90,
+    });
+    const values = new Map<string, string>([
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ templateId: template.id, templateVersion: template.version })],
+    ]);
+    const dataTransfer = {
+      dropEffect: "none",
+      getData: (type: string) => values.get(type) ?? "",
+    } as unknown as DataTransfer;
+
+    render(
+      <Timeline
+        onDropTransition={onDropTransition}
+        pixelsPerFrame={10}
+        project={project}
+        selectedClipId={null}
+      />,
+    );
+
+    const effectTrack = screen.getByRole("region", { name: "特效轨道 1放置区" });
+    effectTrack.getBoundingClientRect = () => ({
+      bottom: 100,
+      height: 56,
+      left: 100,
+      right: 2000,
+      top: 0,
+      width: 1900,
+      x: 100,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const dropEvent = createEvent.drop(effectTrack, { dataTransfer });
+    Object.defineProperty(dropEvent, "clientX", { value: 1000 });
+    fireEvent(effectTrack, dropEvent);
+
+    expect(onDropTransition).toHaveBeenCalledWith(template, {
+      beforeVideoClipId: "video-1",
+      afterVideoClipId: "video-2",
+      frame: 90,
+    });
   });
 
   it("重叠特效显示在可分别操作的多条轨道", () => {

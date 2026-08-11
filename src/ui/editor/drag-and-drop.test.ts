@@ -39,6 +39,24 @@ describe("模板拖放辅助函数", () => {
     });
   });
 
+  it("拖放族卡片时保留用户选择的起始样式", () => {
+    const template = getTemplate("card-overlay", 1);
+    const values = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      setData: (type: string, value: string) => values.set(type, value),
+      getData: (type: string) => values.get(type) ?? "",
+    } as unknown as DataTransfer;
+
+    writeTemplateDragData(dataTransfer, { ...template, effectFamilyId: "family", startingStyleId: "selected-style" });
+
+    expect(readTemplateDragData(dataTransfer)).toEqual({
+      templateId: template.id,
+      templateVersion: template.version,
+      startingStyleId: "selected-style",
+    });
+  });
+
   it("按时间轴元素左边界把鼠标位置换算为非负整数帧", () => {
     const timeline = document.createElement("div");
     timeline.getBoundingClientRect = () => ({

@@ -249,22 +249,68 @@ function inferLegacyParameterMetadata(parameter: ParameterDefinition): EffectPar
   } as EffectParameterDefinition;
 }
 
+type LegacyCatalogMetadata = Pick<EffectFamilyDefinition, "purposeTags" | "visualDirections">;
+
+const legacyCatalogMetadata: Record<string, LegacyCatalogMetadata> = {
+  "section-title-overlay": {
+    purposeTags: ["标题", "章节"],
+    visualDirections: ["简洁信息", "科技数据"],
+  },
+  "card-overlay": {
+    purposeTags: ["重点标注", "结论"],
+    visualDirections: ["简洁信息", "活力社媒"],
+  },
+  "checklist-overlay": {
+    purposeTags: ["清单", "步骤"],
+    visualDirections: ["简洁信息", "科技数据"],
+  },
+  "comment-panel-overlay": {
+    purposeTags: ["引用", "评论"],
+    visualDirections: ["简洁信息", "活力社媒"],
+  },
+  "tag-pills-overlay": {
+    purposeTags: ["标签", "状态"],
+    visualDirections: ["简洁信息", "活力社媒"],
+  },
+  "bubble-decoration": {
+    purposeTags: ["装饰", "节奏"],
+    visualDirections: ["科技数据", "活力社媒"],
+  },
+  "basic-transition": {
+    purposeTags: ["画面连接"],
+    visualDirections: ["简洁信息"],
+  },
+};
+
+/** 中文注释：为历史模板补齐目录策划信息；未知旧模板按顶层类型给出中性的表达目的和视觉方向。 */
+function getLegacyCatalogMetadata(template: TemplateDefinition): LegacyCatalogMetadata {
+  return legacyCatalogMetadata[template.id] ?? (template.category === "decorative-animation"
+    ? { purposeTags: ["画面点缀"], visualDirections: ["活力社媒"] }
+    : template.category === "transition"
+      ? { purposeTags: ["画面连接"], visualDirections: ["简洁信息"] }
+      : { purposeTags: ["信息说明"], visualDirections: ["简洁信息"] });
+}
+
 /** 中文注释：把旧模板包装成历史特效族适配器，只为统一读取和渲染入口，不把旧模板自动升级为新版族。 */
 export function registerLegacyTemplate(template: TemplateDefinition): void {
+  const { purposeTags, visualDirections } = getLegacyCatalogMetadata(template);
   registerEffectFamily({
     id: template.id,
     version: template.version,
     category: template.category,
     name: template.name,
-    description: template.description,
-    purposeTags: [],
-    visualDirections: [],
+    // 中文注释：旧版基础转场仍按 v1 渲染，但在兼容摘要中明确标注为历史全屏过渡遮罩。
+    description: template.id === "basic-transition"
+      ? `历史全屏过渡遮罩：${template.description}`
+      : template.description,
+    purposeTags,
+    visualDirections,
     defaultDurationInFrames: template.defaultDurationInFrames,
     parameters: template.parameters.map(inferLegacyParameterMetadata),
     startingStyles: [{
       id: "legacy-default",
       name: "旧版默认",
-      visualDirection: "legacy",
+      visualDirection: visualDirections[0],
       defaultParams: getDefaultParams(template.parameters),
     }],
     aspectRatioDefaults: {},

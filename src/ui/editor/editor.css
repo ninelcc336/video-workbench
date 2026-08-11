@@ -261,6 +261,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .media-item__details:not(div):hover strong, .media-item__details:not(div):focus-visible strong { color: var(--color-accent); }
 .muted-copy, .error-copy, .panel-subtitle { color: var(--color-text-subtle); font-size: 11px; line-height: 1.7; }
 .section-divider { height: 1px; margin: 0 18px; background: var(--color-border); }
+/* 中文注释：入口、搜索和用途筛选保持固定控件高度，侧栏滚动时不会因目录内容变化而跳动。 */
+.library-quick-tabs { display: flex; gap: 5px; margin-bottom: 12px; overflow-x: auto; padding: 2px 0 5px; scrollbar-width: none; }
+.library-quick-tabs::-webkit-scrollbar { display: none; }
+.library-quick-tabs button { flex: 0 0 auto; border: 1px solid var(--color-border); border-radius: 7px; padding: 7px 8px; color: var(--color-text-subtle); background: var(--color-field); font-size: 10px; }
+.library-quick-tabs button:hover, .library-quick-tabs button:focus-visible { border-color: var(--color-accent); color: var(--color-text-strong); }
+.library-quick-tabs button.active { border-color: var(--color-accent); color: var(--color-accent-foreground); background: var(--color-accent); font-weight: 800; }
+.library-quick-tabs .library-quick-action { margin-left: auto; color: var(--color-accent); background: transparent; }
+.template-library__search, .template-library__filter { display: grid; gap: 5px; margin-bottom: 9px; color: var(--color-text-subtle); font-size: 10px; }
+.template-library__search input, .template-library__filter select { width: 100%; min-height: 32px; border: 1px solid var(--color-border); border-radius: 7px; padding: 7px 9px; color: var(--color-text-strong); background: var(--color-field); font-size: 11px; }
+.template-library__search input:focus, .template-library__filter select:focus { border-color: var(--color-accent); outline: 2px solid var(--color-accent-focus); outline-offset: 1px; }
 .category-tabs { display: flex; gap: 5px; margin: 0 -4px 12px; overflow-x: auto; padding: 2px 4px 5px; scrollbar-width: none; }
 .category-tabs::-webkit-scrollbar { display: none; }
 .category-tabs button { position: relative; flex: 0 0 auto; border: 1px solid transparent; border-radius: 7px; padding: 7px 8px; color: var(--color-text-subtle); background: transparent; font-size: 10px; transition: color .16s ease, background-color .16s ease, border-color .16s ease; }
@@ -270,15 +280,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 /* 中文注释：固定基础卡片宽度，避免侧栏变宽时单张预览被拉伸；max-width 保障最窄侧栏下仍可完整显示。 */
 .template-card { position: relative; flex: 0 0 210px; width: 210px; max-width: 100%; overflow: hidden; border: 1px solid var(--color-border); border-radius: 11px; background: var(--color-surface-raised); box-shadow: 0 3px 12px var(--color-shadow); transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease, opacity .18s ease; }
 .template-card:hover, .template-card:focus-within { border-color: var(--color-accent); transform: translateY(-2px); box-shadow: 0 10px 22px var(--color-shadow); }
+.template-card--selected { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft), 0 10px 22px var(--color-shadow); }
 .template-card--dragging { border-color: var(--color-accent); opacity: .64; transform: scale(.98); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .template-card__preview { position: relative; display: grid; height: 88px; place-items: center; overflow: hidden; color: var(--color-accent); background: radial-gradient(circle at 76% 24%, var(--color-accent-soft), transparent 37%), linear-gradient(135deg, var(--color-template-a), var(--color-canvas)); }
 .template-card__preview::after { position: absolute; inset: 0; border-bottom: 1px solid var(--color-border); content: ""; pointer-events: none; }
 .template-card__preview > div { z-index: 1; }
-.template-card__content { align-items: flex-end; justify-content: space-between; gap: 8px; padding: 11px 15px 11px 11px; }
+.template-card__content { align-items: flex-end; justify-content: space-between; gap: 8px; padding: 11px 15px 11px 11px; flex-wrap: wrap; }
 /* 中文注释：信息区允许在固定宽度卡片中收缩，让右侧操作区始终留在内容边界内。 */
 .template-card__details { min-width: 0; flex: 1; }
 .template-card strong { color: var(--color-text-strong); font-size: 11px; }
 .template-card p { overflow: hidden; max-width: 155px; margin: 4px 0 0; color: var(--color-text-subtle); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.template-card__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.template-card__tags span { border: 1px solid var(--color-border); border-radius: 5px; padding: 2px 4px; color: var(--color-text-subtle); background: var(--color-field); font-size: 8px; line-height: 1.2; }
+.template-card__styles { display: flex; width: 100%; flex-wrap: wrap; gap: 4px; }
+.template-card__styles button { padding: 4px 6px; color: var(--color-text-subtle); font-size: 9px; }
+.template-card__styles button[aria-checked="true"] { border-color: var(--color-accent); color: var(--color-accent-foreground); background: var(--color-accent); }
+.template-card__actions button[aria-disabled="true"] { border-color: var(--color-border); color: var(--color-text-subtle); background: var(--color-field); }
 /* 中文注释：操作区单独保留右侧安全距离，避免 flex 文本区变化时“添加”按钮重新贴近卡片边缘。 */
 .template-card__actions { display: flex; gap: 5px; padding-right: 8px; }
 .template-card button { flex: 0 0 auto; border: 1px solid var(--color-border-strong); border-radius: 7px; padding: 6px 8px; color: var(--color-accent); background: transparent; font-size: 10px; font-weight: 700; transition: color .16s ease, background-color .16s ease, border-color .16s ease, transform .16s ease; }

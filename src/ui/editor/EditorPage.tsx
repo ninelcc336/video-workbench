@@ -3,7 +3,7 @@ import type { EditorCommand } from "../../domain/editor/commands";
 import type { EditorStore } from "../../domain/editor/editor-store";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
-import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
+import { getTemplate } from "../../domain/templates/registry";
 import type { MediaSources } from "../../remotion/media";
 import type { MediaAsset } from "../../server/workspace/media-repository";
 import type { ExportSettings } from "../../domain/project/model";
@@ -21,6 +21,11 @@ import { PreviewCanvas } from "./PreviewCanvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { TemplateLibrary } from "./TemplateLibrary";
 import { Timeline, type ClipKind } from "./Timeline";
+import {
+  createEffectClipFromTemplate,
+  findTemplateTransitionBoundary,
+  type TemplateTransitionBoundary,
+} from "./drag-and-drop";
 import { importMediaFile, readVideoDimensions } from "./media-import";
 import { getAvailableEffectTrackId } from "./effect-track-layout";
 import { EditorPanelLayout } from "./EditorPanelLayout";
@@ -61,16 +66,21 @@ function createId(prefix: string): string {
   return `${prefix}-${randomUUID}`;
 }
 
-/** 中文注释：新版族适配模板需要把族和起始样式身份一起写入片段，旧模板则返回空对象保持 JSON 形状不变。 */
-function getTemplateFamilyIdentity(
+/**
+ * 中文注释：统一构造页面命令写入的特效片段，合并族身份、默认参数和可用轨道；
+ * 普通范围放置不额外写 placement，只有真实转场保存相邻视频片段绑定。
+ */
+function createEditorEffectClip(
+  project: EditProject,
   template: ReturnType<typeof getTemplate>,
-): Pick<EffectClip, "effectFamilyId" | "startingStyleId"> {
-  return template.effectFamilyId && template.startingStyleId
-    ? {
-        effectFamilyId: template.effectFamilyId,
-        startingStyleId: template.startingStyleId,
-      }
-    : {};
+  fromFrame: number,
+  placement?: EffectClip["placement"],
+): EffectClip {
+  const safeFromFrame = Number.isFinite(fromFrame) ? Math.max(0, Math.round(fromFrame)) : 0;
+  return createEffectClipFromTemplate(template, safeFromFrame, {
+    ...(placement ? { placement } : {}),
+    trackId: getAvailableEffectTrackId(project.effectClips, safeFromFrame, template.defaultDurationInFrames),
+  });
 }
 
 function getClip(project: EditProject, id: string | null): EffectClip | null {
@@ -223,6 +233,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const visibleProject = previewProject ?? project;
   const selectedEffectClip = getClip(visibleProject, selectedClipId);
   const selectedStoredEffectClip = getClip(project, selectedClipId);
+  const transitionBoundary = findTemplateTransitionBoundary(project, currentFrame);
 
   /** 中文注释：拖动特效期间只更新页面级临时项目，让预览、选区和属性面板共享同一结果。 */
   const previewEffectParams = (clipId: string, params: Record<string, unknown>) => {
@@ -243,34 +254,33 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setPreviewProject(null);
   };
 
-  const addTemplate = (templateId: string) => {
-    const template = getTemplate(templateId);
-    const clip: EffectClip = {
-      id: createId("effect"),
-      templateId: template.id,
-      templateVersion: template.version,
-      ...getTemplateFamilyIdentity(template),
-      trackId: getAvailableEffectTrackId(project.effectClips, currentFrame, template.defaultDurationInFrames),
-      fromFrame: currentFrame,
-      durationInFrames: template.defaultDurationInFrames,
-      params: getTemplateDefaultParams(template),
-    };
+  /** 中文注释：播放头添加接收可选起始样式，保证族内样式选择不会退回第一个默认样式。 */
+  const addTemplate = (templateId: string, startingStyleId?: string) => {
+    const template = startingStyleId
+      ? getTemplate(templateId, undefined, startingStyleId)
+      : getTemplate(templateId);
+    const clip = createEditorEffectClip(project, template, currentFrame);
     dispatch({ type: "add-effect-clip", clip });
     setSelectedClipId(clip.id);
   };
 
+  /** 中文注释：播放头之外的添加入口复用同一片段构造规则，只改变特效的起始帧。 */
   const addTemplateAtFrame = (template: ReturnType<typeof getTemplate>, frame: number) => {
-    const fromFrame = Math.max(0, Math.round(frame));
-    const clip: EffectClip = {
-      id: createId("effect"),
-      templateId: template.id,
-      templateVersion: template.version,
-      ...getTemplateFamilyIdentity(template),
-      trackId: getAvailableEffectTrackId(project.effectClips, fromFrame, template.defaultDurationInFrames),
-      fromFrame,
-      durationInFrames: template.defaultDurationInFrames,
-      params: getTemplateDefaultParams(template),
-    };
+    const clip = createEditorEffectClip(project, template, frame);
+    dispatch({ type: "add-effect-clip", clip });
+    setSelectedClipId(clip.id);
+  };
+
+  /** 中文注释：真实转场只保存合法相邻视频片段身份和交界帧，绝不退回普通范围放置；双画面渲染由后续转场合成器消费该声明。 */
+  const addTransitionAtBoundary = (
+    template: ReturnType<typeof getTemplate>,
+    boundary: TemplateTransitionBoundary,
+  ) => {
+    const clip = createEditorEffectClip(project, template, boundary.frame, {
+      type: "boundary",
+      beforeVideoClipId: boundary.beforeVideoClipId,
+      afterVideoClipId: boundary.afterVideoClipId,
+    });
     dispatch({ type: "add-effect-clip", clip });
     setSelectedClipId(clip.id);
   };
@@ -635,11 +645,11 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         {projectError ? <div aria-label="视频工作区错误" className="workspace-error" role="alert"><span>{projectError}</span><button onClick={onRetryProject} type="button">重试</button>{backupAvailable && onRecoverProject ? <button onClick={onRecoverProject} type="button">从最近备份恢复</button> : null}<button onClick={onDismissProjectError} type="button">返回编辑</button></div> : null}
       {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
       <EditorPanelLayout>
-        <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onAddMedia={addMediaToTimeline} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} /></aside>
+        <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onAddMedia={addMediaToTimeline} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} onAddTransitionAtBoundary={addTransitionAtBoundary} onInvalidTransition={() => setNotice("片段转场只能放在相邻视频片段交界点。") } onOpenPresets={() => { setPresetError(selectedStoredEffectClip ? undefined : "请先选择一个特效片段，再保存或套用个人预设。"); setPresetOpen(true); }} selectedEffectFamilyId={selectedEffectClip?.effectFamilyId ?? selectedEffectClip?.templateId ?? null} transitionBoundary={transitionBoundary} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
         <PropertiesPanel onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
-      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
+      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onDropTransition={addTransitionAtBoundary} onInvalidTemplateDrop={setNotice} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => void cancelRender()} onDismiss={dismissRenderStatus} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} returnFocusRef={exportTriggerRef} />

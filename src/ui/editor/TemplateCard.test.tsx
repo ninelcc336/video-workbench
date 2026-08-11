@@ -105,4 +105,75 @@ describe("特效模板卡片", () => {
     fireEvent.dragEnd(card);
     expect(card.classList.contains("template-card--dragging")).toBe(false);
   });
+
+  it("拖放开始不记录最近使用，只有目标确认成功后才记录", () => {
+    const onTemplateUsed = vi.fn();
+    const dataTransfer = {
+      dropEffect: "none",
+      effectAllowed: "",
+      setData: vi.fn(),
+    } as unknown as DataTransfer;
+    const template = {
+      ...createTemplate(() => <span />),
+      effectFamilyId: "test-family",
+      startingStyleId: "default",
+    };
+    render(<TemplateCard onTemplateUsed={onTemplateUsed} template={template} />);
+    const card = screen.getByRole("article");
+
+    fireEvent.dragStart(card, { dataTransfer });
+    expect(onTemplateUsed).not.toHaveBeenCalled();
+
+    fireEvent.dragEnd(card, { dataTransfer });
+    expect(onTemplateUsed).not.toHaveBeenCalled();
+
+    dataTransfer.dropEffect = "copy";
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragEnd(card, { dataTransfer });
+    expect(onTemplateUsed).toHaveBeenCalledWith({
+      familyId: "test-family",
+      startingStyleId: "default",
+      version: 1,
+    });
+  });
+
+  it("只有进入可见区域的卡片才启动预览，离屏后停止更新", () => {
+    vi.useFakeTimers();
+    const renderTemplate = vi.fn(({ frame }: { frame: number }) => <span>{frame}</span>);
+    let onIntersection: ((entries: Array<{ isIntersecting: boolean }>) => void) | undefined;
+    class FakeIntersectionObserver {
+      constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) {
+        onIntersection = callback;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    render(<TemplateCard template={createTemplate(renderTemplate)} />);
+    const initialCallCount = renderTemplate.mock.calls.length;
+
+    act(() => onIntersection?.([{ isIntersecting: true }]));
+    act(() => vi.advanceTimersByTime(50));
+    expect(renderTemplate.mock.calls.length).toBeGreaterThan(initialCallCount);
+
+    const callCountWhileVisible = renderTemplate.mock.calls.length;
+    act(() => onIntersection?.([{ isIntersecting: false }]));
+    const callCountAfterLeavingViewport = renderTemplate.mock.calls.length;
+    act(() => vi.advanceTimersByTime(100));
+    expect(callCountAfterLeavingViewport).toBeGreaterThanOrEqual(callCountWhileVisible);
+    expect(renderTemplate.mock.calls.length).toBe(callCountAfterLeavingViewport);
+  });
+
+  it("当前选中的卡片即使离屏也保留短预览", () => {
+    vi.useFakeTimers();
+    const renderTemplate = vi.fn(() => <span />);
+
+    render(<TemplateCard isSelected template={createTemplate(renderTemplate)} />);
+    const initialCallCount = renderTemplate.mock.calls.length;
+
+    act(() => vi.advanceTimersByTime(50));
+
+    expect(renderTemplate.mock.calls.length).toBeGreaterThan(initialCallCount);
+  });
 });

@@ -114,6 +114,18 @@ describe("特效模板注册表", () => {
     );
   });
 
+  it("旧模板族摘要提供用途标签和视觉方向元数据", () => {
+    // 中文注释：旧版仍需保留历史渲染，但目录搜索不能因为兼容适配而丢失策划信息。
+    expect(getEffectFamily("section-title-overlay", 1)).toMatchObject({
+      purposeTags: expect.arrayContaining(["标题"]),
+      visualDirections: expect.arrayContaining(["简洁信息"]),
+    });
+    expect(getEffectFamily("basic-transition", 1)).toMatchObject({
+      description: expect.stringContaining("历史全屏过渡遮罩"),
+      purposeTags: expect.arrayContaining(["画面连接"]),
+    });
+  });
+
   it("旧 registry 兼容门面能发现并创建新版特效族片段", () => {
     const family: EffectFamilyDefinition = {
       id: "registry-family-fixture",

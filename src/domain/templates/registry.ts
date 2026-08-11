@@ -37,7 +37,22 @@ export const registerTemplate = (template: TemplateDefinition): void => {
   registerLegacyTemplate(template);
 };
 
-export const getTemplate = (templateId: string, version?: number): TemplateDefinition => {
+/** 中文注释：按稳定模板身份读取兼容定义；提供起始样式时返回统一特效族适配器，不改变历史版本选择规则。 */
+export const getTemplate = (
+  templateId: string,
+  version?: number,
+  startingStyleId?: string,
+): TemplateDefinition => {
+  if (startingStyleId !== undefined) {
+    try {
+      return createTemplateDefinitionAdapter(
+        getEffectFamily(templateId, version),
+        startingStyleId,
+      );
+    } catch {
+      // 中文注释：没有新版族或样式时继续走旧模板查找，保持历史模板的异常契约。
+    }
+  }
   if (version !== undefined) {
     const template = templates.get(templateKey(templateId, version));
     if (template) {
