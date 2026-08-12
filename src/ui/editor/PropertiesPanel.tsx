@@ -17,7 +17,6 @@ import {
   getDefaultParams,
   normalizeParameterValuesWithDiagnostics,
 } from "../../domain/templates/parameter-schema";
-import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
 import type {
   AnimationPhaseValue,
   AnimationStageParameterDefinition,
@@ -30,7 +29,7 @@ import type {
   SizeParameterDefinition,
   SpacingParameterDefinition,
   StructuredListParameterDefinition,
-  TemplateDefinition,
+  EffectFamilyDefinition,
 } from "../../domain/templates/types";
 
 export type PropertiesPanelProps = {
@@ -43,8 +42,6 @@ export type PropertiesPanelProps = {
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
   /** 中文注释：样式选择只向页面命令层发送族内样式身份，面板不直接修改项目快照。 */
   onSwitchStartingStyle?: (clipId: string, startingStyleId: string) => void;
-  /** 中文注释：显式升级入口只请求预览，确认后的版本迁移由页面通过一次命令提交。 */
-  onRequestUpgrade?: (clipId: string) => void;
 };
 
 type EditorMode = "basic" | "advanced";
@@ -115,14 +112,9 @@ function getParameterLevel(parameter: ParameterDefinition): ParameterLevel {
   return parameter.level ?? "basic";
 }
 
-/** 中文注释：面板优先读取特效族深模块补齐后的参数声明，只有注册表异常时才回退到模板原始声明。 */
-function getPanelParameters(template: TemplateDefinition): ReadonlyArray<ParameterDefinition> {
-  try {
-    return getEffectFamily(template.effectFamilyId ?? template.id, template.version).parameters;
-  } catch {
-    // 中文注释：兼容外部测试或历史调用方传入的未注册模板，保留原有参数面板能力。
-    return template.parameters;
-  }
+/** 中文注释：属性面板只消费当前特效族声明，不为旧模板保留参数或渲染回退。 */
+function getPanelParameters(family: EffectFamilyDefinition): ReadonlyArray<ParameterDefinition> {
+  return family.parameters;
 }
 
 function getControlLabel(definition: ParameterDefinition, labelSuffix?: string): string {
@@ -278,22 +270,17 @@ function getBasicParameters(parameters: ReadonlyArray<ParameterDefinition>): Par
   return parameters.filter((parameter) => getParameterLevel(parameter) === "basic").slice(0, 8);
 }
 
-/** 中文注释：按当前画幅生成分组重置值，旧模板没有画幅覆盖时回退到原有默认参数。 */
-function getResetParams(template: TemplateDefinition, project: EditProject): Record<string, unknown> {
-  try {
-    const family = getEffectFamily(template.effectFamilyId ?? template.id, template.version);
-    const startingStyleId = template.startingStyleId ?? family.startingStyles[0]?.id;
-    if (startingStyleId) {
-      return createEffectFamilyInstance(
-        family,
-        startingStyleId,
-        getAspectRatioForCanvas(project.settings.width, project.settings.height),
-      ).params;
-    }
-  } catch {
-    // 中文注释：旧模板必须继续使用原有默认值，不能因为新版族元数据缺失而阻断属性面板。
-  }
-  return getTemplateDefaultParams(template);
+/** 中文注释：按当前片段的起始样式和画幅生成分组重置值，重置不会回退到其他族或旧模板默认值。 */
+function getResetParams(
+  family: EffectFamilyDefinition,
+  startingStyleId: string,
+  project: EditProject,
+): Record<string, unknown> {
+  return createEffectFamilyInstance(
+    family,
+    startingStyleId,
+    getAspectRatioForCanvas(project.settings.width, project.settings.height),
+  ).params;
 }
 
 function DiagnosticMessages({ diagnostics }: { diagnostics: PanelDiagnostic[] }): ReactNode {
@@ -1147,7 +1134,6 @@ export function PropertiesPanel({
   onPreviewParams,
   onChangeParams,
   onSwitchStartingStyle,
-  onRequestUpgrade,
 }: PropertiesPanelProps) {
   const [mode, setMode] = useState<EditorMode>("basic");
   const [openGroups, setOpenGroups] = useState<Record<ParameterGroup, boolean>>({
@@ -1167,32 +1153,20 @@ export function PropertiesPanel({
     );
   }
 
-  let template: TemplateDefinition;
+  let family: EffectFamilyDefinition;
   try {
-    template = getTemplate(selectedClip.templateId, selectedClip.templateVersion);
+    family = getEffectFamily(selectedClip.effectFamilyId, selectedClip.templateVersion);
   } catch {
-    return <aside className="panel properties-panel"><div className="panel-heading"><span className="eyebrow">Inspector</span><h2>特效参数</h2></div><p className="error-copy">找不到这个特效模板，请重新选择。</p></aside>;
+    return <aside className="panel properties-panel"><div className="panel-heading"><span className="eyebrow">Inspector</span><h2>特效参数</h2></div><p className="error-copy">这个特效与当前目录版本不兼容，请重新添加特效。</p></aside>;
   }
 
-  let family: ReturnType<typeof getEffectFamily> | null = null;
-  try {
-    family = getEffectFamily(selectedClip.effectFamilyId ?? template.id, selectedClip.templateVersion);
-  } catch {
-    // 中文注释：没有新版族元数据的外部旧模板继续显示原有参数面板，不阻断历史片段编辑。
+  const styleId = family.startingStyles.find((style) => style.id === selectedClip.startingStyleId)?.id;
+  if (!styleId) {
+    return <aside className="panel properties-panel"><div className="panel-heading"><span className="eyebrow">Inspector</span><h2>特效参数</h2></div><p className="error-copy">这个特效的起始样式与当前目录版本不兼容，请重新添加特效。</p></aside>;
   }
-  const styleId = family?.startingStyles.find((style) => style.id === selectedClip.startingStyleId)?.id
-    ?? family?.startingStyles[0]?.id;
-  const latestFamily = family ? (() => {
-    try {
-      return getEffectFamily(family.id);
-    } catch {
-      return family;
-    }
-  })() : null;
-  const canUpgrade = Boolean(latestFamily && family && latestFamily.version > family.version && onRequestUpgrade);
 
   const rawParams = paramsSnapshot ?? selectedClip.params;
-  const parameters = getPanelParameters(template);
+  const parameters = getPanelParameters(family);
   const normalized = normalizeParameterValuesWithDiagnostics(parameters, rawParams);
   const diagnostics = buildPanelDiagnostics(parameters, rawParams, normalized);
   if (selectedClip.placement?.type === "boundary") {
@@ -1205,7 +1179,7 @@ export function PropertiesPanel({
     );
   }
   const basicParameters = getBasicParameters(parameters);
-  const resetParams = getResetParams(template, project);
+  const resetParams = getResetParams(family, styleId, project);
   const values = mode === "basic"
     ? Object.fromEntries(parameters.map((parameter) => {
         const current = normalized.values[parameter.key];
@@ -1248,21 +1222,16 @@ export function PropertiesPanel({
   return (
     <aside aria-label="特效参数面板" className="panel properties-panel">
       <div className="panel-heading">
-        <span className="eyebrow">Inspector / {template.category === "transition" ? "转场" : "特效"}</span>
+        <span className="eyebrow">Inspector / {family.category === "transition" ? "转场" : "特效"}</span>
         <h2>特效参数</h2>
-        <p className="panel-subtitle">{template.name}</p>
-        {family && family.startingStyles.length > 1 && styleId ? (
+        <p className="panel-subtitle">{family.name}</p>
+        {family.startingStyles.length > 1 ? (
           <label className="properties-style-select">
             <span>起始样式</span>
             <select aria-label="起始样式" onChange={(event) => onSwitchStartingStyle?.(selectedClip.id, event.target.value)} value={styleId}>
               {family.startingStyles.map((style) => <option key={style.id} value={style.id}>{style.name}</option>)}
             </select>
           </label>
-        ) : null}
-        {canUpgrade ? (
-          <button className="properties-upgrade" onClick={() => onRequestUpgrade?.(selectedClip.id)} type="button">
-            预览特效升级 · v{latestFamily?.version}
-          </button>
         ) : null}
         <div aria-label="特效参数编辑模式" className="properties-mode" role="group">
           <span className="properties-mode__label">{advanced ? "高级参数" : "基础参数"}</span>

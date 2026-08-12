@@ -363,12 +363,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .properties-mode__toggle, .parameter-group__toggle, .parameter-group__reset, .structured-list-item__actions button, .structured-list-control__add, .gradient-control > button, .gradient-stop > button { border: 1px solid var(--color-border-strong); border-radius: 7px; padding: 6px 8px; color: var(--color-text-strong); background: var(--color-field); font-size: 10px; font-weight: 700; }
 .properties-mode__toggle:hover, .parameter-group__toggle:hover, .parameter-group__reset:hover, .structured-list-item__actions button:hover:not(:disabled), .structured-list-control__add:hover:not(:disabled), .gradient-control > button:hover:not(:disabled), .gradient-stop > button:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent-foreground); background: var(--color-accent); }
 .properties-mode__toggle:disabled, .parameter-group__reset:disabled, .structured-list-item__actions button:disabled, .structured-list-control__add:disabled, .gradient-control > button:disabled, .gradient-stop > button:disabled { cursor: not-allowed; opacity: .45; }
-/* 中文注释：样式与升级入口放在面板标题下方，保留紧凑工作台的扫描层级并适配深浅主题。 */
+/* 中文注释：样式切换入口放在面板标题下方，保留紧凑工作台的扫描层级并适配深浅主题。 */
 .properties-style-select { display: grid; gap: 6px; margin-top: 12px; color: var(--color-text-subtle); font-size: 10px; font-weight: 700; }
 .properties-style-select select { width: 100%; border: 1px solid var(--color-border-strong); border-radius: 7px; padding: 8px 9px; outline: none; color: var(--color-text-strong); background: var(--color-field); font-size: 11px; }
 .properties-style-select select:focus { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft); }
-.properties-upgrade { width: 100%; margin-top: 9px; border: 1px solid var(--color-accent); border-radius: 7px; padding: 8px 9px; color: var(--color-accent-foreground); background: var(--color-accent-soft); font-size: 10px; font-weight: 800; text-align: left; }
-.properties-upgrade:hover { background: var(--color-accent); }
 .property-diagnostics { display: grid; gap: 5px; margin: 12px 20px 0; border: 1px solid var(--color-border); border-radius: 9px; padding: 9px 10px; }
 .property-diagnostics h3 { margin: 0; color: var(--color-text-strong); font-size: 10px; }
 .property-diagnostics--error { border-color: var(--color-danger); background: var(--color-danger-surface); }
@@ -550,7 +548,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .asset-dialog__apply:not(:disabled):hover { border-color: var(--color-accent); background: var(--color-field-hover); }
 .asset-dialog__delete { flex: 0 0 auto; border: 1px solid var(--color-danger); border-radius: 8px; padding: 0 10px; color: var(--color-danger-text); background: transparent; font-size: 10px; }
 .asset-dialog__delete:hover { background: var(--color-danger-surface); }
-/* 中文注释：样式切换与版本升级共用差异面板，参数列表在窄窗口中可滚动且不会撑破对话框。 */
+/* 中文注释：样式切换使用差异面板，参数列表在窄窗口中可滚动且不会撑破对话框。 */
 .effect-change-dialog { gap: 14px; }
 .effect-change-dialog__section { display: grid; gap: 7px; border: 1px solid var(--color-border); border-radius: 9px; padding: 10px; background: var(--color-surface-raised); }
 .effect-change-dialog__section--warning { border-color: var(--color-accent-focus); background: var(--color-accent-soft); }

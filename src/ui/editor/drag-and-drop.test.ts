@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from "vitest";
-import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
+import { createEffectFamilyInstance, getEffectFamily } from "../../domain/templates/effect-family";
+import "../../domain/templates/registry";
 import {
   createEffectClipFromTemplate,
   getDropFrame,
@@ -11,19 +12,22 @@ import {
 
 describe("模板拖放辅助函数", () => {
   it("把放置位置吸附为非负整数帧，并使用模板默认值", () => {
-    const template = getTemplate("card-overlay", 1);
-    const clip = createEffectClipFromTemplate(template, -2.4);
+    const family = getEffectFamily("card-overlay", 1);
+    const clip = createEffectClipFromTemplate(family, "default", -2.4);
 
     expect(clip.fromFrame).toBe(0);
-    expect(clip.durationInFrames).toBe(template.defaultDurationInFrames);
-    expect(clip.params).toEqual(getTemplateDefaultParams(template));
-    expect(clip.templateId).toBe(template.id);
-    expect(clip.templateVersion).toBe(template.version);
+    expect(clip.durationInFrames).toBe(family.defaultDurationInFrames);
+    expect(clip.params).toEqual(createEffectFamilyInstance(family, "default", "16:9").params);
+    expect(clip.templateId).toBe(family.id);
+    expect(clip.effectFamilyId).toBe(family.id);
+    expect(clip.startingStyleId).toBe("default");
+    expect(clip.placement).toEqual({ type: "range" });
+    expect(clip.templateVersion).toBe(family.version);
     expect(clip.trackId).toBe("effects-1");
   });
 
   it("将拖放数据往返为模板身份", () => {
-    const template = getTemplate("bubble-decoration", 1);
+    const family = getEffectFamily("bubble-decoration", 1);
     const values = new Map<string, string>();
     const dataTransfer = {
       effectAllowed: "",
@@ -31,16 +35,17 @@ describe("模板拖放辅助函数", () => {
       getData: (type: string) => values.get(type) ?? "",
     } as unknown as DataTransfer;
 
-    writeTemplateDragData(dataTransfer, template);
+    writeTemplateDragData(dataTransfer, family, "default");
 
     expect(readTemplateDragData(dataTransfer)).toEqual({
-      templateId: template.id,
-      templateVersion: template.version,
+      effectFamilyId: family.id,
+      effectFamilyVersion: family.version,
+      startingStyleId: "default",
     });
   });
 
   it("拖放族卡片时保留用户选择的起始样式", () => {
-    const template = getTemplate("card-overlay", 1);
+    const family = getEffectFamily("card-overlay", 1);
     const values = new Map<string, string>();
     const dataTransfer = {
       effectAllowed: "",
@@ -48,12 +53,12 @@ describe("模板拖放辅助函数", () => {
       getData: (type: string) => values.get(type) ?? "",
     } as unknown as DataTransfer;
 
-    writeTemplateDragData(dataTransfer, { ...template, effectFamilyId: "family", startingStyleId: "selected-style" });
+    writeTemplateDragData(dataTransfer, family, "default");
 
     expect(readTemplateDragData(dataTransfer)).toEqual({
-      templateId: template.id,
-      templateVersion: template.version,
-      startingStyleId: "selected-style",
+      effectFamilyId: family.id,
+      effectFamilyVersion: family.version,
+      startingStyleId: "default",
     });
   });
 

@@ -84,7 +84,7 @@ function printHelp(): void {
   console.log(`用法：
   npm run test:visual
   npm run test:visual -- --family checklist-overlay
-  npm run test:visual -- --family checklist-overlay --style legacy-default
+  npm run test:visual -- --family checklist-overlay --style default
   npm run test:visual -- --update
 
 选项：

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { deserializeEffectClip, LEGACY_DEFAULT_STARTING_STYLE_ID } from "./serialization";
+import { deserializeEffectClip } from "./serialization";
 
-describe("旧版特效片段兼容读取", () => {
-  it("为缺少特效族、起始样式和放置类型的旧 JSON 保留原模板并补齐兼容标记", () => {
+describe("当前特效片段序列化格式", () => {
+  it("拒绝缺少特效族、起始样式和放置类型的开发期旧 JSON", () => {
     const legacyClip = {
       id: "legacy-transition",
       templateId: "basic-transition",
@@ -13,18 +13,17 @@ describe("旧版特效片段兼容读取", () => {
       params: { style: "wipe", color: "#111827" },
     };
 
-    expect(deserializeEffectClip(legacyClip)).toEqual({
-      ...legacyClip,
-      startingStyleId: LEGACY_DEFAULT_STARTING_STYLE_ID,
-      placement: { type: "range" },
-    });
+    expect(() => deserializeEffectClip(legacyClip)).toThrow("请重建视频工作区");
   });
 
-  it("不把旧基础转场自动改成绑定相邻视频片段的真实片段转场", () => {
+  it("读取当前范围放置时不猜测为真实片段转场", () => {
     const clip = deserializeEffectClip({
       id: "legacy-transition",
       templateId: "basic-transition",
       templateVersion: 1,
+      effectFamilyId: "basic-transition",
+      startingStyleId: "default",
+      placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 45,
       durationInFrames: 15,

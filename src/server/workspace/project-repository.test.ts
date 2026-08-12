@@ -80,7 +80,7 @@ describe("项目仓储", () => {
     ]);
   });
 
-  it("兼容读取缺少新版元数据的旧特效片段，并保留基础转场的范围放置", async () => {
+  it("拒绝读取缺少新版元数据的旧特效片段并提示重建", async () => {
     const { adapter, root } = await createTestAdapter();
     const paths = getWorkspacePaths(root);
     const legacyProject = {
@@ -103,15 +103,10 @@ describe("项目仓储", () => {
       "utf8",
     );
 
-    const loaded = await adapter.loadProject("legacy-effects");
-
-    expect(loaded.effectClips[0]).toMatchObject({
-      templateId: "basic-transition",
-      templateVersion: 1,
-      startingStyleId: "legacy-default",
-      placement: { type: "range" },
+    await expect(adapter.loadProject("legacy-effects")).rejects.toMatchObject({
+      code: "corrupt_project",
+      message: expect.stringContaining("重建视频工作区"),
     });
-    expect(loaded.effectClips[0].placement).not.toHaveProperty("beforeVideoClipId");
     expect(JSON.parse(await readFile(projectFilePath(paths, "legacy-effects"), "utf8"))).toEqual(legacyProject);
   });
 

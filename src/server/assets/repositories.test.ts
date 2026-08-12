@@ -34,20 +34,24 @@ describe("个人资产仓储", () => {
       { text: "知识点" },
       "我的卡片",
       "preset-1",
+      "full",
+      "card-overlay",
     );
 
     await expect(presetRepository.loadPreset("preset-1")).resolves.toEqual(saved);
     const raw = await readFile(join(root, "presets", "preset-1.json"), "utf8");
     expect(JSON.parse(raw)).toEqual({
+      effectFamilyId: "card-overlay",
       templateId: "card-overlay",
       templateVersion: 1,
       name: "我的卡片",
+      scope: "full",
       params: { text: "知识点" },
     });
     await expect(presetRepository.listPresets()).resolves.toHaveLength(1);
   });
 
-  it("兼容读取缺少范围字段的旧个人预设，并按完整预设保留内容", async () => {
+  it("拒绝读取缺少范围和特效族身份的开发期旧个人预设", async () => {
     const { root, presetRepository } = await createRepositories();
     const legacyPresetPath = join(root, "presets", "legacy-preset.json");
     await writeFile(
@@ -61,14 +65,7 @@ describe("个人资产仓储", () => {
       "utf8",
     );
 
-    await expect(presetRepository.loadPreset("legacy-preset")).resolves.toEqual({
-      id: "legacy-preset",
-      templateId: "card-overlay",
-      templateVersion: 1,
-      name: "旧版卡片",
-      scope: "full",
-      params: { text: "保留旧文案" },
-    });
+    await expect(presetRepository.loadPreset("legacy-preset")).rejects.toThrow("请删除后重新创建");
   });
 
   it("保存并读取视频模板，内容只包含相对特效布局", async () => {
@@ -76,10 +73,14 @@ describe("个人资产仓储", () => {
     const template = {
       id: "template-1",
       name: "知识点模板",
+      fps: 30,
       effectClips: [
         {
           templateId: "card-overlay",
           templateVersion: 1,
+          effectFamilyId: "card-overlay",
+          startingStyleId: "default",
+          placement: { type: "range" },
           trackId: "effects-1",
           fromFrame: 0,
           durationInFrames: 30,

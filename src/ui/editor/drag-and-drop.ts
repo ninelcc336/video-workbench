@@ -1,14 +1,14 @@
-import { getTemplateDefaultParams } from "../../domain/templates/registry";
 import type { EditProject, EffectClip } from "../../domain/project/model";
-import type { TemplateDefinition } from "../../domain/templates/types";
+import { createEffectFamilyInstance, getAspectRatioForCanvas } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition } from "../../domain/templates/types";
 
 /** 中文注释：使用自定义 MIME 类型，避免模板拖放与普通文本拖放混淆。 */
 export const TEMPLATE_DRAG_MIME = "application/x-video-effect-template";
 
 export type TemplateDragData = {
-  templateId: string;
-  templateVersion: number;
-  startingStyleId?: string;
+  effectFamilyId: string;
+  effectFamilyVersion: number;
+  startingStyleId: string;
 };
 
 export type TemplateTransitionBoundary = {
@@ -34,7 +34,8 @@ function createId(prefix: string): string {
  * 无效帧会回退到 0，参数始终从模板默认值深拷贝，避免新片段共享可变状态。
  */
 export function createEffectClipFromTemplate(
-  template: TemplateDefinition,
+  family: EffectFamilyDefinition,
+  startingStyleId: string,
   dropFrame: number,
   options: EffectClipCreationOptions = {},
 ): EffectClip {
@@ -42,38 +43,39 @@ export function createEffectClipFromTemplate(
     ? Math.max(0, Math.round(dropFrame))
     : 0;
 
-  const familyIdentity = template.effectFamilyId && template.startingStyleId
-    ? {
-        effectFamilyId: template.effectFamilyId,
-        startingStyleId: template.startingStyleId,
-      }
-    : {};
+  const instance = createEffectFamilyInstance(
+    family,
+    startingStyleId,
+    getAspectRatioForCanvas(1920, 1080),
+  );
 
   return {
     id: createId("effect"),
-    templateId: template.id,
-    templateVersion: template.version,
-    ...familyIdentity,
-    ...(options.placement ? { placement: options.placement } : {}),
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId,
+    placement: options.placement ?? { type: "range" },
     trackId: options.trackId ?? "effects-1",
     fromFrame: safeDropFrame,
-    durationInFrames: template.defaultDurationInFrames,
-    params: getTemplateDefaultParams(template),
+    durationInFrames: instance.durationInFrames,
+    params: instance.params,
   };
 }
 
 /** 中文注释：将模板身份写入 DataTransfer，文本值用于不支持自定义 MIME 的浏览器回退。 */
 export function writeTemplateDragData(
   dataTransfer: DataTransfer,
-  template: TemplateDefinition,
+  family: EffectFamilyDefinition,
+  startingStyleId: string,
 ): void {
   const payload: TemplateDragData = {
-    templateId: template.id,
-    templateVersion: template.version,
-    ...(template.startingStyleId ? { startingStyleId: template.startingStyleId } : {}),
+    effectFamilyId: family.id,
+    effectFamilyVersion: family.version,
+    startingStyleId,
   };
   dataTransfer.setData(TEMPLATE_DRAG_MIME, JSON.stringify(payload));
-  dataTransfer.setData("text/plain", template.id);
+  dataTransfer.setData("text/plain", family.id);
   dataTransfer.effectAllowed = "copy";
 }
 
@@ -86,23 +88,22 @@ export function readTemplateDragData(
 
   try {
     const value = JSON.parse(raw) as Partial<TemplateDragData>;
-    const templateVersion = value.templateVersion;
+    const templateVersion = value.effectFamilyVersion;
     if (
-      typeof value.templateId !== "string" ||
+      typeof value.effectFamilyId !== "string" ||
       typeof templateVersion !== "number" ||
       !Number.isInteger(templateVersion) ||
-      templateVersion < 1
+      templateVersion < 1 ||
+      typeof value.startingStyleId !== "string" ||
+      !value.startingStyleId.trim()
     ) {
       return null;
     }
     const result: TemplateDragData = {
-      templateId: value.templateId,
-      templateVersion,
+      effectFamilyId: value.effectFamilyId,
+      effectFamilyVersion: templateVersion,
+      startingStyleId: value.startingStyleId,
     };
-    if (value.startingStyleId !== undefined) {
-      if (typeof value.startingStyleId !== "string" || !value.startingStyleId.trim()) return null;
-      result.startingStyleId = value.startingStyleId;
-    }
     return result;
   } catch {
     return null;

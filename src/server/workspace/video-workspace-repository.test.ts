@@ -3,14 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
-import { LEGACY_DEFAULT_STARTING_STYLE_ID } from "../../domain/project/serialization";
-import { createWorkspaceAdapter } from "./workspace-adapter";
 import { VideoWorkspaceAdapter } from "./video-workspace-adapter";
 import { VideoWorkspaceRepository } from "./video-workspace-repository";
 
 const temporaryRoots: string[] = [];
 
-/** 中文注释：为每个用例创建独立目录，避免迁移测试碰到开发机上的真实视频数据。 */
+/** 中文注释：为每个用例创建独立目录，避免工作区读取测试碰到开发机上的真实视频数据。 */
 async function createTemporaryRoot(prefix: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   temporaryRoots.push(root);
@@ -41,10 +39,11 @@ describe("视频工作区仓储", () => {
     expect((await stat(join(repository.getWorkspacePaths("视频 A").media, asset.fileName))).isFile()).toBe(true);
   });
 
-  it("读取视频工作区时补齐旧特效片段元数据，但不改写模板版本和原始快照", async () => {
+  it("拒绝读取缺少新版元数据的旧特效片段并提示重建", async () => {
     const root = await createTemporaryRoot("legacy-video-workspace-");
     const repository = new VideoWorkspaceRepository(root);
     await repository.initialize();
+    await repository.createWorkspace("旧视频", createEmptyProject());
     const legacyWorkspace = {
       ...createEmptyProject(),
       effectClips: [{
@@ -57,56 +56,32 @@ describe("视频工作区仓储", () => {
         trackId: "effects-1",
       }],
     };
-    await repository.createWorkspace("旧视频", legacyWorkspace);
+    const snapshotPath = join(repository.getWorkspacePaths("旧视频").root, "workspace.json");
+    await writeFile(snapshotPath, `${JSON.stringify(legacyWorkspace, null, 2)}\n`, "utf8");
 
-    const loaded = await repository.loadWorkspace("旧视频");
-
-    expect(loaded.effectClips[0]).toMatchObject({
-      startingStyleId: LEGACY_DEFAULT_STARTING_STYLE_ID,
-      placement: { type: "range" },
-      templateVersion: 1,
-      params: { text: "历史内容" },
+    await expect(repository.loadWorkspace("旧视频")).rejects.toMatchObject({
+      code: "corrupt_project",
+      message: expect.stringContaining("重建视频工作区"),
     });
-    expect(JSON.parse(await readFile(join(repository.getWorkspacePaths("旧视频").root, "workspace.json"), "utf8"))).toEqual(legacyWorkspace);
+    await expect(readFile(snapshotPath, "utf8")).resolves.toBe(`${JSON.stringify(legacyWorkspace, null, 2)}\n`);
   });
 
-  it("迁移共享素材时为每个引用工作区复制一份文件", async () => {
-    const legacyRoot = await createTemporaryRoot("legacy-shared-library-");
-    const destinationRoot = await createTemporaryRoot("isolated-video-workspaces-");
-    const legacy = createWorkspaceAdapter(legacyRoot);
-    await legacy.createWorkspace();
-    const source = join(legacyRoot, "shared.mp4");
-    await writeFile(source, "旧共享素材");
-    const asset = await legacy.importMedia({ mimeType: "video/mp4", originalName: "shared.mp4", path: source });
-    const project = createEmptyProject();
-    project.videoClips.push({ audioEnabled: true, durationInFrames: 30, fromFrame: 0, id: "clip", mediaId: asset.id, sourceStartFrame: 0 });
-    await legacy.createProject("视频 A", project);
-    await legacy.createProject("视频 B", project);
+  it("拒绝读取缺少当前顶层字段的工作区并提示重建", async () => {
+    const root = await createTemporaryRoot("invalid-video-workspace-");
+    const repository = new VideoWorkspaceRepository(root);
+    await repository.initialize();
+    await repository.createWorkspace("缺字段视频", createEmptyProject());
+    const snapshotPath = join(repository.getWorkspacePaths("缺字段视频").root, "workspace.json");
+    const invalidWorkspace = {
+      ...createEmptyProject(),
+      settings: { width: 1080, height: 1920 },
+    };
+    await writeFile(snapshotPath, `${JSON.stringify(invalidWorkspace, null, 2)}\n`, "utf8");
 
-    const repository = new VideoWorkspaceRepository(destinationRoot);
-    await repository.migrateLegacyLibrary(legacy.getPaths());
-
-    await expect(repository.loadWorkspace("视频 A")).resolves.toEqual(project);
-    await expect(repository.loadWorkspace("视频 B")).resolves.toEqual(project);
-    await expect(repository.getMediaRepository("视频 A").getMediaAsset(asset.id)).resolves.toMatchObject({ id: asset.id });
-    await expect(repository.getMediaRepository("视频 B").getMediaAsset(asset.id)).resolves.toMatchObject({ id: asset.id });
-    expect(repository.getWorkspacePaths("视频 A").media).not.toBe(repository.getWorkspacePaths("视频 B").media);
-  });
-
-  it("旧数据迁移失败时不留下半完成工作区，并保留原始数据供修复后重试", async () => {
-    const legacyRoot = await createTemporaryRoot("legacy-shared-library-");
-    const destinationRoot = await createTemporaryRoot("isolated-video-workspaces-");
-    const legacy = createWorkspaceAdapter(legacyRoot);
-    await legacy.createWorkspace();
-    const validProject = createEmptyProject();
-    await legacy.createProject("可迁移视频", validProject);
-    const corruptProjectPath = join(legacy.getPaths().projects, "损坏视频.json");
-    await writeFile(corruptProjectPath, "{损坏快照", "utf8");
-
-    const repository = new VideoWorkspaceRepository(destinationRoot);
-    await expect(repository.migrateLegacyLibrary(legacy.getPaths())).rejects.toMatchObject({ code: "corrupt_project" });
-    await expect(repository.listWorkspaces()).resolves.toEqual([]);
-    await expect(readFile(corruptProjectPath, "utf8")).resolves.toBe("{损坏快照");
+    await expect(repository.loadWorkspace("缺字段视频")).rejects.toMatchObject({
+      code: "corrupt_project",
+      message: expect.stringContaining("重建视频工作区"),
+    });
   });
 
   it("工作区内删除素材不会扫描其他工作区，但会保护自己的时间轴引用", async () => {

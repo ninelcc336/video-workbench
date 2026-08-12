@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, FocusEvent } from "react";
-import { getTemplateDefaultParams } from "../../domain/templates/registry";
-import type { EffectFamilySummary, TemplateCategory, TemplateDefinition } from "../../domain/templates/types";
+import { createEffectFamilyInstance, getAspectRatioForCanvas } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilySummary, TemplateCategory } from "../../domain/templates/types";
 import { writeTemplateDragData } from "./drag-and-drop";
 
 export type TemplateUsageReference = {
@@ -11,16 +11,18 @@ export type TemplateUsageReference = {
 };
 
 export type TemplateCardProps = {
-  template: TemplateDefinition;
-  /** 中文注释：新版族摘要只负责目录展示，实际渲染仍由 template 适配器提供。 */
+  template: EffectFamilyDefinition;
+  /** 中文注释：族摘要只负责目录展示，实际渲染直接使用当前族定义。 */
   family?: EffectFamilySummary;
+  /** 中文注释：由模板库保存的当前样式身份，避免卡片重新渲染时退回族内第一个样式。 */
+  selectedStartingStyleId?: string;
   isSelected?: boolean;
   canAdd?: boolean;
   addDisabledReason?: string;
   onInvalidAction?: () => void;
   onStartingStyleChange?: (startingStyleId: string) => void;
   onTemplateUsed?: (reference: TemplateUsageReference) => void;
-  onAddTemplate?: (templateId: string, startingStyleId?: string) => void;
+  onAddTemplate?: (familyId: string, startingStyleId: string) => void;
 };
 
 const categoryLabels: Record<TemplateCategory, string> = {
@@ -76,6 +78,7 @@ function useCardVisibility(cardRef: React.RefObject<HTMLElement | null>): boolea
 export function TemplateCard({
   template,
   family,
+  selectedStartingStyleId,
   isSelected = false,
   canAdd = true,
   addDisabledReason = "片段转场只能放在相邻视频片段交界点。",
@@ -92,10 +95,10 @@ export function TemplateCard({
   const isVisible = useCardVisibility(cardRef);
   const prefersReducedMotion = usePrefersReducedMotion();
   const isPreviewActive = !prefersReducedMotion && (isVisible || isEngaged || isSelected);
-  const selectedStyleId = template.startingStyleId ?? family?.startingStyles[0]?.id;
-  const usageReference = template.effectFamilyId && selectedStyleId
+  const selectedStyleId = selectedStartingStyleId ?? family?.startingStyles[0]?.id ?? template.startingStyles[0]?.id;
+  const usageReference = selectedStyleId
     ? {
-        familyId: template.effectFamilyId,
+        familyId: template.id,
         version: template.version,
         startingStyleId: selectedStyleId,
       }
@@ -134,7 +137,7 @@ export function TemplateCard({
   /** 中文注释：拖放状态仅提供视觉反馈，模板身份仍由既有 DataTransfer 协议传递。 */
   const handleDragStart = (event: DragEvent<HTMLElement>) => {
     setIsDragging(true);
-    writeTemplateDragData(event.dataTransfer, template);
+    if (selectedStyleId) writeTemplateDragData(event.dataTransfer, template, selectedStyleId);
   };
 
   /** 中文注释：拖放结束总会清理抓取状态，只有目标以 copy 确认成功时才写入最近使用记录。 */
@@ -153,17 +156,24 @@ export function TemplateCard({
     }
     if (!onAddTemplate) return;
     if (selectedStyleId) onAddTemplate(template.id, selectedStyleId);
-    else onAddTemplate(template.id);
     if (usageReference) onTemplateUsed?.(usageReference);
   };
 
+  const previewInstance = selectedStyleId
+    ? createEffectFamilyInstance(template, selectedStyleId, getAspectRatioForCanvas(240, 140))
+    : null;
   const preview = template.render({
     frame,
     fps: 30,
     width: 240,
     height: 140,
     durationInFrames: template.defaultDurationInFrames,
-    params: getTemplateDefaultParams(template),
+    effectFamilyId: template.id,
+    effectFamilyVersion: template.version,
+    startingStyleId: selectedStyleId ?? "default",
+    aspectRatio: getAspectRatioForCanvas(240, 140),
+    randomSeed: `template-card/${template.id}`,
+    params: previewInstance?.params ?? {},
   });
 
   return (

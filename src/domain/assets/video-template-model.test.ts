@@ -21,6 +21,9 @@ const effectClip: EffectClip = {
   id: "effect-1",
   templateId: "card-overlay",
   templateVersion: 1,
+  effectFamilyId: "card-overlay",
+  startingStyleId: "default",
+  placement: { type: "range" },
   trackId: "effects-1",
   fromFrame: 30,
   durationInFrames: 20,
@@ -36,6 +39,9 @@ describe("视频模板模型", () => {
       {
         templateId: "card-overlay",
         templateVersion: 1,
+        effectFamilyId: "card-overlay",
+        startingStyleId: "default",
+        placement: { type: "range" },
         trackId: "effects-1",
         fromFrame: 0,
         durationInFrames: 20,
@@ -50,10 +56,14 @@ describe("视频模板模型", () => {
     const template: VideoTemplate = {
       id: "template-1",
       name: "知识点模板",
+      fps: 30,
       effectClips: [
         {
           templateId: "card-overlay",
           templateVersion: 1,
+          effectFamilyId: "card-overlay",
+          startingStyleId: "default",
+          placement: { type: "range" },
           trackId: "effects-1",
           fromFrame: 10,
           durationInFrames: 20,

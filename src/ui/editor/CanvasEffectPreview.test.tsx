@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditorStore } from "../../domain/editor/editor-store";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject, EffectClip } from "../../domain/project/model";
-import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
+import { createEffectFamilyInstance, getEffectFamily } from "../../domain/templates/effect-family";
 import { EditorPage } from "./EditorPage";
 
 vi.mock("./PreviewCanvas", () => ({
@@ -45,15 +45,19 @@ afterEach(cleanup);
 /** 中文注释：构造包含位置参数的特效项目，验证临时快照不会直接污染编辑器存储。 */
 function createEffectStore() {
   const store = createEditorStore(createEmptyProject());
-  const template = getTemplate("card-overlay", 1);
+  const family = getEffectFamily("card-overlay", 1);
+  const instance = createEffectFamilyInstance(family, "default", "16:9");
   const clip: EffectClip = {
     id: "effect-1",
-    templateId: template.id,
-    templateVersion: template.version,
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: "default",
+    placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
-    durationInFrames: template.defaultDurationInFrames,
-    params: getTemplateDefaultParams(template),
+    durationInFrames: instance.durationInFrames,
+    params: instance.params,
   };
   store.dispatch({ type: "add-effect-clip", clip });
   return store;

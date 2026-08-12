@@ -3,6 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
+import type { EditProject } from "../../domain/project/model";
 import { clampPreviewFrame, PreviewPlayer } from "./PreviewPlayer";
 
 const mockPlayer = vi.hoisted(() => ({
@@ -99,12 +100,15 @@ describe("实时预览播放同步", () => {
     );
     expect(mockPlayer.lastInputProps).toBe(firstInputProps);
 
-    const changedProject = {
+    const changedProject: EditProject = {
       ...project,
       effectClips: [{
         id: "effect-1",
         templateId: "card-overlay",
         templateVersion: 1,
+        effectFamilyId: "card-overlay",
+        startingStyleId: "default",
+        placement: { type: "range" },
         trackId: "effects-1",
         fromFrame: 0,
         durationInFrames: 60,

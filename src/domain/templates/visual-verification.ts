@@ -82,12 +82,12 @@ type ScenarioInput = {
 const ASPECT_RATIOS: ReadonlyArray<AspectRatio> = ["16:9", "9:16", "1:1"];
 const LONG_TEXT = "这是一段用于视觉回归的长文本，包含 English words 和中文内容，用来验证换行、缩放与安全布局。";
 
-/** 中文注释：按用户选择的范围解析目标族和起始样式，目录默认包含历史族以便继续验证兼容渲染。 */
+/** 中文注释：按用户选择的范围解析当前注册族和起始样式，不把已删除的开发期族混入验证目录。 */
 export function selectVisualVerificationTargets(
   scope: VisualVerificationScope,
 ): VisualVerificationTarget[] {
   if (scope.kind === "catalog") {
-    return listEffectFamilies({ includeLegacy: true })
+    return listEffectFamilies()
       .flatMap((summary) => {
         const family = getEffectFamily(summary.id, summary.version);
         return family.startingStyles.map((style) => ({ family, style }));

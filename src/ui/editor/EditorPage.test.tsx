@@ -53,31 +53,10 @@ const pageStyleFamily: EffectFamilyDefinition = {
     { id: "tech", name: "科技", visualDirection: "科技数据", defaultParams: { color: "#38bdf8" } },
   ],
   aspectRatioDefaults: { "9:16": { position: { x: 0.5, y: 0.65 } } },
-  migrations: [],
   render: (props) => createElement("div", { "data-family": props.effectFamilyId }),
 };
 
-const pageUpgradeSourceFamily: EffectFamilyDefinition = {
-  ...pageStyleFamily,
-  id: "editor-page-upgrade-fixture",
-  parameters: pageStyleFamily.parameters.filter((parameter) => parameter.key !== "position"),
-  startingStyles: [{ id: "clean", name: "简洁", visualDirection: "简洁信息", defaultParams: {} }],
-  aspectRatioDefaults: {},
-};
-
-const pageUpgradeTargetFamily: EffectFamilyDefinition = {
-  ...pageUpgradeSourceFamily,
-  version: 2,
-  parameters: [
-    { key: "headline", label: "新标题", type: "text", defaultValue: "默认标题", group: "content", level: "basic", styleSwitch: "preserve" },
-    { key: "accent", label: "强调色", type: "color", defaultValue: "#38bdf8", group: "appearance", level: "basic", styleSwitch: "replace" },
-  ],
-  migrations: [{ fromVersion: 1, toVersion: 2, migrate: (params) => ({ params: { headline: params.text, accent: params.color } }) }],
-};
-
 registerEffectFamily(pageStyleFamily);
-registerEffectFamily(pageUpgradeSourceFamily);
-registerEffectFamily(pageUpgradeTargetFamily);
 
 /** 中文注释：集中构造重置场景的横屏项目，避免多个交互用例复制相同的视频时间轴夹具。 */
 function createLandscapeProjectStore() {
@@ -94,7 +73,7 @@ function createEffectProjectStore() {
   const store = createEditorStore(createEmptyProject());
   store.dispatch({
     type: "add-effect-clip",
-    clip: { durationInFrames: 20, fromFrame: 6, id: "effect-1", params: { text: "原始文案" }, templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" },
+    clip: { durationInFrames: 20, effectFamilyId: "card-overlay", fromFrame: 6, id: "effect-1", params: { text: "原始文案" }, placement: { type: "range" }, startingStyleId: "default", templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" },
   });
   return store;
 }
@@ -110,6 +89,7 @@ function createFamilyProjectStore(familyId: string, version: number, startingSty
       fromFrame: 6,
       id: "effect-1",
       params,
+      placement: { type: "range" },
       startingStyleId,
       templateId: familyId,
       templateVersion: version,
@@ -288,9 +268,12 @@ describe("编辑项目的素材导入", () => {
       type: "add-effect-clip",
       clip: {
         durationInFrames: 20,
+        effectFamilyId: "card-overlay",
         fromFrame: 0,
         id: "effect-1",
         params: {},
+        placement: { type: "range" },
+        startingStyleId: "default",
         templateId: "card-overlay",
         templateVersion: 1,
         trackId: "effects-1",
@@ -328,24 +311,8 @@ describe("编辑项目的素材导入", () => {
     expect(store.getSnapshot().effectClips[0]).toMatchObject({ startingStyleId: "clean", params: { color: "#111827", position: { x: 0.2, y: 0.8 }, text: "页面中的文案" } });
   });
 
-  it("预览并确认显式特效升级，随后可一次撤销版本迁移", async () => {
-    const store = createFamilyProjectStore(pageUpgradeSourceFamily.id, 1, "clean", { color: "#ffffff", text: "旧版本内容" });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ json: async () => [], ok: true } as Response);
-
-    render(<EditorPage store={store} />);
-    fireEvent.click(screen.getByRole("button", { name: "从预览选择特效" }));
-    fireEvent.click(screen.getByRole("button", { name: "预览特效升级 · v2" }));
-    expect(screen.getByRole("dialog", { name: "预览特效升级" })).toBeTruthy();
-    expect(screen.getByText("headline")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "确认升级特效" }));
-
-    await waitFor(() => expect(store.getSnapshot().effectClips[0]).toMatchObject({ templateVersion: 2, params: { accent: "#ffffff", headline: "旧版本内容" } }));
-    store.undo();
-    expect(store.getSnapshot().effectClips[0]).toMatchObject({ templateVersion: 1, params: { color: "#ffffff", text: "旧版本内容" } });
-  });
-
   it("保存、套用和删除个人预设时只更新当前特效参数，并使用应用内确认对话框", async () => {
-    const preset: Preset = { id: "preset-1", name: "强调版", scope: "full", params: { text: "预设文案" }, templateId: "card-overlay", templateVersion: 1 };
+    const preset: Preset = { effectFamilyId: "card-overlay", id: "preset-1", name: "强调版", scope: "full", params: { text: "预设文案" }, templateId: "card-overlay", templateVersion: 1 };
     const store = createEffectProjectStore();
     const fetchMock = mockAssetApi([preset]);
 
@@ -377,7 +344,8 @@ describe("编辑项目的素材导入", () => {
     const template: VideoTemplate = {
       id: "video-template-1",
       name: "片头布局",
-      effectClips: [{ durationInFrames: 10, fromFrame: 0, params: { text: "模板文案" }, templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" }],
+      fps: 30,
+      effectClips: [{ durationInFrames: 10, effectFamilyId: "card-overlay", fromFrame: 0, params: { text: "模板文案" }, placement: { type: "range" }, startingStyleId: "default", templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" }],
     };
     const store = createEffectProjectStore();
     const fetchMock = mockAssetApi([], [template]);

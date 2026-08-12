@@ -1,8 +1,5 @@
 import type { EffectClip } from "./model";
 
-/** 中文注释：历史片段没有起始样式时的稳定来源标记，不代表任何新版起始样式。 */
-export const LEGACY_DEFAULT_STARTING_STYLE_ID = "legacy-default";
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -44,10 +41,7 @@ function readPlacement(value: unknown): EffectClip["placement"] {
   throw new Error("特效片段放置类型不受支持");
 }
 
-/**
- * 中文注释：将旧版特效片段 JSON 读取为当前内存模型。
- * 只补齐兼容元数据，不迁移模板版本、特效族或渲染参数；字段非法时抛错交给仓储转成可展示的损坏项目错误。
- */
+/** 中文注释：读取当前特效片段格式；开发期旧 JSON 缺少新模型字段时直接要求重建，不猜测迁移结果。 */
 export function deserializeEffectClip(value: unknown): EffectClip {
   if (!isRecord(value)) {
     throw new Error("特效片段数据不是对象");
@@ -57,39 +51,29 @@ export function deserializeEffectClip(value: unknown): EffectClip {
     !isNonEmptyString(value.id) ||
     !isNonEmptyString(value.templateId) ||
     !isPositiveInteger(value.templateVersion) ||
+    !isNonEmptyString(value.effectFamilyId) ||
+    !isNonEmptyString(value.startingStyleId) ||
     !isNonEmptyString(value.trackId) ||
     !isNonNegativeInteger(value.fromFrame) ||
     !isPositiveInteger(value.durationInFrames) ||
-    !isRecord(value.params)
+    !isRecord(value.params) ||
+    value.placement === undefined
   ) {
-    throw new Error("特效片段数据格式无效");
-  }
-
-  const startingStyleId =
-    value.startingStyleId === undefined
-      ? LEGACY_DEFAULT_STARTING_STYLE_ID
-      : value.startingStyleId;
-  if (!isNonEmptyString(startingStyleId)) {
-    throw new Error("特效片段起始样式 ID 无效");
+    throw new Error("特效片段与当前开发期数据格式不兼容，请重建视频工作区");
   }
 
   const clip: EffectClip = {
     id: value.id,
     templateId: value.templateId,
     templateVersion: value.templateVersion,
+    effectFamilyId: value.effectFamilyId,
+    startingStyleId: value.startingStyleId,
     trackId: value.trackId,
     fromFrame: value.fromFrame,
     durationInFrames: value.durationInFrames,
     params: structuredClone(value.params),
-    startingStyleId,
-    placement: value.placement === undefined ? { type: "range" } : readPlacement(value.placement),
+    placement: readPlacement(value.placement),
   };
-  if (value.effectFamilyId !== undefined) {
-    if (!isNonEmptyString(value.effectFamilyId)) {
-      throw new Error("特效片段特效族 ID 无效");
-    }
-    clip.effectFamilyId = value.effectFamilyId;
-  }
 
   return clip;
 }

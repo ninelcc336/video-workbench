@@ -1,6 +1,7 @@
 import React from "react";
 import { Easing, interpolate } from "remotion";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 
 type TransitionParams = {
   style: "fade" | "wipe" | "zoom";
@@ -12,8 +13,8 @@ const transitionDefaults: TransitionParams = {
   color: "#000000",
 };
 
-export const BasicTransition: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const BasicTransition: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...transitionDefaults, ...params } as TransitionParams;
   // 中文注释：转场进度由当前帧和片段总帧数决定，模板不依赖真实时间或浏览器时钟。
@@ -50,12 +51,14 @@ export const BasicTransition: React.FC<TemplateRenderProps> & {
   );
 };
 
-BasicTransition.definition = {
+BasicTransition.definition = defineEffectFamily({
   id: "basic-transition",
   version: 1,
   category: "transition",
   name: "基础转场",
-  description: "提供淡入淡出、擦除和缩放三种 2D 片段转场。",
+  description: "在相邻视频片段之间提供淡化、擦除和缩放过渡。",
+  purposeTags: ["画面连接"],
+  visualDirections: ["简洁信息"],
   defaultDurationInFrames: 15,
   parameters: [
     {
@@ -71,5 +74,7 @@ BasicTransition.definition = {
     },
     { key: "color", label: "转场颜色", type: "color", defaultValue: transitionDefaults.color },
   ],
+  startingStyles: [{ id: "default", name: "淡化过渡", visualDirection: "简洁信息", defaultParams: transitionDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <BasicTransition {...props} />,
-};
+});

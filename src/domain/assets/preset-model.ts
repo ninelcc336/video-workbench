@@ -1,26 +1,23 @@
 import type { EditorStore } from "../editor/editor-store";
 import type { EditProject, ExportSettings } from "../project/model";
 import { getEffectFamily } from "../templates/effect-family";
-// 中文注释：预设模型独立加载时也要注册内置旧模板，才能校验合法的历史模板身份。
-import "../templates/registry";
 
 /** 中文注释：预设范围决定套用时是否保留当前特效片段的内容参数。 */
 export type PresetScope = "style" | "full";
 
-/** 中文注释：个人预设只引用特效模板，并保存用户主动调整的参数。 */
+/** 中文注释：个人预设绑定当前特效族版本，并保存用户主动调整的参数。 */
 export type Preset = {
   id: string;
   templateId: string;
   templateVersion: number;
-  /** 中文注释：新版预设显式绑定特效族；缺失时用 templateId 兼容旧版个人预设。 */
-  effectFamilyId?: string;
+  effectFamilyId: string;
   name: string;
   scope: PresetScope;
   params: Record<string, unknown>;
 };
 
-/** 中文注释：仓储写入的结构不包含 ID，ID 由文件名提供，避免重复保存资产元数据。 */
-export type SerializedPreset = Omit<Preset, "id" | "scope"> & { scope?: PresetScope };
+/** 中文注释：仓储写入的结构不包含 ID，ID 由文件名提供，当前格式字段全部显式保存。 */
+export type SerializedPreset = Omit<Preset, "id">;
 
 export type ExportPresetName = "vertical" | "horizontal" | "square";
 
@@ -41,7 +38,7 @@ function getPresetParams(
   templateVersion: number,
   params: Record<string, unknown>,
   scope: PresetScope,
-  effectFamilyId?: string,
+  effectFamilyId: string,
 ): Record<string, unknown> {
   const clonedParams = cloneParams(params);
   if (scope === "full") return clonedParams;
@@ -60,8 +57,8 @@ export function createPreset(
   templateVersion: number,
   name: string,
   params: Record<string, unknown>,
-  scope: PresetScope = "full",
-  effectFamilyId?: string,
+  scope: PresetScope,
+  effectFamilyId: string,
 ): Preset {
   if (!id.trim() || !templateId.trim()) {
     throw new Error("预设 ID 和特效模板 ID 不能为空");
@@ -75,7 +72,7 @@ export function createPreset(
   if (scope !== "style" && scope !== "full") {
     throw new Error("预设范围无效");
   }
-  if (effectFamilyId !== undefined && !effectFamilyId.trim()) {
+  if (!effectFamilyId.trim()) {
     throw new Error("特效族 ID 不能为空");
   }
 
@@ -83,7 +80,7 @@ export function createPreset(
     id,
     templateId,
     templateVersion,
-    ...(effectFamilyId ? { effectFamilyId } : {}),
+    effectFamilyId,
     name: name.trim(),
     scope,
     params: getPresetParams(templateId, templateVersion, params, scope, effectFamilyId),
@@ -92,15 +89,15 @@ export function createPreset(
 
 /**
  * 中文注释：序列化时明确白名单，防止把编辑项目或媒体路径混入个人预设。
- * 完整预设沿用缺省范围的旧 JSON 形状；只有样式预设需要显式写出 scope。
+ * 当前格式显式保存 scope，避免加载时把旧完整预设误认为可用数据。
  */
 export function serializePreset(preset: Preset): SerializedPreset {
   return {
-    ...(preset.effectFamilyId ? { effectFamilyId: preset.effectFamilyId } : {}),
+    effectFamilyId: preset.effectFamilyId,
     templateId: preset.templateId,
     templateVersion: preset.templateVersion,
     name: preset.name,
-    ...(preset.scope === "style" ? { scope: "style" as const } : {}),
+    scope: preset.scope,
     params: getPresetParams(preset.templateId, preset.templateVersion, preset.params, preset.scope, preset.effectFamilyId),
   };
 }
@@ -113,28 +110,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-/**
- * 中文注释：读取个人预设的持久化数据；旧文件缺少 scope 时按完整预设恢复，不能丢弃内容参数。
- * 数据结构或范围非法时抛错，由资产仓储转换为对应的读取错误。
- */
+/** 中文注释：读取当前个人预设格式；缺少范围或特效族身份的开发期文件必须重建。 */
 export function deserializePreset(value: unknown, presetId: string): Preset {
   if (
     !isRecord(value) ||
     typeof value.templateId !== "string" ||
     !Number.isInteger(value.templateVersion) ||
+    !isNonEmptyString(value.effectFamilyId) ||
     typeof value.name !== "string" ||
-    !isRecord(value.params)
+    !isRecord(value.params) ||
+    (value.scope !== "style" && value.scope !== "full")
   ) {
-    throw new Error(`个人预设“${presetId}”的数据格式无效`);
+    throw new Error(`个人预设“${presetId}”与当前开发期数据格式不兼容，请删除后重新创建`);
   }
 
-  const scope = value.scope === undefined ? "full" : value.scope;
-  if (scope !== "style" && scope !== "full") {
-    throw new Error(`个人预设“${presetId}”的范围无效`);
-  }
-  if (value.effectFamilyId !== undefined && !isNonEmptyString(value.effectFamilyId)) {
-    throw new Error(`个人预设“${presetId}”的特效族 ID 无效`);
-  }
   const templateVersion = value.templateVersion as number;
 
   return createPreset(
@@ -143,8 +132,8 @@ export function deserializePreset(value: unknown, presetId: string): Preset {
     templateVersion,
     value.name,
     value.params,
-    scope,
-    value.effectFamilyId as string | undefined,
+    value.scope,
+    value.effectFamilyId,
   );
 }
 
@@ -158,8 +147,8 @@ export function applyPreset(
   if (!target) throw new Error(`未找到特效片段：${effectClipId}`);
   let normalizedParams: Record<string, unknown>;
   try {
-    const targetFamilyId = target.effectFamilyId ?? target.templateId;
-    const presetFamilyId = preset.effectFamilyId ?? preset.templateId;
+    const targetFamilyId = target.effectFamilyId;
+    const presetFamilyId = preset.effectFamilyId;
     // 中文注释：只有同一特效族和同一模板版本才能套用，避免把语义不同的参数写入当前片段。
     if (targetFamilyId !== presetFamilyId || target.templateVersion !== preset.templateVersion) throw new Error("预设特效族或模板版本与当前特效不兼容");
     const family = getEffectFamily(presetFamilyId, preset.templateVersion);

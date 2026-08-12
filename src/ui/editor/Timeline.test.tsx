@@ -4,7 +4,8 @@ import { cleanup, createEvent, fireEvent, render, screen } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EditProject } from "../../domain/project/model";
-import { getTemplateDefaultParams, getTemplate } from "../../domain/templates/registry";
+import { createEffectFamilyInstance, getEffectFamily } from "../../domain/templates/effect-family";
+import "../../domain/templates/registry";
 import { TEMPLATE_DRAG_MIME } from "./drag-and-drop";
 import { clampClipRange, clampTimelineHeight, getTimelineHeightBounds, Timeline, TIMELINE_LABEL_WIDTH, pixelsToFrames } from "./Timeline";
 
@@ -12,6 +13,7 @@ afterEach(cleanup);
 
 function createTimelineProject(): EditProject {
   const project = createEmptyProject();
+  const family = getEffectFamily("card-overlay", 1);
   project.videoClips = [
     {
       id: "video-1",
@@ -27,10 +29,13 @@ function createTimelineProject(): EditProject {
       id: "effect-1",
       templateId: "card-overlay",
       templateVersion: 1,
+      effectFamilyId: "card-overlay",
+      startingStyleId: "default",
+      placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 30,
       durationInFrames: 45,
-      params: getTemplateDefaultParams(getTemplate("card-overlay", 1)),
+      params: createEffectFamilyInstance(family, "default", "16:9").params,
     },
   ];
   return project;
@@ -215,9 +220,9 @@ describe("基础时间轴", () => {
 
   it("接收模板拖放并把时间轴位置换算成特效起始帧", () => {
     const onDropTemplate = vi.fn();
-    const template = getTemplate("bubble-decoration", 1);
+    const template = getEffectFamily("bubble-decoration", 1);
     const values = new Map<string, string>([
-      [TEMPLATE_DRAG_MIME, JSON.stringify({ templateId: template.id, templateVersion: template.version })],
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "default" })],
     ]);
     const dataTransfer = {
       dropEffect: "none",
@@ -250,15 +255,15 @@ describe("基础时间轴", () => {
     Object.defineProperty(dropEvent, "clientX", { value: 350 });
     fireEvent(effectTrack, dropEvent);
 
-    expect(onDropTemplate).toHaveBeenCalledWith(template, 25);
+    expect(onDropTemplate).toHaveBeenCalledWith(template, "default", 25);
   });
 
   it("非法位置拖入片段转场时只提示，不把它创建成普通范围特效", () => {
     const onDropTemplate = vi.fn();
     const onInvalidTemplateDrop = vi.fn();
-    const template = getTemplate("basic-transition", 1);
+    const template = getEffectFamily("basic-transition", 1);
     const values = new Map<string, string>([
-      [TEMPLATE_DRAG_MIME, JSON.stringify({ templateId: template.id, templateVersion: template.version })],
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "default" })],
     ]);
     const dataTransfer = {
       dropEffect: "none",
@@ -297,7 +302,7 @@ describe("基础时间轴", () => {
 
   it("拖入片段转场到合法交界点时传递前后视频片段身份", () => {
     const onDropTransition = vi.fn();
-    const template = getTemplate("basic-transition", 1);
+    const template = getEffectFamily("basic-transition", 1);
     const project = createTimelineProject();
     project.videoClips.push({
       ...project.videoClips[0],
@@ -305,7 +310,7 @@ describe("基础时间轴", () => {
       fromFrame: 90,
     });
     const values = new Map<string, string>([
-      [TEMPLATE_DRAG_MIME, JSON.stringify({ templateId: template.id, templateVersion: template.version })],
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "default" })],
     ]);
     const dataTransfer = {
       dropEffect: "none",
@@ -337,7 +342,7 @@ describe("基础时间轴", () => {
     Object.defineProperty(dropEvent, "clientX", { value: 1000 });
     fireEvent(effectTrack, dropEvent);
 
-    expect(onDropTransition).toHaveBeenCalledWith(template, {
+    expect(onDropTransition).toHaveBeenCalledWith(template, "default", {
       beforeVideoClipId: "video-1",
       afterVideoClipId: "video-2",
       frame: 90,

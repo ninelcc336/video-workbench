@@ -16,7 +16,7 @@ const emptyEffectRenderProps: EffectFamilyRenderProps = {
   params: {},
   effectFamilyId: "card-overlay",
   effectFamilyVersion: 1,
-  startingStyleId: "legacy-default",
+  startingStyleId: "default",
   aspectRatio: "16:9",
   randomSeed: "effect-visual-verification-v1",
 };

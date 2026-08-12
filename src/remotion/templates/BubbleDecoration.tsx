@@ -1,6 +1,7 @@
 import React from "react";
 import { Easing, interpolate } from "remotion";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 import { getVisibilityProgress } from "./animation";
 
 type BubbleParams = {
@@ -21,8 +22,8 @@ const bubbleDefaults: BubbleParams = {
   animationDuration: 18,
 };
 
-export const BubbleDecoration: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const BubbleDecoration: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...bubbleDefaults, ...params } as BubbleParams;
   // 中文注释：用片段帧数计算统一的漂浮进度，确保 Player 预览和导出渲染可重复。
@@ -70,12 +71,14 @@ export const BubbleDecoration: React.FC<TemplateRenderProps> & {
   );
 };
 
-BubbleDecoration.definition = {
+BubbleDecoration.definition = defineEffectFamily({
   id: "bubble-decoration",
   version: 1,
   category: "decorative-animation",
   name: "漂浮气泡",
   description: "在画面中生成轻盈的 2D 漂浮气泡。",
+  purposeTags: ["装饰", "节奏"],
+  visualDirections: ["科技数据", "活力社媒"],
   defaultDurationInFrames: 75,
   parameters: [
     { key: "color", label: "气泡颜色", type: "color", defaultValue: bubbleDefaults.color },
@@ -109,5 +112,7 @@ BubbleDecoration.definition = {
       step: 1,
     },
   ],
+  startingStyles: [{ id: "default", name: "漂浮气泡", visualDirection: "活力社媒", defaultParams: bubbleDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <BubbleDecoration {...props} />,
-};
+});

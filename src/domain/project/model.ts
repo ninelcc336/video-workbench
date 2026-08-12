@@ -44,12 +44,10 @@ export type EffectClip = {
   id: string;
   templateId: string;
   templateVersion: number;
-  /** 中文注释：新版特效族标识暂时可选，旧模板不会在加载时被静默归入新族。 */
-  effectFamilyId?: string;
-  /** 中文注释：旧模板没有起始样式，兼容读取时使用 legacy-default 来源标记。 */
-  startingStyleId?: string;
-  /** 中文注释：缺少该字段的历史片段按范围放置读取，不改变原有时间范围。 */
-  placement?: EffectClipPlacement;
+  /** 中文注释：当前片段必须绑定已注册的特效族和族内起始样式，不为开发期旧模板保留回退身份。 */
+  effectFamilyId: string;
+  startingStyleId: string;
+  placement: EffectClipPlacement;
   trackId: string;
   // 中文注释：特效片段的时间范围使用帧而不是浮点秒，保证拖拽和 Remotion 渲染边界一致。
   fromFrame: number;

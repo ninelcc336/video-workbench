@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TemplateDefinition } from "../../domain/templates/types";
+import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { TemplateCard } from "./TemplateCard";
 
 afterEach(() => {
@@ -11,15 +11,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function createTemplate(render: TemplateDefinition["render"]): TemplateDefinition {
+function createTemplate(render: EffectFamilyDefinition["render"]): EffectFamilyDefinition {
   return {
     id: "test-template",
     version: 1,
     category: "decorative-animation",
     name: "测试模板",
     description: "测试动效",
+    purposeTags: ["测试"],
+    visualDirections: ["简洁信息"],
     defaultDurationInFrames: 10,
     parameters: [],
+    startingStyles: [{ id: "default", name: "默认", visualDirection: "简洁信息", defaultParams: {} }],
+    aspectRatioDefaults: {},
     render,
   };
 }
@@ -32,7 +36,7 @@ describe("特效模板卡片", () => {
 
     expect(screen.queryByRole("button", { name: /预览|停止/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "添加测试模板" }));
-    expect(onAddTemplate).toHaveBeenCalledWith("test-template");
+    expect(onAddTemplate).toHaveBeenCalledWith("test-template", "default");
     expect(screen.getByRole("article").getAttribute("draggable")).toBe("true");
   });
 
@@ -113,11 +117,7 @@ describe("特效模板卡片", () => {
       effectAllowed: "",
       setData: vi.fn(),
     } as unknown as DataTransfer;
-    const template = {
-      ...createTemplate(() => <span />),
-      effectFamilyId: "test-family",
-      startingStyleId: "default",
-    };
+    const template = createTemplate(() => <span />);
     render(<TemplateCard onTemplateUsed={onTemplateUsed} template={template} />);
     const card = screen.getByRole("article");
 
@@ -131,7 +131,7 @@ describe("特效模板卡片", () => {
     fireEvent.dragStart(card, { dataTransfer });
     fireEvent.dragEnd(card, { dataTransfer });
     expect(onTemplateUsed).toHaveBeenCalledWith({
-      familyId: "test-family",
+      familyId: "test-template",
       startingStyleId: "default",
       version: 1,
     });

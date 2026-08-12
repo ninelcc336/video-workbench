@@ -30,7 +30,7 @@ describe("特效固定帧 Remotion 渲染器", () => {
       params: { text: "固定帧" },
       effectFamilyId: "card-overlay",
       effectFamilyVersion: 1,
-      startingStyleId: "legacy-default",
+      startingStyleId: "default",
       aspectRatio: "9:16" as const,
       randomSeed: "visual-test-seed",
     };

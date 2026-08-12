@@ -1,6 +1,7 @@
 import React from "react";
 import { Easing, interpolate } from "remotion";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 import { getVisibilityProgress } from "./animation";
 
 /** 中文注释：信息清单使用“普通文字|重点文字”描述每一行，便于在现有文本参数控件中编辑。 */
@@ -49,8 +50,8 @@ function parseChecklistItems(value: string): ChecklistItem[] {
 }
 
 /** 中文注释：渲染带逐行入场的清单信息层，用强调色突出每行结论。 */
-export const ChecklistOverlay: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const ChecklistOverlay: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...checklistDefaults, ...params } as ChecklistOverlayParams;
   const items = parseChecklistItems(values.items).slice(0, 8);
@@ -127,12 +128,14 @@ export const ChecklistOverlay: React.FC<TemplateRenderProps> & {
   );
 };
 
-ChecklistOverlay.definition = {
+ChecklistOverlay.definition = defineEffectFamily({
   id: "checklist-overlay",
   version: 1,
   category: "information-overlay",
   name: "信息清单卡",
   description: "用图标、条目和重点色复刻科技解说中的观点清单。",
+  purposeTags: ["清单", "步骤"],
+  visualDirections: ["简洁信息", "科技数据"],
   defaultDurationInFrames: 120,
   parameters: [
     { key: "title", label: "清单标题", type: "text", defaultValue: checklistDefaults.title, maxLength: 40 },
@@ -161,5 +164,7 @@ ChecklistOverlay.definition = {
     },
     { key: "itemGap", label: "行间距", type: "number", defaultValue: checklistDefaults.itemGap, min: 0, max: 40, step: 1 },
   ],
+  startingStyles: [{ id: "default", name: "信息清单", visualDirection: "简洁信息", defaultParams: checklistDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <ChecklistOverlay {...props} />,
-};
+});

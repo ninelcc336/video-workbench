@@ -1,24 +1,21 @@
+import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  createEffectFamilyInstance,
   createEffectRenderInput,
   getEffectFamily,
   listEffectFamilies,
   registerEffectFamily,
+  validateEffectFamilyParams,
 } from "./effect-family";
-import {
-  getTemplate,
-  getTemplateDefaultParams,
-  listTemplates,
-  normalizeParams,
-  registerTemplate,
-} from "./registry";
-import type { EffectFamilyDefinition, TemplateDefinition } from "./types";
+import type { EffectFamilyDefinition } from "./types";
+import "./registry";
 
-describe("特效模板注册表", () => {
-  it("注册启动时可用的基础模板和科技解说信息叠加模板", () => {
-    // 中文注释：用户通过分类浏览模板，因此基础模板和目标视频拆出的信息层都必须能被发现。
-    expect(listTemplates()).toEqual(
+describe("特效族注册表", () => {
+  it("注册启动时可用的当前特效族和三种顶层类型", () => {
+    // 中文注释：目录只暴露当前特效族，首次发布前不再混入旧模板兼容条目。
+    expect(listEffectFamilies()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "card-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "bubble-decoration", category: "decorative-animation" }),
@@ -31,108 +28,105 @@ describe("特效模板注册表", () => {
     );
   });
 
-  it("支持按分类过滤模板摘要", () => {
-    // 中文注释：列表接口只返回摘要，避免模板实现细节泄漏到模板库 UI。
-    const templates = listTemplates("decorative-animation");
+  it("支持按分类过滤当前特效族摘要", () => {
+    const families = listEffectFamilies({ category: "decorative-animation" });
 
-    expect(templates).toHaveLength(1);
-    expect(templates[0]).toMatchObject({ id: "bubble-decoration" });
+    expect(families).toHaveLength(1);
+    expect(families[0]).toMatchObject({ id: "bubble-decoration" });
   });
 
-  it("按模板 ID 和版本查找模板", () => {
-    const template = getTemplate("card-overlay", 1);
-
-    expect(template).toMatchObject({ id: "card-overlay", version: 1 });
+  it("按特效族 ID 和当前版本查找声明", () => {
+    expect(getEffectFamily("card-overlay", 1)).toMatchObject({
+      id: "card-overlay",
+      version: 1,
+    });
   });
 
-  it("拒绝重复的模板 ID 和版本", () => {
-    const duplicate = getTemplate("card-overlay", 1);
+  it("拒绝重复的特效族 ID 和版本", () => {
+    const family = getEffectFamily("card-overlay", 1);
 
-    expect(() => registerTemplate(duplicate)).toThrow(/重复/);
+    expect(() => registerEffectFamily(family)).toThrow(/重复/);
   });
 
-  it("归一化参数时只保留声明字段并使用默认值兜底", () => {
-    const template = getTemplate("card-overlay", 1);
-    const params = normalizeParams(template, {
+  it("通过特效族深模块归一化参数并使用声明默认值兜底", () => {
+    const family = getEffectFamily("card-overlay", 1);
+    const result = validateEffectFamilyParams(family, {
       text: "重点",
       color: "不是颜色",
       unexpected: "不会进入渲染输入",
     });
 
-    expect(params).toMatchObject({
+    expect(result.params).toMatchObject({
       text: "重点",
       color: "#111827",
     });
-    expect(params).not.toHaveProperty("unexpected");
+    expect(result.params).not.toHaveProperty("unexpected");
   });
 
-  it("模板 render 接口返回可渲染的 React 节点", () => {
-    const renderProps = {
-      frame: 10,
-      fps: 30,
-      width: 1080,
-      height: 1920,
-      durationInFrames: 60,
-    };
+  it("所有当前特效族都能生成可渲染的 React 节点", () => {
+    const canvas = { width: 1080, height: 1920 };
 
-    const templates: TemplateDefinition[] = listTemplates().map((summary) =>
-      getTemplate(summary.id, summary.version),
-    );
-
-    for (const template of templates) {
-      const element = template.render({
-        ...renderProps,
-        params: normalizeParams(template, {}),
+    for (const summary of listEffectFamilies()) {
+      const family = getEffectFamily(summary.id, summary.version);
+      const styleId = summary.startingStyles[0].id;
+      const instance = createEffectFamilyInstance(family, styleId, "9:16");
+      const input = createEffectRenderInput({
+        familyId: family.id,
+        version: family.version,
+        startingStyleId: styleId,
+        aspectRatio: "9:16",
+        frame: 10,
+        fps: 30,
+        width: canvas.width,
+        height: canvas.height,
+        durationInFrames: instance.durationInFrames,
+        params: instance.params,
       });
 
-      expect(element).toBeTruthy();
+      expect(family.render(input.renderProps)).toBeTruthy();
     }
   });
 
-  it("旧模板通过统一特效族入口按版本生成相同的渲染结果", () => {
-    const template = getTemplate("card-overlay", 1);
+  it("当前特效族摘要包含用途与视觉方向，但不暴露渲染实现和默认参数", () => {
     const family = getEffectFamily("card-overlay", 1);
+    const summary = listEffectFamilies({ text: family.name }).find((item) => item.id === family.id);
+
+    expect(summary).toMatchObject({
+      purposeTags: expect.arrayContaining(["重点标注"]),
+      visualDirections: expect.arrayContaining(["简洁信息"]),
+    });
+    expect(summary).not.toHaveProperty("render");
+    expect(summary?.startingStyles[0]).not.toHaveProperty("defaultParams");
+  });
+
+  it("当前特效族通过统一渲染输入生成稳定可观察的节点", () => {
+    const family = getEffectFamily("card-overlay", 1);
+    const instance = createEffectFamilyInstance(family, "default", "16:9");
     const input = createEffectRenderInput({
       familyId: family.id,
       version: family.version,
-      startingStyleId: "legacy-default",
+      startingStyleId: "default",
       aspectRatio: "16:9",
       frame: 24,
       fps: 30,
       width: 1920,
       height: 1080,
-      durationInFrames: template.defaultDurationInFrames,
-      params: getTemplateDefaultParams(template),
+      durationInFrames: instance.durationInFrames,
+      params: instance.params,
     });
 
-    expect(family.legacy).toBe(true);
-    expect(listEffectFamilies()).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: "card-overlay" })]),
-    );
     expect(renderToStaticMarkup(family.render(input.renderProps))).toContain(
-      `data-template-id="${template.id}"`,
+      "data-template-id=\"" + family.id + "\"",
     );
   });
 
-  it("旧模板族摘要提供用途标签和视觉方向元数据", () => {
-    // 中文注释：旧版仍需保留历史渲染，但目录搜索不能因为兼容适配而丢失策划信息。
-    expect(getEffectFamily("section-title-overlay", 1)).toMatchObject({
-      purposeTags: expect.arrayContaining(["标题"]),
-      visualDirections: expect.arrayContaining(["简洁信息"]),
-    });
-    expect(getEffectFamily("basic-transition", 1)).toMatchObject({
-      description: expect.stringContaining("历史全屏过渡遮罩"),
-      purposeTags: expect.arrayContaining(["画面连接"]),
-    });
-  });
-
-  it("旧 registry 兼容门面能发现并创建新版特效族片段", () => {
+  it("可以注册新的当前特效族声明并按用途查询", () => {
     const family: EffectFamilyDefinition = {
       id: "registry-family-fixture",
       version: 1,
       category: "decorative-animation",
       name: "注册表族测试",
-      description: "验证旧调用方可以通过兼容门面使用新版族。",
+      description: "验证当前注册表可以添加新的特效族声明。",
       purposeTags: ["highlight"],
       visualDirections: ["tech-data"],
       defaultDurationInFrames: 24,
@@ -144,21 +138,15 @@ describe("特效模板注册表", () => {
         defaultParams: {},
       }],
       aspectRatioDefaults: {},
-      migrations: [],
-      render: () => null,
+      render: () => createElement("span"),
     };
     registerEffectFamily(family);
 
-    const template = getTemplate(family.id, family.version);
-
-    expect(listTemplates("decorative-animation")).toEqual(
+    expect(listEffectFamilies({ purposeTag: "highlight" })).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: family.id, version: family.version })]),
     );
-    expect(template).toMatchObject({
-      effectFamilyId: family.id,
-      startingStyleId: "default",
+    expect(getEffectFamily(family.id, family.version)).toMatchObject({
       defaultDurationInFrames: family.defaultDurationInFrames,
     });
-    expect(getTemplateDefaultParams(template)).toEqual({});
   });
 });

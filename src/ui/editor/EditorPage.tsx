@@ -8,11 +8,9 @@ import {
   getAspectRatioForCanvas,
   getEffectFamily,
   switchStartingStyle,
-  upgradeEffectFamily,
-  type EffectFamilyUpgradeResult,
   type StartingStyleSwitchResult,
 } from "../../domain/templates/effect-family";
-import { getTemplate } from "../../domain/templates/registry";
+import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import type { MediaSources } from "../../remotion/media";
 import type { MediaAsset } from "../../server/workspace/media-repository";
 import type { ExportSettings } from "../../domain/project/model";
@@ -77,19 +75,20 @@ function createId(prefix: string): string {
 }
 
 /**
- * 中文注释：统一构造页面命令写入的特效片段，合并族身份、默认参数和可用轨道；
- * 普通范围放置不额外写 placement，只有真实转场保存相邻视频片段绑定。
+ * 中文注释：统一构造页面命令写入的特效片段，合并族身份、默认参数、范围放置和可用轨道；
+ * 真实转场调用方额外传入相邻视频片段绑定，普通特效保持显式的 range 放置声明。
  */
 function createEditorEffectClip(
   project: EditProject,
-  template: ReturnType<typeof getTemplate>,
+  family: EffectFamilyDefinition,
+  startingStyleId: string,
   fromFrame: number,
   placement?: EffectClip["placement"],
 ): EffectClip {
   const safeFromFrame = Number.isFinite(fromFrame) ? Math.max(0, Math.round(fromFrame)) : 0;
-  return createEffectClipFromTemplate(template, safeFromFrame, {
+  return createEffectClipFromTemplate(family, startingStyleId, safeFromFrame, {
     ...(placement ? { placement } : {}),
-    trackId: getAvailableEffectTrackId(project.effectClips, safeFromFrame, template.defaultDurationInFrames),
+    trackId: getAvailableEffectTrackId(project.effectClips, safeFromFrame, family.defaultDurationInFrames),
   });
 }
 
@@ -98,11 +97,11 @@ function getClip(project: EditProject, id: string | null): EffectClip | null {
   return project.effectClips.find((clip) => clip.id === id) ?? null;
 }
 
-/** 中文注释：旧特效模板可能已经从注册表移除，资产入口仍应能打开并显示安全回退名称。 */
+/** 中文注释：当前片段找不到注册族时只显示通用名称；真正的项目读取和渲染会阻止不兼容数据继续使用。 */
 function getEffectTemplateName(clip: EffectClip | null): string {
   if (!clip) return "当前特效";
   try {
-    return getTemplate(clip.templateId, clip.templateVersion).name;
+    return getEffectFamily(clip.effectFamilyId, clip.templateVersion).name;
   } catch {
     return "当前特效";
   }
@@ -117,25 +116,19 @@ type StyleSwitchPreview = {
   result: StartingStyleSwitchResult;
 };
 
-type UpgradePreview = {
-  clipId: string;
-  familyName: string;
-  result: EffectFamilyUpgradeResult;
-};
-
 /**
- * 中文注释：页面只按片段保存的族 ID、版本和参数组装计算实例，样式默认值与迁移细节仍由特效族深模块处理。
- * 历史片段缺少起始样式时仅为本次预览选择族首样式，不回写工作区快照。
+ * 中文注释：页面只按当前片段保存的族 ID、版本和起始样式组装计算实例，样式默认值仍由特效族深模块处理。
+ * 片段身份不完整或样式已从当前声明中移除时直接失败，避免预览偷偷改用另一个样式。
  */
 function getEffectFamilyInstanceForClip(
   project: EditProject,
   clip: EffectClip,
 ): { family: ReturnType<typeof getEffectFamily>; instance: ReturnType<typeof createEffectFamilyInstance> } {
-  const family = getEffectFamily(clip.effectFamilyId ?? clip.templateId, clip.templateVersion);
+  const family = getEffectFamily(clip.effectFamilyId, clip.templateVersion);
   const startingStyleId = family.startingStyles.some((style) => style.id === clip.startingStyleId)
-    ? clip.startingStyleId as string
-    : family.startingStyles[0]?.id;
-  if (!startingStyleId) throw new Error(`特效族“${family.id}”没有可用的起始样式`);
+    ? clip.startingStyleId
+    : undefined;
+  if (!startingStyleId) throw new Error(`特效片段“${clip.id}”的起始样式与当前特效族不兼容，请重新添加特效`);
   const aspectRatio = getAspectRatioForCanvas(project.settings.width, project.settings.height);
   return {
     family,
@@ -201,7 +194,6 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [renderJobId, setRenderJobId] = useState<string | null>(null);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [styleSwitchPreview, setStyleSwitchPreview] = useState<StyleSwitchPreview | null>(null);
-  const [upgradePreview, setUpgradePreview] = useState<UpgradePreview | null>(null);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [relinkedMediaId, setRelinkedMediaId] = useState<string | null>(null);
   const activeWorkspaceId = workspaceId ?? projectId;
@@ -234,7 +226,6 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setRenderSnapshot(null);
     setRenderJobId(null);
     setStyleSwitchPreview(null);
-    setUpgradePreview(null);
     setNotice(null);
     setPresets([]);
     setVideoTemplates([]);
@@ -378,59 +369,28 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setNotice(`已切换到“${styleSwitchPreview.styleName}”，原内容和时间范围已保留。`);
   };
 
-  /** 中文注释：版本升级入口只生成迁移预览，不改动项目；确认时再让 EditorStore 记录单次历史快照。 */
-  const requestEffectUpgrade = (clipId: string) => {
-    const clip = getClip(project, clipId);
-    if (!clip) return;
-    try {
-      const familyId = clip.effectFamilyId ?? clip.templateId;
-      const result = upgradeEffectFamily({
-        familyId,
-        fromVersion: clip.templateVersion,
-        params: clip.params,
-      });
-      const targetFamily = getEffectFamily(familyId, result.toVersion);
-      if (result.toVersion <= clip.templateVersion) {
-        setNotice("当前特效已经是可用的最新版本。");
-        return;
-      }
-      setUpgradePreview({ clipId, familyName: targetFamily.name, result });
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "无法预览特效升级");
-    }
-  };
-
-  /** 中文注释：确认升级后关闭预览并提示结果，历史撤销入口仍由顶栏统一提供。 */
-  const confirmEffectUpgrade = () => {
-    if (!upgradePreview) return;
-    if (!dispatch({ type: "upgrade-effect-family", clipId: upgradePreview.clipId, toVersion: upgradePreview.result.toVersion })) return;
-    setUpgradePreview(null);
-    setNotice(`“${upgradePreview.familyName}”已升级到 v${upgradePreview.result.toVersion}，可用撤销恢复旧版本。`);
-  };
-
   /** 中文注释：播放头添加接收可选起始样式，保证族内样式选择不会退回第一个默认样式。 */
-  const addTemplate = (templateId: string, startingStyleId?: string) => {
-    const template = startingStyleId
-      ? getTemplate(templateId, undefined, startingStyleId)
-      : getTemplate(templateId);
-    const clip = createEditorEffectClip(project, template, currentFrame);
+  const addTemplate = (familyId: string, startingStyleId: string) => {
+    const family = getEffectFamily(familyId);
+    const clip = createEditorEffectClip(project, family, startingStyleId, currentFrame);
     dispatch({ type: "add-effect-clip", clip });
     setSelectedClipId(clip.id);
   };
 
   /** 中文注释：播放头之外的添加入口复用同一片段构造规则，只改变特效的起始帧。 */
-  const addTemplateAtFrame = (template: ReturnType<typeof getTemplate>, frame: number) => {
-    const clip = createEditorEffectClip(project, template, frame);
+  const addTemplateAtFrame = (family: EffectFamilyDefinition, startingStyleId: string, frame: number) => {
+    const clip = createEditorEffectClip(project, family, startingStyleId, frame);
     dispatch({ type: "add-effect-clip", clip });
     setSelectedClipId(clip.id);
   };
 
   /** 中文注释：真实转场只保存合法相邻视频片段身份和交界帧，绝不退回普通范围放置；双画面渲染由后续转场合成器消费该声明。 */
   const addTransitionAtBoundary = (
-    template: ReturnType<typeof getTemplate>,
+    family: EffectFamilyDefinition,
+    startingStyleId: string,
     boundary: TemplateTransitionBoundary,
   ) => {
-    const clip = createEditorEffectClip(project, template, boundary.frame, {
+    const clip = createEditorEffectClip(project, family, startingStyleId, boundary.frame, {
       type: "boundary",
       beforeVideoClipId: boundary.beforeVideoClipId,
       afterVideoClipId: boundary.afterVideoClipId,
@@ -700,7 +660,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
           name,
           params: selectedStoredEffectClip.params,
           scope,
-          effectFamilyId: selectedStoredEffectClip.effectFamilyId ?? selectedStoredEffectClip.templateId,
+          effectFamilyId: selectedStoredEffectClip.effectFamilyId,
           templateId: selectedStoredEffectClip.templateId,
           templateVersion: selectedStoredEffectClip.templateVersion,
         }),
@@ -806,7 +766,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       <EditorPanelLayout>
         <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onAddMedia={addMediaToTimeline} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} onAddTransitionAtBoundary={addTransitionAtBoundary} onInvalidTransition={() => setNotice("片段转场只能放在相邻视频片段交界点。") } onOpenPresets={() => { setPresetError(selectedStoredEffectClip ? undefined : "请先选择一个特效片段，再保存或套用个人预设。"); setPresetOpen(true); }} selectedEffectFamilyId={selectedEffectClip?.effectFamilyId ?? selectedEffectClip?.templateId ?? null} transitionBoundary={transitionBoundary} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
-        <PropertiesPanel onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} onRequestUpgrade={requestEffectUpgrade} onSwitchStartingStyle={requestStartingStyleSwitch} project={visibleProject} selectedClip={selectedEffectClip} />
+        <PropertiesPanel onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} onSwitchStartingStyle={requestStartingStyleSwitch} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
       <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onDropTransition={addTransitionAtBoundary} onInvalidTemplateDrop={setNotice} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => void cancelRender()} onDismiss={dismissRenderStatus} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
@@ -828,19 +788,6 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         open={styleSwitchPreview !== null}
         title="预览起始样式切换"
         warnings={styleSwitchPreview?.result.warnings}
-      />
-      <EffectChangePreviewDialog
-        changes={upgradePreview?.result.changes ?? []}
-        confirmLabel="确认升级特效"
-        defaultedKeys={upgradePreview?.result.defaultedKeys}
-        description={upgradePreview ? `“${upgradePreview.familyName}”将从 v${upgradePreview.result.fromVersion} 迁移到 v${upgradePreview.result.toVersion}。打开历史工作区不会自动执行这次升级。` : ""}
-        droppedKeys={upgradePreview?.result.droppedKeys}
-        errors={upgradePreview?.result.errors}
-        onClose={() => setUpgradePreview(null)}
-        onConfirm={confirmEffectUpgrade}
-        open={upgradePreview !== null}
-        title="预览特效升级"
-        warnings={upgradePreview?.result.warnings}
       />
       <VideoTemplateDialog effectCount={project.effectClips.length} error={videoTemplateError} onApply={applySelectedVideoTemplate} onClose={() => { setVideoTemplateOpen(false); setVideoTemplateError(undefined); }} onDelete={deleteVideoTemplate} onSave={saveVideoTemplate} open={videoTemplateOpen} templates={videoTemplates} />
     </main>

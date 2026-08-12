@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerEffectFamily } from "../../domain/templates/effect-family";
-import type { EffectFamilyDefinition, TemplateDefinition } from "../../domain/templates/types";
+import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { TEMPLATE_DRAG_MIME } from "./drag-and-drop";
 import { TemplateLibrary } from "./TemplateLibrary";
 
@@ -33,7 +33,6 @@ const discoveryFamily: EffectFamilyDefinition = {
     },
   ],
   aspectRatioDefaults: {},
-  migrations: [],
   render: ({ effectFamilyId, startingStyleId }) => createElement("span", { children: `${effectFamilyId}/${startingStyleId}` }),
 };
 
@@ -72,7 +71,8 @@ describe("特效模板库", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /^添加/ })[0]);
 
     expect(onAddTemplateAtFrame).toHaveBeenCalledWith(
-      expect.objectContaining({ id: expect.any(String) }) as TemplateDefinition,
+      expect.objectContaining({ id: expect.any(String) }) as EffectFamilyDefinition,
+      "information",
       42,
     );
   });
@@ -101,10 +101,8 @@ describe("特效模板库", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加步骤清单" }));
 
     expect(onAddTemplateAtFrame).toHaveBeenCalledWith(
-      expect.objectContaining({
-        effectFamilyId: discoveryFamily.id,
-        startingStyleId: "numbered",
-      }) as TemplateDefinition,
+      expect.objectContaining({ id: discoveryFamily.id }) as EffectFamilyDefinition,
+      "numbered",
       42,
     );
   });

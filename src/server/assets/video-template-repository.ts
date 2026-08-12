@@ -19,6 +19,10 @@ function videoTemplateFilePath(paths: WorkspacePaths, templateId: string): strin
   );
 }
 
+/**
+ * 中文注释：解析当前视频模板白名单，只接受带帧率、族身份、起始样式和范围放置的片段；
+ * 缺少当前字段时明确要求重建，边界转场或非法时间范围不会被静默降级为普通布局。
+ */
 function parseVideoTemplate(value: unknown, templateId: string): VideoTemplate {
   if (
     typeof value !== "object" ||
@@ -29,18 +33,26 @@ function parseVideoTemplate(value: unknown, templateId: string): VideoTemplate {
     throw new Error(`视频模板“${templateId}”的数据格式无效`);
   }
 
-  const data = value as { name: string; effectClips: unknown[]; fps?: number };
+  const data = value as { name: string; effectClips: unknown[]; fps: number };
+  if (!Number.isInteger(data.fps) || data.fps <= 0) {
+    throw new Error(`视频模板“${templateId}”与当前开发期数据格式不兼容，请重建`);
+  }
   const effectClips = data.effectClips.map((clip) => {
     if (
       typeof clip !== "object" ||
       clip === null ||
       typeof (clip as VideoTemplateEffectClip).templateId !== "string" ||
+      typeof (clip as VideoTemplateEffectClip).effectFamilyId !== "string" ||
+      typeof (clip as VideoTemplateEffectClip).startingStyleId !== "string" ||
       typeof (clip as VideoTemplateEffectClip).trackId !== "string" ||
       !Number.isInteger((clip as VideoTemplateEffectClip).templateVersion) ||
       !Number.isInteger((clip as VideoTemplateEffectClip).fromFrame) ||
       !Number.isInteger((clip as VideoTemplateEffectClip).durationInFrames) ||
       typeof (clip as VideoTemplateEffectClip).params !== "object" ||
-      (clip as VideoTemplateEffectClip).params === null
+      (clip as VideoTemplateEffectClip).params === null ||
+      typeof (clip as VideoTemplateEffectClip).placement !== "object" ||
+      (clip as VideoTemplateEffectClip).placement === null ||
+      (clip as VideoTemplateEffectClip).placement.type !== "range"
     ) {
       throw new Error(`视频模板“${templateId}”包含无效特效片段`);
     }
@@ -51,6 +63,9 @@ function parseVideoTemplate(value: unknown, templateId: string): VideoTemplate {
     return {
       templateId: item.templateId,
       templateVersion: item.templateVersion,
+      effectFamilyId: item.effectFamilyId,
+      startingStyleId: item.startingStyleId,
+      placement: { type: "range" as const },
       trackId: item.trackId,
       fromFrame: item.fromFrame,
       durationInFrames: item.durationInFrames,
@@ -61,9 +76,9 @@ function parseVideoTemplate(value: unknown, templateId: string): VideoTemplate {
   const template: VideoTemplate = {
     id: templateId,
     name: data.name,
+    fps: data.fps,
     effectClips,
   };
-  if (data.fps !== undefined) Object.defineProperty(template, "fps", { configurable: true, enumerable: false, value: data.fps });
   return template;
 }
 
@@ -82,9 +97,6 @@ export class VideoTemplateRepository {
     }
     await mkdir(this.paths.videoTemplates, { recursive: true });
     const saved = structuredClone(template);
-    if (template.fps !== undefined && saved.fps === undefined) {
-      Object.defineProperty(saved, "fps", { configurable: true, enumerable: false, value: template.fps });
-    }
     await writeFile(
       videoTemplateFilePath(this.paths, safeId),
       `${JSON.stringify(serializeVideoTemplate(saved), null, 2)}\n`,

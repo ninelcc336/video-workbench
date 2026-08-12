@@ -1,14 +1,13 @@
 import { useMemo, useState } from "react";
 import {
-  createTemplateDefinitionAdapter,
   getEffectFamily,
   listEffectFamilies,
   type EffectFamilyQuery,
 } from "../../domain/templates/effect-family";
 import type {
+  EffectFamilyDefinition,
   EffectFamilySummary,
   TemplateCategory,
-  TemplateDefinition,
 } from "../../domain/templates/types";
 import type { TemplateTransitionBoundary } from "./drag-and-drop";
 import {
@@ -20,16 +19,17 @@ import { TemplateCard, type TemplateUsageReference } from "./TemplateCard";
 export type { TemplateTransitionBoundary } from "./drag-and-drop";
 
 export type TemplateLibraryProps = {
-  onAddTemplate?: (templateId: string, startingStyleId?: string) => void;
+  onAddTemplate?: (familyId: string, startingStyleId: string) => void;
   /** 中文注释：播放头添加作为拖放之外的辅助入口，帧值由页面快照提供。 */
   currentFrame?: number;
-  onAddTemplateAtFrame?: (template: TemplateDefinition, frame: number) => void;
+  onAddTemplateAtFrame?: (family: EffectFamilyDefinition, startingStyleId: string, frame: number) => void;
   /** 中文注释：当前选中特效用于保持对应族的预览，即使该卡片暂时离开滚动视口。 */
   selectedEffectFamilyId?: string | null;
   onOpenPresets?: () => void;
   transitionBoundary?: TemplateTransitionBoundary | null;
   onAddTransitionAtBoundary?: (
-    template: TemplateDefinition,
+    family: EffectFamilyDefinition,
+    startingStyleId: string,
     boundary: TemplateTransitionBoundary,
   ) => void;
   onInvalidTransition?: () => void;
@@ -50,14 +50,9 @@ function familyKey(family: Pick<EffectFamilySummary, "id" | "version">): string 
   return `${family.id}@${family.version}`;
 }
 
-/** 中文注释：新目录隐藏旧版全屏转场，保留历史渲染器但不让它被误用为真实片段转场。 */
-function isVisibleLibraryFamily(family: EffectFamilySummary): boolean {
-  return !(family.legacy === true && family.category === "transition");
-}
-
-/** 中文注释：目录和最近入口共享同一可见族查询，统一包含旧版信息/装饰模板并隐藏历史全屏转场。 */
-function listVisibleLibraryFamilies(query: Omit<EffectFamilyQuery, "includeLegacy"> = {}): EffectFamilySummary[] {
-  return listEffectFamilies({ ...query, includeLegacy: true }).filter(isVisibleLibraryFamily);
+/** 中文注释：目录只返回当前注册的特效族，预发布阶段不再混入旧模板或隐藏兼容条目。 */
+function listVisibleLibraryFamilies(query: EffectFamilyQuery = {}): EffectFamilySummary[] {
+  return listEffectFamilies(query);
 }
 
 /** 中文注释：最近入口按浏览器记录顺序重排族摘要，失效的旧族身份会自动从结果中消失。 */
@@ -118,7 +113,7 @@ export function TemplateLibrary({
     setView("all");
   };
 
-  /** 中文注释：样式选择只更新当前卡片的族内视图，真正添加时才生成对应起始样式适配器。 */
+  /** 中文注释：样式选择只更新当前卡片的族内视图，添加时直接把族和样式交给页面命令层。 */
   const selectStartingStyle = (family: EffectFamilySummary, startingStyleId: string) => {
     setSelectedStyles((current) => ({ ...current, [familyKey(family)]: startingStyleId }));
   };
@@ -138,21 +133,21 @@ export function TemplateLibrary({
 
   /** 中文注释：普通特效保持原来的播放头添加和拖放回调；片段转场只有拿到合法交界点才进入页面命令层。 */
   const addFamily = (family: EffectFamilySummary, startingStyleId: string) => {
-    const template = createTemplateDefinitionAdapter(getEffectFamily(family.id, family.version), startingStyleId);
+    const registeredFamily = getEffectFamily(family.id, family.version);
     if (family.category === "transition") {
       if (!transitionBoundary || !onAddTransitionAtBoundary) {
         onInvalidTransition?.();
         return;
       }
-      onAddTransitionAtBoundary(template, transitionBoundary);
+      onAddTransitionAtBoundary(registeredFamily, startingStyleId, transitionBoundary);
       return;
     }
 
     if (onAddTemplateAtFrame) {
-      onAddTemplateAtFrame(template, Math.max(0, Math.round(currentFrame)));
+      onAddTemplateAtFrame(registeredFamily, startingStyleId, Math.max(0, Math.round(currentFrame)));
       return;
     }
-    onAddTemplate?.(template.id, startingStyleId);
+    onAddTemplate?.(registeredFamily.id, startingStyleId);
   };
 
   return (
@@ -225,7 +220,7 @@ export function TemplateLibrary({
       <div aria-labelledby={`template-category-${category}`} className="template-list" id="template-library-results" role="tabpanel">
         {families.length === 0 ? <p className="muted-copy">没有匹配的特效族。</p> : families.map((family) => {
           const startingStyleId = getSelectedStyleId(family);
-          const template = createTemplateDefinitionAdapter(getEffectFamily(family.id, family.version), startingStyleId);
+          const registeredFamily = getEffectFamily(family.id, family.version);
           const isSelected = selectedEffectFamilyId === family.id;
           const canAddTransition = family.category !== "transition" || Boolean(transitionBoundary && onAddTransitionAtBoundary);
           return (
@@ -238,7 +233,8 @@ export function TemplateLibrary({
               onInvalidAction={family.category === "transition" ? onInvalidTransition : undefined}
               onStartingStyleChange={(nextStyleId) => selectStartingStyle(family, nextStyleId)}
               onTemplateUsed={rememberUsage}
-              template={template}
+              selectedStartingStyleId={startingStyleId}
+              template={registeredFamily}
             />
           );
         })}

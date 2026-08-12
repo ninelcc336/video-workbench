@@ -48,6 +48,8 @@ export function createTransitionSmokeProject(
     id: "transition-smoke-effect",
     templateId: "basic-transition",
     templateVersion: 1,
+    effectFamilyId: "basic-transition",
+    startingStyleId: "default",
     placement: {
       type: "boundary",
       beforeVideoClipId: "transition-before",

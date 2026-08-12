@@ -6,11 +6,10 @@ import {
   getTransitionVideoFrames,
   resolveBoundaryTransition,
 } from "../domain/project/transition";
-// 中文注释：加载旧模板注册副作用，让历史 v1 声明也能通过统一特效族查找入口读取。
+// 中文注释：加载当前内置特效族注册声明，编辑器与固定帧组合共享同一目录。
 import "../domain/templates/registry";
 import {
   createEffectRenderInput,
-  createTemplateDefinitionAdapter,
   getEffectFamily,
   getAspectRatioForCanvas,
 } from "../domain/templates/effect-family";
@@ -18,7 +17,6 @@ import type {
   EffectFamilyRenderProps,
   EffectFamilyTransitionRenderProps,
   EffectFamilyDefinition,
-  TemplateDefinition,
   TransitionVideoFrame,
 } from "../domain/templates/types";
 import { assertMediaSource, type MediaSources } from "./media";
@@ -58,21 +56,21 @@ export function getCompositionMediaSources(
 }
 
 export type EffectLayerRenderProps = {
-  template: TemplateDefinition;
+  family: EffectFamilyDefinition;
   renderProps: EffectFamilyRenderProps;
 };
 
-/** 中文注释：把编辑项目中的特效片段转换成模板渲染输入，统一注册表查找、局部帧和参数归一化。 */
+/** 中文注释：把当前特效片段转换成族渲染输入，统一注册表查找、局部帧和参数归一化。 */
 export function getEffectLayerRenderProps(
   project: EditProject,
   clip: EffectClip,
   frame: number,
 ): EffectLayerRenderProps {
-  const family = getEffectFamily(clip.effectFamilyId ?? clip.templateId, clip.templateVersion);
+  const family = getEffectFamily(clip.effectFamilyId, clip.templateVersion);
   const renderInput = createEffectRenderInput({
     familyId: family.id,
     version: clip.templateVersion,
-    startingStyleId: clip.startingStyleId ?? "legacy-default",
+    startingStyleId: clip.startingStyleId,
     aspectRatio: getAspectRatioForCanvas(project.settings.width, project.settings.height),
     frame,
     fps: project.settings.fps,
@@ -83,15 +81,15 @@ export function getEffectLayerRenderProps(
   });
 
   return {
-    template: createTemplateDefinitionAdapter(family, renderInput.renderProps.startingStyleId),
+    family,
     renderProps: renderInput.renderProps,
   };
 }
 
 function TemplateLayer({ clip, project }: { clip: EffectClip; project: EditProject }) {
-  const { template, renderProps } = getEffectLayerRenderProps(project, clip, useCurrentFrame());
+  const { family, renderProps } = getEffectLayerRenderProps(project, clip, useCurrentFrame());
 
-  return template.render(renderProps);
+  return family.render(renderProps);
 }
 
 /** 中文注释：把一个精确源帧包在当前局部帧上，避免转场读取不存在的历史帧；冻结时只重复该单帧。 */
@@ -148,11 +146,11 @@ export function getTransitionLayerRenderProps(
   const beforeSource = assertMediaSource(resolved.beforeVideoClip.mediaId, mediaSources);
   const afterSource = assertMediaSource(resolved.afterVideoClip.mediaId, mediaSources);
   const durationInFrames = resolved.durationInFrames;
-  const family = getEffectFamily(clip.effectFamilyId ?? clip.templateId, clip.templateVersion);
+  const family = getEffectFamily(clip.effectFamilyId, clip.templateVersion);
   const renderInput = createEffectRenderInput({
     familyId: family.id,
     version: clip.templateVersion,
-    startingStyleId: clip.startingStyleId ?? "legacy-default",
+    startingStyleId: clip.startingStyleId,
     aspectRatio: getAspectRatioForCanvas(project.settings.width, project.settings.height),
     frame,
     fps: project.settings.fps,

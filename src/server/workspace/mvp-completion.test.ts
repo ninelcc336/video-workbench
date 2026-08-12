@@ -72,7 +72,17 @@ describe("MVP 视频模板原子套用", () => {
       id: "template-1",
       name: "节奏模板",
       fps: 30,
-      effectClips: [{ templateId: "card-overlay", templateVersion: 1, trackId: "effects-1", fromFrame: 30, durationInFrames: 30, params: {} }],
+        effectClips: [{
+          templateId: "card-overlay",
+          templateVersion: 1,
+          effectFamilyId: "card-overlay",
+          startingStyleId: "default",
+          placement: { type: "range" },
+          trackId: "effects-1",
+          fromFrame: 30,
+          durationInFrames: 30,
+          params: {},
+        }],
     };
     applyVideoTemplate(store, template, 60, (index) => `generated-${index}`);
     expect(store.getSnapshot().effectClips[0]).toMatchObject({ fromFrame: 120, durationInFrames: 60 });

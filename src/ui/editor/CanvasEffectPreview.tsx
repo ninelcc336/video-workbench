@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { EditProject, EffectClip } from "../../domain/project/model";
-import { getTemplate } from "../../domain/templates/registry";
+import { getEffectFamily } from "../../domain/templates/effect-family";
 import { CANVAS_DRAG_THRESHOLD, getPositionAndSize } from "./CanvasSelection";
 import { isEffectClipActive } from "./effect-visibility";
 
@@ -45,7 +45,7 @@ function roundPosition(position: { x: number; y: number }): { x: number; y: numb
 /** 中文注释：模板缺失时仍保留预览命中层的稳定渲染，避免一个异常片段阻断其他特效选择。 */
 function getClipLabel(clip: EffectClip): string {
   try {
-    return getTemplate(clip.templateId, clip.templateVersion).name;
+    return getEffectFamily(clip.effectFamilyId, clip.templateVersion).name;
   } catch {
     return "未知特效";
   }

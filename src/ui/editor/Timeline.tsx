@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { EditProject, EffectClip, VideoClip } from "../../domain/project/model";
-import { getTemplate } from "../../domain/templates/registry";
+import { getEffectFamily } from "../../domain/templates/effect-family";
 import {
   findTemplateTransitionBoundary,
   getDropFrame,
@@ -10,7 +10,7 @@ import {
 } from "./drag-and-drop";
 import { layoutEffectTracks } from "./effect-track-layout";
 import { TimelineClip, type TimelineClipKind } from "./TimelineClip";
-import type { TemplateDefinition } from "../../domain/templates/types";
+import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { normalizeVideoRange, type VideoRangeMode } from "../../domain/editor/clip-ranges";
 import { getEffectClipFrameRange } from "../../domain/project/transition";
 
@@ -51,8 +51,8 @@ export type TimelineProps = {
   ) => void;
   onDeleteClip?: (clipId: string, kind: ClipKind) => void;
   onSeekFrame?: (frame: number) => void;
-  onDropTemplate?: (template: TemplateDefinition, frame: number) => void;
-  onDropTransition?: (template: TemplateDefinition, boundary: TemplateTransitionBoundary) => void;
+  onDropTemplate?: (family: EffectFamilyDefinition, startingStyleId: string, frame: number) => void;
+  onDropTransition?: (family: EffectFamilyDefinition, startingStyleId: string, boundary: TemplateTransitionBoundary) => void;
   onInvalidTemplateDrop?: (message: string) => void;
   onPreviewProject?: (project: EditProject | null) => void;
 };
@@ -87,7 +87,7 @@ function clipLabel(clip: VideoClip | EffectClip, kind: ClipKind): string {
   if (kind === "video") return `视频 ${clip.id.slice(-4)}`;
   if (!("templateId" in clip)) return "未知特效";
   try {
-    return getTemplate(clip.templateId, clip.templateVersion).name;
+    return getEffectFamily(clip.effectFamilyId, clip.templateVersion).name;
   } catch {
     return "未知特效";
   }
@@ -347,13 +347,13 @@ export function Timeline({
     event.preventDefault();
 
     try {
-      const template = getTemplate(dragData.templateId, dragData.templateVersion, dragData.startingStyleId);
+      const family = getEffectFamily(dragData.effectFamilyId, dragData.effectFamilyVersion);
       const frame = getDropFrame(
         { clientX: event.clientX },
         event.currentTarget,
         pixelsPerFrame,
       );
-      if (template.category === "transition") {
+      if (family.category === "transition") {
         const boundary = findTemplateTransitionBoundary(project, frame);
         if (!boundary || !onDropTransition) {
           // 中文注释：向拖动源明确报告非法交界点，避免最近使用把失败的转场拖放误记为成功。
@@ -361,11 +361,11 @@ export function Timeline({
           onInvalidTemplateDrop?.("片段转场只能放在相邻视频片段交界点。");
           return;
         }
-        onDropTransition(template, boundary);
+        onDropTransition(family, dragData.startingStyleId, boundary);
         return;
       }
       // 中文注释：放置位置由时间轴换算，页面层负责创建片段并写入 EditorStore。
-      onDropTemplate?.(template, frame);
+      onDropTemplate?.(family, dragData.startingStyleId, frame);
     } catch {
       // 中文注释：外部拖放或已失效模板不会破坏时间轴当前项目。
     }

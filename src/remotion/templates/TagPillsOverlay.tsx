@@ -1,6 +1,7 @@
 import React from "react";
 import { Easing, interpolate } from "remotion";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 import { getVisibilityProgress } from "./animation";
 
 /** 中文注释：标签胶囊参数支持用换行或逗号输入多个短标签。 */
@@ -36,8 +37,8 @@ function parseTags(value: string): string[] {
 }
 
 /** 中文注释：渲染标题和逐个弹入的标签胶囊，适合作为章节标题的补充信息层。 */
-export const TagPillsOverlay: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const TagPillsOverlay: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...tagPillsDefaults, ...params } as TagPillsOverlayParams;
   const tags = parseTags(values.tags);
@@ -111,12 +112,14 @@ export const TagPillsOverlay: React.FC<TemplateRenderProps> & {
   );
 };
 
-TagPillsOverlay.definition = {
+TagPillsOverlay.definition = defineEffectFamily({
   id: "tag-pills-overlay",
   version: 1,
   category: "information-overlay",
   name: "标签胶囊组",
   description: "用小型标签、分类和状态胶囊补充章节信息。",
+  purposeTags: ["标签", "状态"],
+  visualDirections: ["简洁信息", "活力社媒"],
   defaultDurationInFrames: 90,
   parameters: [
     { key: "title", label: "标签标题", type: "text", defaultValue: tagPillsDefaults.title, maxLength: 30 },
@@ -128,5 +131,7 @@ TagPillsOverlay.definition = {
     { key: "size", label: "尺寸", type: "size", defaultValue: tagPillsDefaults.size },
     { key: "animationDuration", label: "入场/出场时长", type: "number", defaultValue: tagPillsDefaults.animationDuration, min: 1, max: 90, step: 1 },
   ],
+  startingStyles: [{ id: "default", name: "标签胶囊", visualDirection: "简洁信息", defaultParams: tagPillsDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <TagPillsOverlay {...props} />,
-};
+});

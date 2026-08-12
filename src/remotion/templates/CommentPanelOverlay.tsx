@@ -1,5 +1,6 @@
 import React from "react";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 import { getVisibilityProgress } from "./animation";
 
 /** 中文注释：评论面板参数覆盖目标视频右侧半透明评论卡片的内容、尺寸和入场方式。 */
@@ -51,8 +52,8 @@ function getPanelOffset(
 }
 
 /** 中文注释：渲染带头像标记、正文和可选标签的半透明评论面板。 */
-export const CommentPanelOverlay: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const CommentPanelOverlay: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...commentPanelDefaults, ...params } as CommentPanelOverlayParams;
   // 中文注释：出场复用入场方向和时长，让面板离开画面时保持相同的运动语义。
@@ -128,12 +129,14 @@ export const CommentPanelOverlay: React.FC<TemplateRenderProps> & {
   );
 };
 
-CommentPanelOverlay.definition = {
+CommentPanelOverlay.definition = defineEffectFamily({
   id: "comment-panel-overlay",
   version: 1,
   category: "information-overlay",
   name: "评论面板卡",
   description: "复刻视频中的半透明评论、聊天和消息信息面板。",
+  purposeTags: ["引用", "评论"],
+  visualDirections: ["简洁信息", "活力社媒"],
   defaultDurationInFrames: 105,
   parameters: [
     { key: "title", label: "面板标题", type: "text", defaultValue: commentPanelDefaults.title, maxLength: 40 },
@@ -160,5 +163,7 @@ CommentPanelOverlay.definition = {
     { key: "animationDuration", label: "入场/出场时长", type: "number", defaultValue: commentPanelDefaults.animationDuration, min: 1, max: 90, step: 1 },
     { key: "showTag", label: "显示底部标签", type: "boolean", defaultValue: commentPanelDefaults.showTag },
   ],
+  startingStyles: [{ id: "default", name: "评论卡", visualDirection: "简洁信息", defaultParams: commentPanelDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <CommentPanelOverlay {...props} />,
-};
+});

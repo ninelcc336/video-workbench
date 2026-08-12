@@ -37,6 +37,10 @@ function projectIdFromFileName(fileName: string): string {
   return fileName.slice(0, -".json".length);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** 中文注释：项目名称既是展示名称也是 Windows 文件名，统一裁剪、阻止保留名和路径危险字符。 */
 function normalizeProjectId(projectId: string): string {
   const normalized = projectId.trim();
@@ -53,51 +57,28 @@ function normalizeProjectId(projectId: string): string {
   return normalized;
 }
 
-/** 中文注释：把旧项目提升到当前数据版本，迁移只作用于内存快照。 */
-function migrateProject(value: unknown): { project: EditProject; migrated: boolean } {
-  if (!value || typeof value !== "object") {
-    throw new WorkspaceErrorClass("corrupt_project", "项目数据不是对象");
+/** 中文注释：只解析当前项目格式；旧快照不再补字段或迁移，必须由用户重建开发期视频工作区。 */
+function parseCurrentProject(value: unknown, projectId: string, sourceLabel: string): EditProject {
+  try {
+    const source = isRecord(value) ? value : undefined;
+    const project = source && Array.isArray(source.effectClips)
+      ? {
+          ...source,
+          effectClips: source.effectClips.map(deserializeEffectClip),
+        }
+      : source;
+    const validation = validateProject(project);
+    if (!validation.valid) {
+      throw new Error(validation.errors.map((error) => error.message).join("；"));
+    }
+    return project as EditProject;
+  } catch (error) {
+    throw new WorkspaceErrorClass(
+      "corrupt_project",
+      `编辑项目“${projectId}”的${sourceLabel}与当前开发期数据格式不兼容，请重建视频工作区`,
+      error,
+    );
   }
-
-  const source = value as Record<string, unknown>;
-  const schemaVersion = source.schemaVersion === undefined ? 0 : source.schemaVersion;
-  if (schemaVersion !== 0 && schemaVersion !== 1) {
-    throw new WorkspaceErrorClass("corrupt_project", `不支持的项目数据版本：${String(schemaVersion)}`);
-  }
-
-  const effectClips: EditProject["effectClips"] | unknown = Array.isArray(source.effectClips)
-    ? source.effectClips.map(deserializeEffectClip)
-    : source.effectClips;
-
-  if (schemaVersion === 1) {
-    return {
-      project: { ...(value as EditProject), effectClips: effectClips as EditProject["effectClips"] },
-      migrated: false,
-    };
-  }
-
-  // 中文注释：早期项目可能没有 sourceStartFrame/audioEnabled/export，补齐安全默认值后再走统一校验。
-  const videoClips: EditProject["videoClips"] | unknown = Array.isArray(source.videoClips)
-    ? source.videoClips.map((clip) => ({
-        ...(clip as Record<string, unknown>),
-        sourceStartFrame: (clip as Record<string, unknown>).sourceStartFrame ?? 0,
-        audioEnabled: (clip as Record<string, unknown>).audioEnabled ?? true,
-      }))
-    : source.videoClips;
-  const settings = source.settings as Record<string, unknown> | undefined;
-  const exportSettings: EditProject["export"] | undefined = source.export as EditProject["export"] | undefined ?? (settings
-    ? { format: "mp4", width: settings.width as number, height: settings.height as number, fps: settings.fps as number }
-    : undefined);
-  return {
-    migrated: true,
-    project: {
-      ...(source as unknown as EditProject),
-      schemaVersion: 1,
-      videoClips: videoClips as EditProject["videoClips"],
-      effectClips: effectClips as EditProject["effectClips"],
-      export: exportSettings as EditProject["export"],
-    },
-  };
 }
 
 /** 中文注释：项目仓储只负责 JSON 持久化，不处理编辑器状态和渲染任务。 */
@@ -179,29 +160,7 @@ export class ProjectRepository {
       );
     }
 
-    let migrated: { project: EditProject; migrated: boolean };
-    try {
-      migrated = migrateProject(parsed);
-    } catch (error) {
-      if (error instanceof WorkspaceErrorClass) throw error;
-      throw new WorkspaceErrorClass("corrupt_project", `编辑项目“${resolvedProjectId}”迁移失败`, error);
-    }
-    const validation = validateProject(migrated.project);
-    if (!validation.valid) {
-      throw new WorkspaceErrorClass(
-        "corrupt_project",
-        `编辑项目“${resolvedProjectId}”的数据格式无效：${validation.errors
-          .map((error) => error.message)
-          .join("；")}`,
-        validation,
-      );
-    }
-    const project = validationProject(migrated.project);
-    if (migrated.migrated) {
-      // 中文注释：迁移成功后再原子保存，失败时原始文件仍由备份和正式文件保护。
-      await this.saveProject(project, resolvedProjectId);
-    }
-    return project;
+    return parseCurrentProject(parsed, resolvedProjectId, "数据");
   }
 
   /** 中文注释：只从最近备份读取，不覆盖损坏的正式项目，供用户明确点击“从备份恢复”。 */
@@ -222,12 +181,7 @@ export class ProjectRepository {
     } catch {
       throw new WorkspaceErrorClass("corrupt_project", `项目“${projectId}”的备份已损坏`);
     }
-    const migrated = migrateProject(parsed).project;
-    const validation = validateProject(migrated);
-    if (!validation.valid) {
-      throw new WorkspaceErrorClass("corrupt_project", `项目“${projectId}”的备份数据无效`, validation);
-    }
-    return migrated;
+    return parseCurrentProject(parsed, projectId, "备份");
   }
 
   /** 中文注释：恢复操作只替换正式文件，不把损坏的正式内容覆盖掉唯一可用备份。 */

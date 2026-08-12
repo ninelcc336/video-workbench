@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { createEffectRenderInput, getEffectFamily } from "../domain/templates/effect-family";
 import { EffectFrame, EffectFrameComposition } from "./EffectFrameComposition";
 
-// 中文注释：测试使用历史 v1 族验证固定帧组合不会绕过版本化查找或改写渲染输入。
+// 中文注释：测试使用当前 v1 族验证固定帧组合不会绕过版本化查找或改写渲染输入。
 const family = getEffectFamily("card-overlay", 1);
 const renderProps = createEffectRenderInput({
   familyId: family.id,
   version: family.version,
-  startingStyleId: "legacy-default",
+  startingStyleId: "default",
   aspectRatio: "16:9",
   frame: 24,
   fps: 30,

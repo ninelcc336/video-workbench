@@ -8,8 +8,8 @@ export type VideoTemplate = {
   id: string;
   name: string;
   effectClips: ReadonlyArray<VideoTemplateEffectClip>;
-  /** 中文注释：模板创建时的帧率用于跨项目换算秒数；旧模板缺省按目标项目帧率处理。 */
-  fps?: number;
+  /** 中文注释：模板创建时的帧率用于跨项目换算秒数，当前格式始终显式保存。 */
+  fps: number;
 };
 
 function cloneParams(params: Record<string, unknown>): Record<string, unknown> {
@@ -44,17 +44,22 @@ export function createVideoTemplate(
     project.effectClips[0]?.fromFrame ?? 0,
   );
 
-  const template: VideoTemplate = {
-    id,
-    name: assertValidName(name),
-    effectClips: project.effectClips.map(({ id: _id, ...clip }) => ({
+  const effectClips = project.effectClips.map(({ id: _id, ...clip }) => {
+    if (clip.placement.type === "boundary") {
+      throw new Error("真实片段转场绑定当前视频工作区，不能保存到可复用视频模板");
+    }
+    return {
       ...clip,
       fromFrame: clip.fromFrame - originFrame,
       params: cloneParams(clip.params),
-    })),
+    };
+  });
+  const template: VideoTemplate = {
+    id,
+    name: assertValidName(name),
+    fps: project.settings.fps,
+    effectClips,
   };
-  // 中文注释：用不可枚举属性兼容旧测试和旧文件格式，同时让新调用方获得真实源帧率。
-  Object.defineProperty(template, "fps", { configurable: true, enumerable: false, value: project.settings.fps });
   return template;
 }
 
@@ -62,10 +67,13 @@ export function createVideoTemplate(
 export function serializeVideoTemplate(template: VideoTemplate): Omit<VideoTemplate, "id"> {
   return {
     name: template.name,
-    ...(template.fps ? { fps: template.fps } : {}),
+    fps: template.fps,
     effectClips: template.effectClips.map((clip) => ({
       templateId: clip.templateId,
       templateVersion: clip.templateVersion,
+      effectFamilyId: clip.effectFamilyId,
+      startingStyleId: clip.startingStyleId,
+      placement: clip.placement,
       trackId: clip.trackId,
       fromFrame: clip.fromFrame,
       durationInFrames: clip.durationInFrames,
@@ -86,7 +94,7 @@ export function applyVideoTemplate(
 ): void {
   assertValidFrame(targetStartFrame, "模板应用起点");
   const targetFps = store.getSnapshot().settings.fps;
-  const sourceFps = template.fps ?? targetFps;
+  const sourceFps = template.fps;
   const existingClips = store.getSnapshot().effectClips;
   const addedClips: EffectClip[] = [];
 

@@ -4,7 +4,7 @@ import {
   getEffectFamily,
 } from "../domain/templates/effect-family";
 import type { EffectFamilyRenderProps } from "../domain/templates/types";
-// 中文注释：固定帧验证页和 Remotion 导出都依赖注册副作用，确保同一份族声明可按 ID 查找。
+// 中文注释：固定帧验证页和 Remotion 导出都依赖当前族注册声明，确保同一份族定义可按 ID 查找。
 import "../domain/templates/registry";
 
 export type EffectFrameCompositionProps = {

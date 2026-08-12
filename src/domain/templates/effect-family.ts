@@ -1,14 +1,10 @@
 import type {
   AspectRatio,
   EffectFamilyDefinition,
-  EffectFamilyMigration,
-  EffectFamilyMigrationOutput,
   EffectFamilyRenderProps,
   EffectFamilySummary,
   EffectParameterDefinition,
   ParameterDefinition,
-  TemplateDefinition,
-  TemplateRenderProps,
   TemplateCategory,
 } from "./types";
 import {
@@ -34,7 +30,6 @@ export type EffectFamilyQuery = {
   visualDirection?: string;
   visualDirections?: ReadonlyArray<string>;
   text?: string;
-  includeLegacy?: boolean;
 };
 
 export type EffectFamilyInstance = {
@@ -45,6 +40,40 @@ export type EffectFamilyInstance = {
   durationInFrames: number;
   params: Record<string, unknown>;
 };
+
+/**
+ * 中文注释：把内置声明中的基础参数补齐为当前族契约需要的元数据；它只在注册当前代码声明时运行，
+ * 不读取、不识别任何历史持久化格式，因此不会形成旧数据兼容路径。
+ */
+export function defineEffectFamily(
+  family: Omit<EffectFamilyDefinition, "parameters"> & {
+    parameters: ReadonlyArray<ParameterDefinition>;
+  },
+): EffectFamilyDefinition {
+  const parameters = family.parameters.map((parameter) => {
+    const group = parameter.group ?? (
+      parameter.type === "position" || parameter.type === "size" || parameter.type === "spacing"
+        ? "layout"
+        : parameter.type === "text" || parameter.type === "multiline-text" || parameter.type === "structured-list" || parameter.type === "icon"
+          ? "content"
+          : parameter.type === "animation-stage"
+            ? "animation"
+            : "appearance"
+    );
+    return {
+      ...parameter,
+      group,
+      level: parameter.level ?? "basic",
+      styleSwitch: parameter.styleSwitch ?? (
+        group === "content" || parameter.type === "position" || parameter.type === "size"
+          ? "preserve"
+          : "replace"
+      ),
+    };
+  });
+
+  return { ...family, parameters } as EffectFamilyDefinition;
+}
 
 export type EffectFamilyValidationOptions = {
   durationInFrames?: number;
@@ -80,25 +109,6 @@ export type StartingStyleSwitchResult = {
 
 export type StartingStyleSwitchOptions = {
   useAspectRatioLayout?: boolean;
-};
-
-export type EffectFamilyUpgradeRequest = {
-  familyId: string;
-  fromVersion: number;
-  toVersion?: number;
-  params: Record<string, unknown>;
-};
-
-export type EffectFamilyUpgradeResult = {
-  valid: boolean;
-  fromVersion: number;
-  toVersion: number;
-  params: Record<string, unknown>;
-  changes: EffectFamilyParameterChange[];
-  droppedKeys: string[];
-  defaultedKeys: string[];
-  errors: EffectFamilyIssue[];
-  warnings: EffectFamilyIssue[];
 };
 
 export type EffectRenderInputRequest = {
@@ -141,7 +151,7 @@ function assertEffectFamilyDefinition(family: EffectFamilyDefinition): void {
   ) {
     throw new Error(`特效族“${family.id || "未命名"}”声明不完整`);
   }
-  if (!family.legacy && (family.purposeTags.length === 0 || family.visualDirections.length === 0)) {
+  if (family.purposeTags.length === 0 || family.visualDirections.length === 0) {
     throw new Error(`特效族“${family.id}”必须声明用途标签和视觉方向`);
   }
 
@@ -184,22 +194,6 @@ function assertEffectFamilyDefinition(family: EffectFamilyDefinition): void {
   }
   assertAspectRatioDefaults(family, family.aspectRatioDefaults, "族级画幅默认值");
 
-  const migrations = new Set<string>();
-  for (const migration of family.migrations) {
-    const migrationKey = `${migration.fromVersion}->${migration.toVersion}`;
-    if (
-      !Number.isInteger(migration.fromVersion) ||
-      migration.fromVersion <= 0 ||
-      !Number.isInteger(migration.toVersion) ||
-      migration.toVersion <= 0 ||
-      migration.fromVersion === migration.toVersion ||
-      migrations.has(migrationKey) ||
-      typeof migration.migrate !== "function"
-    ) {
-      throw new Error(`特效族“${family.id}”包含无效版本迁移：${migrationKey}`);
-    }
-    migrations.add(migrationKey);
-  }
 }
 
 /** 中文注释：族级和样式级画幅覆盖使用同一校验规则，确保部分布局不会绕过参数白名单。 */
@@ -232,156 +226,7 @@ export function registerEffectFamily(family: EffectFamilyDefinition): void {
   effectFamilies.set(key, family);
 }
 
-/** 中文注释：旧参数没有新版元数据时按内容、布局和表现的保守规则补齐，不改变原参数值。 */
-function inferLegacyParameterMetadata(parameter: ParameterDefinition): EffectParameterDefinition {
-  if (parameter.group && parameter.level && parameter.styleSwitch) {
-    return parameter as EffectParameterDefinition;
-  }
-
-  const group = parameter.group ?? (
-    parameter.type === "position" || parameter.type === "size"
-      ? "layout"
-      : parameter.type === "text" || parameter.type === "multiline-text" || parameter.type === "structured-list" || parameter.type === "icon"
-        ? "content"
-        : "appearance"
-  );
-  const styleSwitch = parameter.styleSwitch ?? (
-    group === "content" || parameter.type === "position" || parameter.type === "size"
-      ? "preserve"
-      : "replace"
-  );
-
-  return {
-    ...parameter,
-    group,
-    level: parameter.level ?? "basic",
-    styleSwitch,
-  } as EffectParameterDefinition;
-}
-
-type LegacyCatalogMetadata = Pick<EffectFamilyDefinition, "purposeTags" | "visualDirections">;
-
-const legacyCatalogMetadata: Record<string, LegacyCatalogMetadata> = {
-  "section-title-overlay": {
-    purposeTags: ["标题", "章节"],
-    visualDirections: ["简洁信息", "科技数据"],
-  },
-  "card-overlay": {
-    purposeTags: ["重点标注", "结论"],
-    visualDirections: ["简洁信息", "活力社媒"],
-  },
-  "checklist-overlay": {
-    purposeTags: ["清单", "步骤"],
-    visualDirections: ["简洁信息", "科技数据"],
-  },
-  "comment-panel-overlay": {
-    purposeTags: ["引用", "评论"],
-    visualDirections: ["简洁信息", "活力社媒"],
-  },
-  "tag-pills-overlay": {
-    purposeTags: ["标签", "状态"],
-    visualDirections: ["简洁信息", "活力社媒"],
-  },
-  "bubble-decoration": {
-    purposeTags: ["装饰", "节奏"],
-    visualDirections: ["科技数据", "活力社媒"],
-  },
-  "basic-transition": {
-    purposeTags: ["画面连接"],
-    visualDirections: ["简洁信息"],
-  },
-};
-
-/** 中文注释：为历史模板补齐目录策划信息；未知旧模板按顶层类型给出中性的表达目的和视觉方向。 */
-function getLegacyCatalogMetadata(template: TemplateDefinition): LegacyCatalogMetadata {
-  return legacyCatalogMetadata[template.id] ?? (template.category === "decorative-animation"
-    ? { purposeTags: ["画面点缀"], visualDirections: ["活力社媒"] }
-    : template.category === "transition"
-      ? { purposeTags: ["画面连接"], visualDirections: ["简洁信息"] }
-      : { purposeTags: ["信息说明"], visualDirections: ["简洁信息"] });
-}
-
-/** 中文注释：把旧模板包装成历史特效族适配器，只为统一读取和渲染入口，不把旧模板自动升级为新版族。 */
-export function registerLegacyTemplate(template: TemplateDefinition): void {
-  const { purposeTags, visualDirections } = getLegacyCatalogMetadata(template);
-  registerEffectFamily({
-    id: template.id,
-    version: template.version,
-    category: template.category,
-    name: template.name,
-    // 中文注释：旧版基础转场仍按 v1 渲染，但在兼容摘要中明确标注为历史全屏过渡遮罩。
-    description: template.id === "basic-transition"
-      ? `历史全屏过渡遮罩：${template.description}`
-      : template.description,
-    purposeTags,
-    visualDirections,
-    defaultDurationInFrames: template.defaultDurationInFrames,
-    parameters: template.parameters.map(inferLegacyParameterMetadata),
-    startingStyles: [{
-      id: "legacy-default",
-      name: "旧版默认",
-      visualDirection: visualDirections[0],
-      defaultParams: getDefaultParams(template.parameters),
-    }],
-    aspectRatioDefaults: {},
-    migrations: [],
-    legacy: true,
-    render: (props) => template.render({
-      frame: props.frame,
-      fps: props.fps,
-      width: props.width,
-      height: props.height,
-      durationInFrames: props.durationInFrames,
-      params: props.params,
-    }),
-  });
-}
-
-/**
- * 中文注释：旧模板调用方暂时只认识 TemplateDefinition；适配器把新版族的首个起始样式映射为单个可添加条目，
- * 渲染时仍重新通过族接口合并画幅默认值，避免模板库复制一套渲染逻辑。
- */
-export function createTemplateDefinitionAdapter(
-  family: EffectFamilyDefinition,
-  startingStyleId = family.startingStyles[0]?.id,
-): TemplateDefinition {
-  if (!startingStyleId) {
-    throw new Error(`特效族“${family.id}”没有可用的起始样式`);
-  }
-  const defaultInstance = createEffectFamilyInstance(family, startingStyleId, "16:9");
-
-  return {
-    id: family.id,
-    version: family.version,
-    category: family.category,
-    name: family.name,
-    description: family.description,
-    defaultDurationInFrames: family.defaultDurationInFrames,
-    parameters: family.parameters,
-    effectFamilyId: family.id,
-    startingStyleId,
-    defaultParams: defaultInstance.params,
-    render: (props: TemplateRenderProps) => {
-      const aspectRatio = getAspectRatioForCanvas(props.width, props.height);
-      const instance = createEffectFamilyInstance(family, startingStyleId, aspectRatio);
-      const input = createEffectRenderInput({
-        familyId: family.id,
-        version: family.version,
-        startingStyleId,
-        aspectRatio,
-        frame: props.frame,
-        fps: props.fps,
-        width: props.width,
-        height: props.height,
-        durationInFrames: props.durationInFrames,
-        params: { ...instance.params, ...props.params },
-      });
-      return family.render(input.renderProps);
-    },
-  };
-}
-
-/** 中文注释：显式版本用于恢复历史片段；省略版本时只取当前已注册的最高版本。 */
+/** 中文注释：显式版本用于当前数据校验；省略版本时只取唯一的当前声明。 */
 export function getEffectFamily(
   familyId: string,
   version?: number,
@@ -408,7 +253,6 @@ export function listEffectFamilies(query: EffectFamilyQuery = {}): EffectFamilyS
   const text = query.text?.trim().toLocaleLowerCase("zh-CN");
 
   return [...effectFamilies.values()]
-    .filter((family) => query.includeLegacy === true || family.legacy !== true)
     .filter((family) => query.category === undefined || family.category === query.category)
     .filter((family) => query.purposeTag === undefined || family.purposeTags.includes(query.purposeTag))
     .filter((family) => query.purposeTags === undefined || query.purposeTags.every((tag) => family.purposeTags.includes(tag)))
@@ -420,7 +264,7 @@ export function listEffectFamilies(query: EffectFamilyQuery = {}): EffectFamilyS
         .some((value) => value.toLocaleLowerCase("zh-CN").includes(text));
     })
     .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
-    .map(({ parameters: _parameters, render: _render, migrations: _migrations, startingStyles, ...summary }) => ({
+    .map(({ parameters: _parameters, render: _render, startingStyles, ...summary }) => ({
       ...summary,
       startingStyles: startingStyles.map(({ defaultParams: _defaultParams, aspectRatioDefaults: _aspectRatioDefaults, parameterConstraints: _parameterConstraints, ...style }) => style),
     }));
@@ -601,46 +445,6 @@ function compressAnimationStages(
   return { params: nextParams, warnings };
 }
 
-/** 中文注释：兼容迁移器返回裸参数对象或带差异元数据的结果对象。 */
-function isMigrationOutput(value: unknown): value is EffectFamilyMigrationOutput {
-  return typeof value === "object" &&
-    value !== null &&
-    "params" in value &&
-    typeof value.params === "object" &&
-    value.params !== null &&
-    !Array.isArray(value.params);
-}
-
-/** 中文注释：迁移按版本图做最短路径搜索，支持多个小版本迁移串联且不自动执行。 */
-function findMigrationPath(
-  familyId: string,
-  fromVersion: number,
-  toVersion: number,
-): EffectFamilyMigration[] | undefined {
-  const versions = [...effectFamilies.values()].filter((family) => family.id === familyId);
-  const queue: Array<{ version: number; path: EffectFamilyMigration[] }> = [{ version: fromVersion, path: [] }];
-  const visited = new Set<number>([fromVersion]);
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) break;
-    if (current.version === toVersion) return current.path;
-
-    for (const family of versions) {
-      for (const migration of family.migrations) {
-        if (migration.fromVersion !== current.version || visited.has(migration.toVersion)) continue;
-        visited.add(migration.toVersion);
-        queue.push({
-          version: migration.toVersion,
-          path: [...current.path, migration],
-        });
-      }
-    }
-  }
-
-  return undefined;
-}
-
 /**
  * 中文注释：创建实例时按“schema 默认值 → 起始样式 → 族级画幅 → 样式级画幅”合并，
  * 让画幅适配集中在特效族模块，同时保证输出只包含声明参数。
@@ -730,113 +534,6 @@ export function switchStartingStyle(
     useAspectRatioLayout,
     errors: [...sourceValidation.errors, ...targetValidation.errors],
     warnings,
-  };
-}
-
-/**
- * 中文注释：版本升级必须由调用方显式请求；模块只计算预览所需结果和差异，不修改项目或提交历史命令。
- */
-export function upgradeEffectFamily(
-  request: EffectFamilyUpgradeRequest,
-): EffectFamilyUpgradeResult {
-  const sourceFamily = getEffectFamily(request.familyId, request.fromVersion);
-  const targetFamily = getEffectFamily(request.familyId, request.toVersion);
-  const toVersion = targetFamily.version;
-  const migrationPath = findMigrationPath(request.familyId, request.fromVersion, toVersion);
-  const sourceParams = cloneValue(request.params);
-
-  if (request.fromVersion === toVersion) {
-    const normalized = normalizeParameterValuesWithDiagnostics(targetFamily.parameters, sourceParams);
-    return {
-      valid: normalized.errors.length === 0,
-      fromVersion: request.fromVersion,
-      toVersion,
-      params: normalized.values,
-      changes: [],
-      droppedKeys: [],
-      defaultedKeys: [],
-      errors: normalized.errors,
-      warnings: normalized.warnings,
-    };
-  }
-
-  if (!migrationPath) {
-    return {
-      valid: false,
-      fromVersion: request.fromVersion,
-      toVersion,
-      params: normalizeParameterValuesWithDiagnostics(targetFamily.parameters, {}).values,
-      changes: [],
-      droppedKeys: [],
-      defaultedKeys: [],
-      errors: [{
-        code: "migration_unavailable",
-        message: `没有从特效族 v${request.fromVersion} 升级到 v${toVersion} 的迁移路径`,
-      }],
-      warnings: [],
-    };
-  }
-
-  let migratedParams = sourceParams;
-  const droppedKeys = new Set<string>();
-  const defaultedKeys = new Set<string>();
-  const warnings: EffectFamilyIssue[] = [];
-
-  for (const migration of migrationPath) {
-    const output = migration.migrate(cloneValue(migratedParams));
-    if (isMigrationOutput(output)) {
-      migratedParams = cloneValue(output.params);
-      output.droppedKeys?.forEach((key) => droppedKeys.add(key));
-      output.defaultedKeys?.forEach((key) => defaultedKeys.add(key));
-      output.warnings?.forEach((message) => warnings.push({ code: "migration_warning", message }));
-    } else {
-      migratedParams = cloneValue(output);
-    }
-  }
-
-  const normalized = normalizeParameterValuesWithDiagnostics(targetFamily.parameters, migratedParams);
-  const targetKeys = new Set(targetFamily.parameters.map((parameter) => parameter.key));
-  for (const key of Object.keys(sourceParams)) {
-    if (!targetKeys.has(key) || !Object.prototype.hasOwnProperty.call(migratedParams, key)) {
-      droppedKeys.add(key);
-    }
-  }
-  for (const key of Object.keys(migratedParams)) {
-    if (!targetKeys.has(key)) {
-      droppedKeys.add(key);
-    }
-  }
-  for (const parameter of targetFamily.parameters) {
-    if (!Object.prototype.hasOwnProperty.call(migratedParams, parameter.key)) {
-      defaultedKeys.add(parameter.key);
-    }
-  }
-  for (const error of normalized.errors) {
-    defaultedKeys.add(error.key);
-  }
-
-  const changeKeys = new Set([...Object.keys(sourceParams), ...Object.keys(normalized.values)]);
-  const changes = [...changeKeys]
-    .filter((key) => !valuesEqual(sourceParams[key], normalized.values[key]))
-    .map((key) => ({
-      key,
-      previousValue: cloneValue(sourceParams[key]),
-      nextValue: cloneValue(normalized.values[key]),
-    }));
-
-  return {
-    valid: normalized.errors.length === 0,
-    fromVersion: sourceFamily.version,
-    toVersion,
-    params: normalized.values,
-    changes,
-    droppedKeys: [...droppedKeys].sort(),
-    defaultedKeys: [...defaultedKeys].sort(),
-    errors: normalized.errors,
-    warnings: [
-      ...warnings,
-      ...normalized.warnings,
-    ],
   };
 }
 

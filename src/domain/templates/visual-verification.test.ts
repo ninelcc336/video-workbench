@@ -69,7 +69,6 @@ const fixtureFamily: EffectFamilyDefinition = {
     defaultParams: {},
   }],
   aspectRatioDefaults: {},
-  migrations: [],
   render: () => null,
 };
 

@@ -9,8 +9,6 @@ export type EffectChangePreviewDialogProps = {
   title: string;
   description: string;
   changes: ReadonlyArray<EffectFamilyParameterChange>;
-  droppedKeys?: ReadonlyArray<string>;
-  defaultedKeys?: ReadonlyArray<string>;
   warnings?: ReadonlyArray<EffectFamilyIssue>;
   errors?: ReadonlyArray<EffectFamilyIssue>;
   aspectRatioLayoutOption?: {
@@ -38,8 +36,6 @@ export function EffectChangePreviewDialog({
   title,
   description,
   changes,
-  droppedKeys = [],
-  defaultedKeys = [],
   warnings = [],
   errors = [],
   aspectRatioLayoutOption,
@@ -72,18 +68,6 @@ export function EffectChangePreviewDialog({
               </ul>
             )}
           </section>
-          {defaultedKeys.length > 0 ? (
-            <section aria-label="迁移默认项" className="effect-change-dialog__section">
-              <h3>使用默认值 <span>{defaultedKeys.length}</span></h3>
-              <p>{defaultedKeys.join("、")}</p>
-            </section>
-          ) : null}
-          {droppedKeys.length > 0 ? (
-            <section aria-label="迁移丢弃项" className="effect-change-dialog__section effect-change-dialog__section--warning">
-              <h3>将丢弃的旧参数 <span>{droppedKeys.length}</span></h3>
-              <p>{droppedKeys.join("、")}</p>
-            </section>
-          ) : null}
           {warnings.length > 0 ? (
             <section aria-label="变更警告" className="effect-change-dialog__section effect-change-dialog__section--warning" role="status">
               <h3>需要留意</h3>

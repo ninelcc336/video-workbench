@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { EditProject, EffectClip } from "../../domain/project/model";
-import { getTemplate, normalizeParams } from "../../domain/templates/registry";
+import { getEffectFamily } from "../../domain/templates/effect-family";
+import { normalizeParameterValuesWithDiagnostics } from "../../domain/templates/parameter-schema";
 
 type CanvasPoint = { x: number; y: number };
 type CanvasSize = { width: number; height: number };
@@ -65,8 +66,8 @@ export function getPositionAndSize(
   paramsSnapshot?: Record<string, unknown>,
 ): { position: CanvasPoint; size: CanvasSize } | null {
   try {
-    const template = getTemplate(clip.templateId, clip.templateVersion);
-    const params = normalizeParams(template, paramsSnapshot ?? clip.params);
+    const family = getEffectFamily(clip.effectFamilyId, clip.templateVersion);
+    const params = normalizeParameterValuesWithDiagnostics(family.parameters, paramsSnapshot ?? clip.params).values;
     if (!isPoint(params.position) || !isSize(params.size)) return null;
     return {
       position: {

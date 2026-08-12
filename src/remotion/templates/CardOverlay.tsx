@@ -1,5 +1,6 @@
 import React from "react";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 import { getVisibilityProgress } from "./animation";
 
 export type CardOverlayParams = {
@@ -37,8 +38,8 @@ const getOffset = (direction: CardOverlayParams["enterDirection"], distance: num
   }
 };
 
-export const CardOverlay: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const CardOverlay: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...cardDefaults, ...params } as CardOverlayParams;
   // 中文注释：同一进度覆盖入场和出场，片段结束前会沿入场方向反向退场。
@@ -79,12 +80,14 @@ export const CardOverlay: React.FC<TemplateRenderProps> & {
   );
 };
 
-CardOverlay.definition = {
+CardOverlay.definition = defineEffectFamily({
   id: "card-overlay",
   version: 1,
   category: "information-overlay",
   name: "弹入卡片",
   description: "带有弹入动画的信息卡片。",
+  purposeTags: ["重点标注", "结论"],
+  visualDirections: ["简洁信息", "活力社媒"],
   defaultDurationInFrames: 60,
   parameters: [
     { key: "text", label: "文字", type: "text", defaultValue: cardDefaults.text, maxLength: 80 },
@@ -123,5 +126,7 @@ CardOverlay.definition = {
       step: 1,
     },
   ],
+  startingStyles: [{ id: "default", name: "实色卡片", visualDirection: "简洁信息", defaultParams: cardDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <CardOverlay {...props} />,
-};
+});

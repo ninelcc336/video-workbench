@@ -172,7 +172,8 @@ export type TemplateCategory =
 
 export type EffectType = TemplateCategory;
 
-export type TemplateRenderProps = {
+/** 中文注释：所有当前特效族共享这一份渲染输入，编辑器与 Remotion 不再通过旧模板外壳转接。 */
+export type EffectRenderProps = {
   frame: number;
   fps: number;
   width: number;
@@ -212,7 +213,7 @@ export type StartingStyleDefinition = {
   parameterConstraints?: Readonly<Record<string, { maxItems?: number; maxLength?: number }>>;
 };
 
-export type EffectFamilyRenderProps = TemplateRenderProps & {
+export type EffectFamilyRenderProps = EffectRenderProps & {
   effectFamilyId: string;
   effectFamilyVersion: number;
   startingStyleId: string;
@@ -236,21 +237,6 @@ export type EffectFamilyTransitionRenderProps = EffectFamilyRenderProps & {
   after: TransitionVideoFrame;
 };
 
-export type EffectFamilyMigrationOutput = {
-  params: Record<string, unknown>;
-  droppedKeys?: ReadonlyArray<string>;
-  defaultedKeys?: ReadonlyArray<string>;
-  warnings?: ReadonlyArray<string>;
-};
-
-export type EffectFamilyMigration = {
-  fromVersion: number;
-  toVersion: number;
-  migrate: (
-    params: Readonly<Record<string, unknown>>,
-  ) => Record<string, unknown> | EffectFamilyMigrationOutput;
-};
-
 /** 中文注释：特效族声明是编辑器、模板库和 Remotion 渲染器共享的唯一新版入口。 */
 export type EffectFamilyDefinition = {
   id: string;
@@ -264,11 +250,9 @@ export type EffectFamilyDefinition = {
   parameters: ReadonlyArray<EffectParameterDefinition>;
   startingStyles: ReadonlyArray<StartingStyleDefinition>;
   aspectRatioDefaults: Partial<Record<AspectRatio, Readonly<Record<string, unknown>>>>;
-  migrations: ReadonlyArray<EffectFamilyMigration>;
   render: (props: EffectFamilyRenderProps) => ReactNode;
   /** 中文注释：只有真实片段转场实现该接口；普通信息叠加和装饰动画不应读取相邻视频画面。 */
   renderTransition?: (props: EffectFamilyTransitionRenderProps) => ReactNode;
-  legacy?: boolean;
 };
 
 /** 中文注释：目录只需要样式身份和策划信息，不把样式默认参数暴露给搜索和卡片调用方。 */
@@ -279,27 +263,7 @@ export type StartingStyleSummary = Omit<
 
 export type EffectFamilySummary = Omit<
   EffectFamilyDefinition,
-  "parameters" | "render" | "renderTransition" | "migrations" | "startingStyles"
+  "parameters" | "render" | "renderTransition" | "startingStyles"
 > & {
   startingStyles: ReadonlyArray<StartingStyleSummary>;
 };
-
-export type TemplateDefinition = {
-  id: string;
-  version: number;
-  category: TemplateCategory;
-  name: string;
-  description: string;
-  defaultDurationInFrames: number;
-  parameters: ReadonlyArray<ParameterDefinition>;
-  /** 中文注释：兼容模板外壳可携带新版特效族身份，旧模板没有这些字段。 */
-  effectFamilyId?: string;
-  startingStyleId?: string;
-  defaultParams?: Readonly<Record<string, unknown>>;
-  render: (props: TemplateRenderProps) => ReactNode;
-};
-
-export type TemplateSummary = Omit<
-  TemplateDefinition,
-  "parameters" | "render" | "defaultParams"
->;

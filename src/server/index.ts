@@ -2,10 +2,9 @@ import express from "express";
 import { getHealthStatus } from "./health";
 import { createRenderRouter } from "./render/render-routes";
 import { getFixedProjectLibraryRoot } from "./workspace/workspace-adapter";
-import { ProjectRepository } from "./workspace/project-repository";
 import { VideoWorkspaceAdapter } from "./workspace/video-workspace-adapter";
 import { createVideoWorkspaceRouter } from "./workspace/video-workspace-routes";
-import { getWorkspacePaths, WorkspaceError } from "./workspace/workspace-paths";
+import { WorkspaceError } from "./workspace/workspace-paths";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4173);
@@ -13,13 +12,10 @@ const libraryRoot = getFixedProjectLibraryRoot();
 const workspace = new VideoWorkspaceAdapter(libraryRoot);
 let workspaceInitializationError: WorkspaceError | null = null;
 
-/** 中文注释：启动时只在新工作区库为空时迁移旧共享项目库，避免覆盖用户已创建的独立工作区。 */
+/** 中文注释：启动时只初始化当前工作区库；开发期旧共享项目不会被自动读取或迁移。 */
 async function initializeVideoWorkspaces(): Promise<void> {
   try {
     await workspace.initialize();
-    if ((await workspace.listWorkspaces()).length === 0 && (await new ProjectRepository(getWorkspacePaths(libraryRoot)).listProjects()).length > 0) {
-      await workspace.migrateLegacyLibrary(getWorkspacePaths(libraryRoot));
-    }
     workspaceInitializationError = null;
   } catch (error) {
     workspaceInitializationError = error instanceof WorkspaceError

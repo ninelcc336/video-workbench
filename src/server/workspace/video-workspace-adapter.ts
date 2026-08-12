@@ -24,11 +24,6 @@ export class VideoWorkspaceAdapter {
     await this.repository.initialize();
   }
 
-  /** 中文注释：迁移入口保留在适配器层，防止界面把旧共享目录当作一个可切换的用户工作区。 */
-  async migrateLegacyLibrary(legacyPaths: WorkspacePaths): Promise<void> {
-    await this.repository.migrateLegacyLibrary(legacyPaths);
-  }
-
   /** 中文注释：新建工作区只写自己的初始快照，不创建或复用任何其他工作区素材。 */
   async createWorkspace(workspaceId: string, workspace: VideoWorkspace): Promise<void> {
     await this.repository.createWorkspace(workspaceId, workspace);
@@ -136,12 +131,12 @@ export class VideoWorkspaceAdapter {
     return new PresetRepository(this.repository.getWorkspacePaths(workspaceId));
   }
 
-  /** 中文注释：返回当前视频工作区的个人预设，旧 JSON 的完整预设兼容由领域模型负责。 */
+  /** 中文注释：返回当前视频工作区的个人预设，读取失败时由当前格式校验给出重建提示。 */
   async listPresets(workspaceId: string): Promise<Preset[]> {
     return (await this.getPresetRepository(workspaceId)).listPresets();
   }
 
-  /** 中文注释：保存个人预设时透传范围和特效族身份，仓储负责白名单序列化与旧格式兼容。 */
+  /** 中文注释：保存个人预设时透传范围和特效族身份，仓储负责当前格式白名单序列化。 */
   async savePreset(
     workspaceId: string,
     templateId: string,

@@ -4,20 +4,24 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EffectClip } from "../../domain/project/model";
-import { getTemplate } from "../../domain/templates/registry";
+import { getEffectFamily } from "../../domain/templates/effect-family";
+import "../../domain/templates/registry";
 import { CanvasSelection } from "./CanvasSelection";
 
 afterEach(cleanup);
 
 function createEffectClip(): EffectClip {
-  const template = getTemplate("card-overlay", 1);
+  const family = getEffectFamily("card-overlay", 1);
   return {
     id: "effect-1",
-    templateId: template.id,
-    templateVersion: template.version,
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: "default",
+    placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
-    durationInFrames: template.defaultDurationInFrames,
+    durationInFrames: family.defaultDurationInFrames,
     params: {
       text: "标题",
       color: "#111827",

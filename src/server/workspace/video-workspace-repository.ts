@@ -13,12 +13,9 @@ import type { EditProject } from "../../domain/project/model";
 import { deserializeEffectClip } from "../../domain/project/serialization";
 import { validateProject } from "../../domain/project/validation";
 import { MediaRepository } from "./media-repository";
-import { ProjectRepository } from "./project-repository";
 import {
   assertSafePathSegment,
   getWorkspacePaths,
-  mediaAssetPath,
-  mediaMetadataPath,
   type WorkspacePaths,
   WorkspaceError,
 } from "./workspace-paths";
@@ -136,7 +133,7 @@ export class VideoWorkspaceRepository {
     }
     try {
       const parsed: unknown = JSON.parse(raw);
-      // 中文注释：视频工作区也必须走统一片段反序列化，补齐兼容元数据但不迁移模板版本或参数。
+      // 中文注释：视频工作区也必须走统一片段反序列化；缺少当前字段时直接返回重建提示。
       const workspace: unknown = parsed && typeof parsed === "object" && Array.isArray((parsed as { effectClips?: unknown }).effectClips)
         ? {
             ...(parsed as Record<string, unknown>),
@@ -146,7 +143,23 @@ export class VideoWorkspaceRepository {
       this.assertValidWorkspace(workspace);
       return workspace;
     } catch (error) {
-      if (error instanceof WorkspaceError) throw error;
+      if (error instanceof WorkspaceError) {
+        if (error.code === "invalid_project") {
+          throw new WorkspaceError(
+            "corrupt_project",
+            `视频工作区“${workspaceId}”的${isBackup ? "备份" : "数据"}与当前开发期数据格式不兼容，请重建视频工作区`,
+            error,
+          );
+        }
+        throw error;
+      }
+      if (error instanceof Error && error.message.includes("当前开发期数据格式不兼容")) {
+        throw new WorkspaceError(
+          "corrupt_project",
+          `视频工作区“${workspaceId}”的${isBackup ? "备份" : "数据"}与当前开发期数据格式不兼容，请重建视频工作区`,
+          error,
+        );
+      }
       throw new WorkspaceError("corrupt_project", `视频工作区“${workspaceId}”的${isBackup ? "备份" : "数据"}已损坏，无法读取`, error);
     }
   }
@@ -195,38 +208,6 @@ export class VideoWorkspaceRepository {
       }
     }
     return summaries.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id));
-  }
-
-  /** 中文注释：旧共享项目库迁移为独立目录；同一旧素材按引用工作区复制而不是继续共享。 */
-  async migrateLegacyLibrary(legacyPaths: WorkspacePaths): Promise<void> {
-    await this.initialize();
-    if ((await this.listWorkspaces()).length > 0) {
-      throw new WorkspaceError("project_library_unavailable", "目标工作区库已存在数据，不能覆盖迁移");
-    }
-    const legacyProjects = new ProjectRepository(legacyPaths);
-    const legacyMedia = new MediaRepository(legacyPaths);
-    const createdWorkspaceIds: string[] = [];
-    try {
-      for (const summary of await legacyProjects.listProjects()) {
-        const workspace = await legacyProjects.loadProject(summary.id);
-        await this.createWorkspace(summary.id, workspace);
-        createdWorkspaceIds.push(summary.id);
-        const destinationPaths = this.getWorkspacePaths(summary.id);
-        await mkdir(destinationPaths.media, { recursive: true });
-        for (const mediaId of [...new Set(workspace.videoClips.map((clip) => clip.mediaId))]) {
-          const asset = await legacyMedia.getMediaAsset(mediaId);
-          const sourcePath = await legacyMedia.getMediaPath(mediaId);
-          if (!asset || !sourcePath) continue;
-          const extension = asset.fileName.slice(asset.id.length);
-          await copyFile(sourcePath, mediaAssetPath(destinationPaths, mediaId, extension));
-          await copyFile(mediaMetadataPath(legacyPaths, mediaId), mediaMetadataPath(destinationPaths, mediaId));
-        }
-      }
-    } catch (error) {
-      // 中文注释：迁移尚未成功前清理本次创建的所有目标目录，旧共享库不写入且下次仍可安全重试。
-      await Promise.all(createdWorkspaceIds.map((workspaceId) => rm(this.workspaceDirectory(workspaceId), { force: true, recursive: true })));
-      throw error;
-    }
   }
 
   /** 中文注释：工作区目录仅由经过校验的名称生成，避免名称绕过隔离根目录。 */

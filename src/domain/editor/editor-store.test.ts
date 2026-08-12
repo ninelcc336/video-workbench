@@ -19,6 +19,9 @@ const effectClip: EffectClip = {
   id: "effect-1",
   templateId: "card-overlay",
   templateVersion: 1,
+  effectFamilyId: "card-overlay",
+  startingStyleId: "default",
+  placement: { type: "range" },
   trackId: "effects-1",
   fromFrame: 10,
   durationInFrames: 20,
@@ -78,50 +81,10 @@ const styleSwitchFamily: EffectFamilyDefinition = {
     { id: "tech", name: "科技", visualDirection: "科技数据", defaultParams: { color: "#38bdf8", animation: "slide" } },
   ],
   aspectRatioDefaults: {},
-  migrations: [],
   render: (props) => createElement("div", { "data-family": props.effectFamilyId }),
 };
 
-const upgradeSourceFamily: EffectFamilyDefinition = {
-  ...styleSwitchFamily,
-  id: "editor-command-upgrade-fixture",
-  parameters: styleSwitchFamily.parameters.filter((parameter) => parameter.key !== "animation"),
-  startingStyles: [{ id: "legacy", name: "旧样式", visualDirection: "简洁信息", defaultParams: {} }],
-};
-
-const upgradeTargetFamily: EffectFamilyDefinition = {
-  ...upgradeSourceFamily,
-  version: 2,
-  parameters: [
-    {
-      key: "headline",
-      label: "新标题",
-      type: "text",
-      defaultValue: "新默认标题",
-      group: "content",
-      level: "basic",
-      styleSwitch: "preserve",
-    },
-    {
-      key: "accent",
-      label: "强调色",
-      type: "color",
-      defaultValue: "#38bdf8",
-      group: "appearance",
-      level: "basic",
-      styleSwitch: "replace",
-    },
-  ],
-  migrations: [{
-    fromVersion: 1,
-    toVersion: 2,
-    migrate: (params) => ({ params: { headline: params.text, accent: params.color } }),
-  }],
-};
-
 registerEffectFamily(styleSwitchFamily);
-registerEffectFamily(upgradeSourceFamily);
-registerEffectFamily(upgradeTargetFamily);
 
 function createStore() {
   return createEditorStore(createEmptyProject());
@@ -356,6 +319,7 @@ describe("命令式编辑器核心", () => {
       templateVersion: 1,
       effectFamilyId: styleSwitchFamily.id,
       startingStyleId: "clean",
+      placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 12,
       durationInFrames: 18,
@@ -372,38 +336,6 @@ describe("命令式编辑器核心", () => {
     });
     expect(store.getSnapshot().effectClips[0].fromFrame).toBe(12);
     expect(store.getSnapshot().effectClips[0].durationInFrames).toBe(18);
-
-    store.undo();
-    expect(store.getSnapshot().effectClips[0]).toEqual(clip);
-  });
-
-  it("只在显式升级命令后迁移特效版本，并可一次撤销升级", () => {
-    const store = createStore();
-    const clip: EffectClip = {
-      id: "upgrade-effect-1",
-      templateId: upgradeSourceFamily.id,
-      templateVersion: 1,
-      effectFamilyId: upgradeSourceFamily.id,
-      startingStyleId: "legacy",
-      trackId: "effects-1",
-      fromFrame: 24,
-      durationInFrames: 20,
-      params: { text: "旧文案", color: "#ffffff", obsolete: true },
-    };
-
-    store.dispatch({ type: "add-effect-clip", clip });
-    expect(store.getSnapshot().effectClips[0]).toEqual(clip);
-
-    store.dispatch({ type: "upgrade-effect-family", clipId: clip.id, toVersion: 2 });
-    expect(store.getSnapshot().effectClips[0]).toMatchObject({
-      templateVersion: 2,
-      effectFamilyId: upgradeSourceFamily.id,
-      startingStyleId: "legacy",
-      fromFrame: 24,
-      durationInFrames: 20,
-      params: { headline: "旧文案", accent: "#ffffff" },
-    });
-    expect(store.getSnapshot().effectClips[0].params).not.toHaveProperty("obsolete");
 
     store.undo();
     expect(store.getSnapshot().effectClips[0]).toEqual(clip);

@@ -7,7 +7,6 @@ import {
   listEffectFamilies,
   registerEffectFamily,
   switchStartingStyle,
-  upgradeEffectFamily,
   validateEffectFamilyParams,
 } from "./effect-family";
 import type { EffectFamilyDefinition } from "./types";
@@ -146,7 +145,6 @@ const contractFamily: EffectFamilyDefinition = {
     "9:16": { position: { x: 0.5, y: 0.65 } },
     "1:1": { position: { x: 0.5, y: 0.55 } },
   },
-  migrations: [],
   render: (props) => createElement("div", { "data-effect-family": props.effectFamilyId }),
 };
 
@@ -314,115 +312,6 @@ describe("特效族公共契约", () => {
       title: "保留的标题",
       position: { x: 0.5, y: 0.65 },
     });
-  });
-
-  it("只在显式请求时迁移版本，并返回参数差异和丢弃项", () => {
-    const legacyFamily: EffectFamilyDefinition = {
-      ...contractFamily,
-      id: "migration-fixture",
-      parameters: [
-        {
-          key: "title",
-          label: "旧标题",
-          type: "text",
-          defaultValue: "旧默认标题",
-          group: "content",
-          level: "basic",
-          styleSwitch: "preserve",
-        },
-        {
-          key: "accent",
-          label: "旧强调色",
-          type: "color",
-          defaultValue: "#14b8a6",
-          group: "appearance",
-          level: "basic",
-          styleSwitch: "replace",
-        },
-      ],
-      startingStyles: [
-        {
-          id: "legacy-default",
-          name: "旧版默认",
-          visualDirection: "concise-information",
-          defaultParams: {},
-        },
-      ],
-      aspectRatioDefaults: {},
-      migrations: [],
-    };
-    const nextFamily: EffectFamilyDefinition = {
-      ...legacyFamily,
-      version: 2,
-      parameters: [
-        {
-          key: "headline",
-          label: "新标题",
-          type: "text",
-          defaultValue: "新默认标题",
-          group: "content",
-          level: "basic",
-          styleSwitch: "preserve",
-        },
-        {
-          key: "accentColor",
-          label: "新强调色",
-          type: "color",
-          defaultValue: "#38bdf8",
-          group: "appearance",
-          level: "basic",
-          styleSwitch: "replace",
-        },
-        {
-          key: "mode",
-          label: "模式",
-          type: "select",
-          defaultValue: "standard",
-          options: [{ value: "standard", label: "标准" }],
-          group: "behavior",
-          level: "advanced",
-          styleSwitch: "replace",
-        },
-      ],
-      migrations: [
-        {
-          fromVersion: 1,
-          toVersion: 2,
-          migrate: (params) => ({
-            params: {
-              headline: params.title,
-              accentColor: params.accent,
-              ghost: "迁移产生的未知字段",
-            },
-            droppedKeys: ["title", "accent"],
-          }),
-        },
-      ],
-    };
-    registerEffectFamily(legacyFamily);
-    registerEffectFamily(nextFamily);
-
-    const result = upgradeEffectFamily({
-      familyId: "migration-fixture",
-      fromVersion: 1,
-      toVersion: 2,
-      params: { title: "旧标题", accent: "#ffffff", obsolete: "旧字段" },
-    });
-
-    expect(result).toMatchObject({
-      fromVersion: 1,
-      toVersion: 2,
-      params: {
-        headline: "旧标题",
-        accentColor: "#ffffff",
-        mode: "standard",
-      },
-    });
-    expect(result.droppedKeys).toEqual(expect.arrayContaining(["title", "accent", "obsolete", "ghost"]));
-    expect(result.defaultedKeys).toContain("mode");
-    expect(result.changes).toEqual(
-      expect.arrayContaining([expect.objectContaining({ key: "headline" })]),
-    );
   });
 
   it("为任意帧生成可重复且只包含安全参数的渲染输入", () => {

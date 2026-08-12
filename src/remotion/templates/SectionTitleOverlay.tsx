@@ -1,5 +1,6 @@
 import React from "react";
-import type { TemplateDefinition, TemplateRenderProps } from "../../domain/templates/types";
+import { defineEffectFamily } from "../../domain/templates/effect-family";
+import type { EffectFamilyDefinition, EffectFamilyRenderProps } from "../../domain/templates/types";
 import { getVisibilityProgress } from "./animation";
 
 /** 中文注释：章节标题模板的可调参数，覆盖目标视频左上角的章节信息层。 */
@@ -32,8 +33,8 @@ const sectionTitleDefaults: SectionTitleOverlayParams = {
 };
 
 /** 中文注释：渲染章节编号、英文眉标题、中文标题和可选副标题。 */
-export const SectionTitleOverlay: React.FC<TemplateRenderProps> & {
-  definition: TemplateDefinition;
+export const SectionTitleOverlay: React.FC<EffectFamilyRenderProps> & {
+  definition: EffectFamilyDefinition;
 } = ({ frame, width, height, durationInFrames, params }) => {
   const values = { ...sectionTitleDefaults, ...params } as SectionTitleOverlayParams;
   // 中文注释：标题从上方进入，并在片段尾部沿同一路径反向退出。
@@ -114,12 +115,14 @@ export const SectionTitleOverlay: React.FC<TemplateRenderProps> & {
   );
 };
 
-SectionTitleOverlay.definition = {
+SectionTitleOverlay.definition = defineEffectFamily({
   id: "section-title-overlay",
   version: 1,
   category: "information-overlay",
   name: "章节标题卡",
   description: "复刻科技解说视频左上角的章节编号和标题信息层。",
+  purposeTags: ["标题", "章节"],
+  visualDirections: ["简洁信息", "科技数据"],
   defaultDurationInFrames: 90,
   parameters: [
     { key: "number", label: "章节编号", type: "text", defaultValue: sectionTitleDefaults.number, maxLength: 8 },
@@ -142,5 +145,7 @@ SectionTitleOverlay.definition = {
     },
     { key: "showSubtitle", label: "显示副标题", type: "boolean", defaultValue: sectionTitleDefaults.showSubtitle },
   ],
+  startingStyles: [{ id: "default", name: "简洁章节", visualDirection: "简洁信息", defaultParams: sectionTitleDefaults }],
+  aspectRatioDefaults: {},
   render: (props) => <SectionTitleOverlay {...props} />,
-};
+});

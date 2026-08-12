@@ -5,6 +5,7 @@ import type { EffectClip } from "../project/model";
 import { createEditorStore } from "../editor/editor-store";
 import { registerEffectFamily } from "../templates/effect-family";
 import type { EffectFamilyDefinition } from "../templates/types";
+import "../templates/registry";
 import {
   applyPreset,
   buildExportSettings,
@@ -17,6 +18,9 @@ const effectClip: EffectClip = {
   id: "effect-1",
   templateId: "card-overlay",
   templateVersion: 1,
+  effectFamilyId: "card-overlay",
+  startingStyleId: "default",
+  placement: { type: "range" },
   trackId: "effects-1",
   fromFrame: 0,
   durationInFrames: 30,
@@ -63,7 +67,6 @@ const presetFamily: EffectFamilyDefinition = {
   ],
   startingStyles: [{ id: "default", name: "默认", visualDirection: "简洁信息", defaultParams: {} }],
   aspectRatioDefaults: {},
-  migrations: [],
   render: (props) => createElement("div", { "data-family": props.effectFamilyId }),
 };
 
@@ -72,14 +75,16 @@ registerEffectFamily(presetFamily);
 describe("个人预设模型", () => {
   it("只序列化模板引用、名称和深拷贝后的参数", () => {
     const params = { text: "知识点", position: { x: 0.5, y: 0.8 } };
-    const preset = createPreset("preset-1", "card-overlay", 1, "知识点卡片", params);
+    const preset = createPreset("preset-1", "card-overlay", 1, "知识点卡片", params, "full", "card-overlay");
 
     params.position.x = 0;
 
     expect(serializePreset(preset)).toEqual({
+      effectFamilyId: "card-overlay",
       templateId: "card-overlay",
       templateVersion: 1,
       name: "知识点卡片",
+      scope: "full",
       params: { text: "知识点", position: { x: 0.5, y: 0.8 } },
     });
     expect(JSON.stringify(serializePreset(preset))).not.toContain("mediaId");
@@ -89,7 +94,7 @@ describe("个人预设模型", () => {
     const preset = createPreset("preset-1", "card-overlay", 1, "知识点卡片", {
       text: "新文案",
       position: { x: 0.2, y: 0.3 },
-    });
+    }, "full", "card-overlay");
     const store = createEditorStore({
       ...createEmptyProject(),
       effectClips: [effectClip],
@@ -112,6 +117,8 @@ describe("个人预设模型", () => {
       1,
       "不兼容预设",
       { text: "不应写入" },
+      "full",
+      "another-effect-family",
     );
     const store = createEditorStore({
       ...createEmptyProject(),
@@ -132,6 +139,7 @@ describe("个人预设模型", () => {
       templateVersion: 1,
       effectFamilyId: presetFamily.id,
       startingStyleId: "default",
+      placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 8,
       durationInFrames: 24,
@@ -167,7 +175,7 @@ describe("个人预设模型", () => {
     expect(store.getSnapshot().effectClips[0]).toEqual(clip);
   });
 
-  it("旧版模板创建样式预设时也不会持久化文字内容", () => {
+  it("创建样式预设时不会持久化文字内容", () => {
     const preset = createPreset(
       "legacy-style-preset",
       "card-overlay",
@@ -175,6 +183,7 @@ describe("个人预设模型", () => {
       "旧版品牌样式",
       { text: "当前文案", color: "#38bdf8", position: { x: 0.2, y: 0.8 } },
       "style",
+      "card-overlay",
     );
 
     expect(preset.params).not.toHaveProperty("text");
@@ -189,6 +198,7 @@ describe("个人预设模型", () => {
       "未知样式",
       { text: "不能安全判断" },
       "style",
+      "missing-effect-family",
     )).toThrow("未找到特效族");
   });
 

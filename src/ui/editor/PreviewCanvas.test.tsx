@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EffectClip } from "../../domain/project/model";
-import { getTemplate, getTemplateDefaultParams } from "../../domain/templates/registry";
+import { createEffectFamilyInstance, getEffectFamily } from "../../domain/templates/effect-family";
 import { getContainSize, getPreviewDeviceStyle, getPreviewOrientation, PreviewCanvas } from "./PreviewCanvas";
 
 vi.mock("../preview/PreviewPlayer", () => ({
@@ -22,15 +22,19 @@ function createEffectClip(
   durationInFrames = 20,
   id = "effect-1",
 ): EffectClip {
-  const template = getTemplate(templateId, 1);
+  const family = getEffectFamily(templateId, 1);
+  const instance = createEffectFamilyInstance(family, "default", "16:9");
   return {
     id,
-    templateId: template.id,
-    templateVersion: template.version,
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: "default",
+    placement: { type: "range" },
     trackId: "effects-1",
     fromFrame,
     durationInFrames,
-    params: getTemplateDefaultParams(template),
+    params: instance.params,
   };
 }
 

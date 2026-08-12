@@ -3,7 +3,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createEmptyProject } from "../domain/project/factories";
 import type { EditProject } from "../domain/project/model";
-import { getTemplate, getTemplateDefaultParams } from "../domain/templates/registry";
+import {
+  createEffectFamilyInstance,
+  getEffectFamily,
+} from "../domain/templates/effect-family";
 import { registerEffectFamily } from "../domain/templates/effect-family";
 import type { EffectFamilyDefinition } from "../domain/templates/types";
 import {
@@ -31,13 +34,13 @@ function createProject(): EditProject {
       id: "effect-1",
       templateId: "card-overlay",
       templateVersion: 1,
+      effectFamilyId: "card-overlay",
+      startingStyleId: "default",
+      placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 15,
       durationInFrames: 45,
-      params: getTemplateDefaultParams(
-        // 中文注释：测试使用真实注册表默认参数，保证预览和导出消费同一模板契约。
-        getTemplate("card-overlay", 1),
-      ),
+      params: createEffectFamilyInstance(getEffectFamily("card-overlay", 1), "default", "16:9").params,
     },
   ];
   return project;
@@ -69,6 +72,8 @@ function createBoundaryTransitionProject(): EditProject {
     id: "boundary-transition",
     templateId: "basic-transition",
     templateVersion: 1,
+    effectFamilyId: "basic-transition",
+    startingStyleId: "default",
     placement: {
       type: "boundary",
       beforeVideoClipId: "before-video",
@@ -77,7 +82,7 @@ function createBoundaryTransitionProject(): EditProject {
     trackId: "effects-1",
     fromFrame: 999,
     durationInFrames: 8,
-    params: getTemplateDefaultParams(getTemplate("basic-transition", 1)),
+    params: createEffectFamilyInstance(getEffectFamily("basic-transition", 1), "default", "16:9").params,
   }];
   return project;
 }
@@ -123,27 +128,31 @@ describe("共享 Remotion 编辑组合", () => {
 
   it("通过真实注册表为卡片和气泡生成有效特效渲染输入", () => {
     const project = createProject();
-    const bubbleTemplate = getTemplate("bubble-decoration", 1);
+    const bubbleFamily = getEffectFamily("bubble-decoration", 1);
+    const bubbleInstance = createEffectFamilyInstance(bubbleFamily, "default", "16:9");
     const clips = [
       project.effectClips[0],
       {
         id: "effect-bubble",
-        templateId: bubbleTemplate.id,
-        templateVersion: bubbleTemplate.version,
+        templateId: bubbleFamily.id,
+        templateVersion: bubbleFamily.version,
+        effectFamilyId: bubbleFamily.id,
+        startingStyleId: "default",
+        placement: { type: "range" as const },
         trackId: "effects-1",
         fromFrame: 10,
-        durationInFrames: bubbleTemplate.defaultDurationInFrames,
-        params: getTemplateDefaultParams(bubbleTemplate),
+        durationInFrames: bubbleInstance.durationInFrames,
+        params: bubbleInstance.params,
       },
     ];
 
     for (const clip of clips) {
-      const { template, renderProps } = getEffectLayerRenderProps(project, clip, 12);
+      const { family, renderProps } = getEffectLayerRenderProps(project, clip, 12);
 
       // 中文注释：使用片段内第 12 帧验证入场和漂浮动画都能拿到有效局部帧。
       expect(renderProps.frame).toBe(12);
-      expect(renderToStaticMarkup(template.render(renderProps))).toContain(
-        `data-template-id="${template.id}"`,
+      expect(renderToStaticMarkup(family.render(renderProps))).toContain(
+        `data-template-id="${family.id}"`,
       );
     }
   });
@@ -264,7 +273,6 @@ describe("共享 Remotion 编辑组合", () => {
         defaultParams: {},
       }],
       aspectRatioDefaults: {},
-      migrations: [],
       render: (props) => createElement("div", { "data-effect-family": props.effectFamilyId }),
     };
     registerEffectFamily(family);
@@ -276,16 +284,17 @@ describe("共享 Remotion 编辑组合", () => {
       templateVersion: family.version,
       effectFamilyId: family.id,
       startingStyleId: "default",
+      placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 0,
       durationInFrames: 20,
       params: {},
     }];
 
-    const { template, renderProps } = getEffectLayerRenderProps(project, project.effectClips[0], 8);
+    const { family: resolvedFamily, renderProps } = getEffectLayerRenderProps(project, project.effectClips[0], 8);
 
-    expect(template.id).toBe(family.id);
-    expect(renderToStaticMarkup(template.render(renderProps))).toContain(
+    expect(resolvedFamily.id).toBe(family.id);
+    expect(renderToStaticMarkup(resolvedFamily.render(renderProps))).toContain(
       `data-effect-family="${family.id}"`,
     );
   });

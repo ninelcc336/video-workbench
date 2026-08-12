@@ -24,6 +24,8 @@ function createBoundaryEffect(overrides: Partial<EffectClip> = {}): EffectClip {
     id: "transition-1",
     templateId: "directional-transition",
     templateVersion: 1,
+    effectFamilyId: "basic-transition",
+    startingStyleId: "default",
     trackId: "effects-1",
     fromFrame: 999,
     durationInFrames: 8,

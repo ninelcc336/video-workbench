@@ -5,21 +5,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EffectClip } from "../../domain/project/model";
 import { registerEffectFamily } from "../../domain/templates/effect-family";
-import { getTemplate } from "../../domain/templates/registry";
+import { getEffectFamily } from "../../domain/templates/registry";
 import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { PropertiesPanel } from "./PropertiesPanel";
 
 afterEach(cleanup);
 
 function createEffectClip(): EffectClip {
-  const template = getTemplate("card-overlay", 1);
+  const family = getEffectFamily("card-overlay", 1);
   return {
     id: "effect-1",
-    templateId: template.id,
-    templateVersion: template.version,
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: "default",
+    placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
-    durationInFrames: template.defaultDurationInFrames,
+    durationInFrames: family.defaultDurationInFrames,
     params: {
       text: "旧文字",
       color: "#111827",
@@ -195,7 +198,6 @@ const structuredPropertiesFamily: EffectFamilyDefinition = {
     },
   ],
   aspectRatioDefaults: {},
-  migrations: [],
   render: () => null,
 };
 
@@ -203,13 +205,14 @@ registerEffectFamily(structuredPropertiesFamily);
 
 /** 中文注释：构造包含结构化内容和新版复合参数的片段夹具，所有断言都通过属性面板公共交互验证。 */
 function createStructuredEffectClip(): EffectClip {
-  const template = getTemplate("properties-panel-fixture", 1);
+  const template = getEffectFamily("properties-panel-fixture", 1);
   return {
     id: "structured-effect-1",
     templateId: template.id,
     templateVersion: template.version,
     effectFamilyId: structuredPropertiesFamily.id,
     startingStyleId: "default",
+    placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
     durationInFrames: template.defaultDurationInFrames,
@@ -370,7 +373,7 @@ describe("特效参数面板", () => {
   it("显示真实转场源素材尾帧不足的非阻断警告", () => {
     const clip = createEffectClip();
     clip.templateId = "basic-transition";
-    clip.params = getTemplate("basic-transition", 1).parameters.reduce<Record<string, unknown>>((params, parameter) => {
+    clip.params = getEffectFamily("basic-transition", 1).parameters.reduce<Record<string, unknown>>((params, parameter) => {
       params[parameter.key] = parameter.defaultValue;
       return params;
     }, {});
