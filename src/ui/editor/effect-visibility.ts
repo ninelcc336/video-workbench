@@ -1,9 +1,17 @@
-import type { EffectClip } from "../../domain/project/model";
+import type { EditProject, EffectClip } from "../../domain/project/model";
+import { getEffectClipFrameRange } from "../../domain/project/transition";
 
-/** 中文注释：特效片段使用左闭右开帧区间，确保结束帧已经不再显示可交互选区。 */
+/** 中文注释：按范围或当前交界点派生的左闭右开区间判断特效可见性，避免边界转场使用过期坐标。 */
 export function isEffectClipActive(
-  clip: Pick<EffectClip, "fromFrame" | "durationInFrames">,
+  clip: EffectClip,
   currentFrame: number,
+  project?: EditProject,
 ): boolean {
-  return clip.fromFrame <= currentFrame && currentFrame < clip.fromFrame + clip.durationInFrames;
+  const range = project ? getEffectClipFrameRange(project, clip) : {
+    fromFrame: clip.fromFrame,
+    durationInFrames: clip.durationInFrames,
+  };
+  return range !== null
+    && range.fromFrame <= currentFrame
+    && currentFrame < range.fromFrame + range.durationInFrames;
 }

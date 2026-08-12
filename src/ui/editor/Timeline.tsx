@@ -12,6 +12,7 @@ import { layoutEffectTracks } from "./effect-track-layout";
 import { TimelineClip, type TimelineClipKind } from "./TimelineClip";
 import type { TemplateDefinition } from "../../domain/templates/types";
 import { normalizeVideoRange, type VideoRangeMode } from "../../domain/editor/clip-ranges";
+import { getEffectClipFrameRange } from "../../domain/project/transition";
 
 export type ClipKind = TimelineClipKind;
 
@@ -92,10 +93,20 @@ function clipLabel(clip: VideoClip | EffectClip, kind: ClipKind): string {
   }
 }
 
+/** 中文注释：把边界特效的当前交界点范围投影到时间轴，失效绑定不会继续占据旧坐标。 */
+function getTimelineEffectClips(project: EditProject): EffectClip[] {
+  return project.effectClips.flatMap((clip) => {
+    const range = getEffectClipFrameRange(project, clip);
+    return range
+      ? [{ ...clip, fromFrame: range.fromFrame, durationInFrames: range.durationInFrames }]
+      : [];
+  });
+}
+
 function clipEnd(project: EditProject): number {
   const ends = [
     ...project.videoClips.map((clip) => clip.fromFrame + clip.durationInFrames),
-    ...project.effectClips.map((clip) => clip.fromFrame + clip.durationInFrames),
+    ...getTimelineEffectClips(project).map((clip) => clip.fromFrame + clip.durationInFrames),
   ];
   return Math.max(180, ...ends, 1);
 }
@@ -130,9 +141,9 @@ export function Timeline({
   const resizeStart = useRef<{ clientY: number; height: number } | null>(null);
   const effectTracks = useMemo(
     () => {
-      const committedTracks = layoutEffectTracks(project.effectClips);
+      const committedTracks = layoutEffectTracks(getTimelineEffectClips(project));
       if (!previewProject) return committedTracks;
-      const previewClips = new Map(timelineProject.effectClips.map((clip) => [clip.id, clip]));
+      const previewClips = new Map(getTimelineEffectClips(timelineProject).map((clip) => [clip.id, clip]));
       // 中文注释：拖动期间固定原特效轨道，避免片段临时跨轨道重排导致鼠标手势组件卸载。
       return committedTracks.map((track) => ({
         ...track,
@@ -293,6 +304,10 @@ export function Timeline({
       ? project.videoClips.find((candidate) => candidate.id === clipId)
       : project.effectClips.find((candidate) => candidate.id === clipId);
     if (!clip) return;
+    if (kind === "effect" && "placement" in clip && clip.placement?.type === "boundary") {
+      onInvalidTemplateDrop?.("片段转场的位置由相邻视频片段交界点决定。");
+      return;
+    }
     const nextFromFrame = kind === "video"
       ? normalizeVideoRange(project, clipId, fromFrame, clip.durationInFrames, "move").fromFrame
       : Math.max(0, Math.round(fromFrame));
@@ -308,6 +323,14 @@ export function Timeline({
     const range = kind === "video"
       ? normalizeVideoRange(project, clipId, fromFrame, durationInFrames, mode)
       : clampClipRange(fromFrame, durationInFrames);
+    if (kind === "effect") {
+      const clip = project.effectClips.find((candidate) => candidate.id === clipId);
+      const boundaryRange = clip ? getEffectClipFrameRange(project, clip) : null;
+      if (clip?.placement?.type === "boundary" && boundaryRange) {
+        onResizeClip?.(clipId, kind, boundaryRange.fromFrame, durationInFrames);
+        return;
+      }
+    }
     onResizeClip?.(clipId, kind, range.fromFrame, range.durationInFrames);
   };
 

@@ -23,6 +23,8 @@ export type VideoClip = {
   sourceStartFrame: number;
   // 中文注释：durationInFrames 必须是正整数，区间按 [fromFrame, fromFrame + durationInFrames) 计算。
   durationInFrames: number;
+  /** 中文注释：已知源视频总帧数时用于转场尾帧保护；旧项目缺失该字段时按片段末帧保守冻结。 */
+  sourceDurationInFrames?: number;
   audioEnabled: boolean;
 };
 

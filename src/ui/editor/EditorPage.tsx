@@ -215,9 +215,10 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     onAutosaveStatusChange?.(autosaveState.status);
   }, [autosaveState.status, onAutosaveStatusChange]);
 
-  useEffect(() => store.subscribe((snapshot) => {
+  useEffect(() => store.subscribe((snapshot, notices = []) => {
     setProject(snapshot);
     autosave.schedule(snapshot);
+    if (notices.length > 0) setNotice(notices.join(" "));
   }), [autosave, store]);
 
   useEffect(() => {
@@ -273,11 +274,12 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   }, [project]);
 
   const dispatch = (command: EditorCommand): boolean => {
+    // 中文注释：先清理上一条提示，再让 Store 同步发布本次命令产生的移除或冻结警告，避免成功命令把新提示覆盖掉。
+    setNotice(null);
     try {
       // 中文注释：重置后的其他编辑操作会改变历史栈，不能再把其撤销误判为撤销重置。
       if (command.type !== "reset-project") frameBeforeProjectReset.current = null;
       store.dispatch(command);
-      setNotice(null);
       return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "操作失败，请检查时间轴范围");
@@ -448,6 +450,9 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       sourceStartFrame: 0,
       // 中文注释：历史素材缺少元数据时保留 5 秒兼容时长，避免阻断重新上轨。
       durationInFrames: Math.max(1, Math.round((asset.durationInSeconds ?? 5) * clipFps)),
+      sourceDurationInFrames: asset.durationInSeconds
+        ? Math.max(1, Math.round(asset.durationInSeconds * clipFps))
+        : undefined,
       audioEnabled: true,
     };
     const sourceDimensions = asset.width && asset.height

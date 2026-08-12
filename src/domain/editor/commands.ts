@@ -2,6 +2,10 @@ import { validateProject } from "../project/validation";
 import { createEmptyProject } from "../project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../project/model";
 import {
+  reconcileBoundaryTransitionPlacements,
+  resolveBoundaryTransition,
+} from "../project/transition";
+import {
   createEffectFamilyInstance,
   getAspectRatioForCanvas,
   getEffectFamily,
@@ -39,6 +43,11 @@ export type EditorCommand =
       params: Record<string, unknown>;
     }
   | EffectFamilyEditorCommand;
+
+export type CommandResult = {
+  project: EditProject;
+  notices: string[];
+};
 
 function copyVideoClip(clip: VideoClip): VideoClip {
   return { ...clip };
@@ -103,6 +112,25 @@ function requireEffectClip(project: EditProject, clipId: string): EffectClip {
   return clip;
 }
 
+/** 中文注释：边界特效只能绑定当前严格相邻的视频片段，创建时立即拒绝非法位置，绝不退化成范围放置。 */
+function normalizeBoundaryEffectClip(project: EditProject, clip: EffectClip): EffectClip {
+  if (clip.placement?.type !== "boundary") return copyEffectClip(clip);
+  const resolved = resolveBoundaryTransition(project, clip);
+  if (!resolved) {
+    throw new Error("片段转场只能绑定当前相邻的视频片段交界点");
+  }
+  return { ...copyEffectClip(clip), fromFrame: resolved.fromFrame };
+}
+
+/** 中文注释：视频时间轴操作后刷新所有边界转场，把派生位置和失效提示作为同一条命令结果返回。 */
+function reconcileVideoBoundaryTransitions(project: EditProject): CommandResult {
+  const reconciled = reconcileBoundaryTransitionPlacements(project);
+  return {
+    project: reconciled.project,
+    notices: reconciled.notices,
+  };
+}
+
 /**
  * 中文注释：根据片段保存的族版本构造切换/升级所需的实例；缺失或过期的样式 ID 只在计算新操作时回退到族首样式，
  * 不会修改加载中的历史快照，因此打开旧工作区仍保持原版本和原参数。
@@ -158,11 +186,12 @@ function matchSourceCanvas(project: EditProject, dimensions: VideoDimensions): E
 }
 
 /** 中文注释：将单个命令应用为新快照，任何失败都不会修改输入项目。 */
-export function applyCommand(
+export function applyCommandWithResult(
   project: EditProject,
   command: EditorCommand,
-): EditProject {
+): CommandResult {
   let nextProject: EditProject;
+  let notices: string[] = [];
 
   switch (command.type) {
     case "reset-project":
@@ -179,6 +208,7 @@ export function applyCommand(
         ...projectForVideo,
         videoClips: [...projectForVideo.videoClips.map(copyVideoClip), copyVideoClip(command.clip)],
       };
+      ({ project: nextProject, notices } = reconcileVideoBoundaryTransitions(nextProject));
       break;
     case "move-video-clip": {
       requireVideoClip(project, command.clipId);
@@ -191,6 +221,7 @@ export function applyCommand(
             : copyVideoClip(clip),
         ),
       };
+      ({ project: nextProject, notices } = reconcileVideoBoundaryTransitions(nextProject));
       break;
     }
     case "resize-video-clip": {
@@ -204,6 +235,7 @@ export function applyCommand(
             : copyVideoClip(clip),
         ),
       };
+      ({ project: nextProject, notices } = reconcileVideoBoundaryTransitions(nextProject));
       break;
     }
     case "delete-video-clip":
@@ -214,13 +246,14 @@ export function applyCommand(
           .filter((clip) => clip.id !== command.clipId)
           .map(copyVideoClip),
       };
+      ({ project: nextProject, notices } = reconcileVideoBoundaryTransitions(nextProject));
       break;
     case "add-effect-clip":
       nextProject = {
         ...project,
         effectClips: [
           ...project.effectClips.map(copyEffectClip),
-          copyEffectClip(command.clip),
+          normalizeBoundaryEffectClip(project, command.clip),
         ],
       };
       break;
@@ -230,12 +263,15 @@ export function applyCommand(
         ...project,
         effectClips: [
           ...project.effectClips.map(copyEffectClip),
-          ...command.clips.map(copyEffectClip),
+          ...command.clips.map((clip) => normalizeBoundaryEffectClip(project, clip)),
         ],
       };
       break;
     case "move-effect-clip": {
-      requireEffectClip(project, command.clipId);
+      const clip = requireEffectClip(project, command.clipId);
+      if (clip.placement?.type === "boundary") {
+        throw new Error("片段转场的位置由相邻视频片段交界点决定");
+      }
       assertNonNegativeFrame(command.fromFrame);
       nextProject = {
         ...project,
@@ -248,16 +284,25 @@ export function applyCommand(
       break;
     }
     case "resize-effect-clip": {
-      requireEffectClip(project, command.clipId);
+      const clip = requireEffectClip(project, command.clipId);
       assertClipRange(command.fromFrame, command.durationInFrames);
       nextProject = {
         ...project,
         effectClips: project.effectClips.map((clip) =>
           clip.id === command.clipId
-            ? { ...copyEffectClip(clip), fromFrame: command.fromFrame, durationInFrames: command.durationInFrames }
+            ? {
+                ...copyEffectClip(clip),
+                fromFrame: clip.placement?.type === "boundary"
+                  ? (resolveBoundaryTransition(project, clip)?.fromFrame ?? command.fromFrame)
+                  : command.fromFrame,
+                durationInFrames: command.durationInFrames,
+              }
             : copyEffectClip(clip),
         ),
       };
+      if (clip.placement?.type === "boundary") {
+        ({ project: nextProject, notices } = reconcileVideoBoundaryTransitions(nextProject));
+      }
       break;
     }
     case "delete-effect-clip":
@@ -343,5 +388,10 @@ export function applyCommand(
   }
 
   assertCommandResult(nextProject);
-  return nextProject;
+  return { project: nextProject, notices };
+}
+
+/** 中文注释：保留旧的纯项目返回接口，供不需要用户提示的领域调用方继续使用。 */
+export function applyCommand(project: EditProject, command: EditorCommand): EditProject {
+  return applyCommandWithResult(project, command).project;
 }

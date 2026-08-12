@@ -11,6 +11,7 @@ import {
   getCompositionDurationInFrames,
   getCompositionMediaSources,
   getEffectLayerRenderProps,
+  getTransitionLayerRenderProps,
 } from "./EditorComposition";
 
 function createProject(): EditProject {
@@ -39,6 +40,45 @@ function createProject(): EditProject {
       ),
     },
   ];
+  return project;
+}
+
+function createBoundaryTransitionProject(): EditProject {
+  const project = createEmptyProject({ width: 1920, height: 1080 });
+  project.videoClips = [
+    {
+      id: "before-video",
+      mediaId: "before-media",
+      fromFrame: 0,
+      sourceStartFrame: 0,
+      durationInFrames: 30,
+      sourceDurationInFrames: 32,
+      audioEnabled: true,
+    },
+    {
+      id: "after-video",
+      mediaId: "after-media",
+      fromFrame: 30,
+      sourceStartFrame: 10,
+      durationInFrames: 45,
+      sourceDurationInFrames: 100,
+      audioEnabled: false,
+    },
+  ];
+  project.effectClips = [{
+    id: "boundary-transition",
+    templateId: "basic-transition",
+    templateVersion: 1,
+    placement: {
+      type: "boundary",
+      beforeVideoClipId: "before-video",
+      afterVideoClipId: "after-video",
+    },
+    trackId: "effects-1",
+    fromFrame: 999,
+    durationInFrames: 8,
+    params: getTemplateDefaultParams(getTemplate("basic-transition", 1)),
+  }];
   return project;
 }
 
@@ -121,6 +161,88 @@ describe("共享 Remotion 编辑组合", () => {
 
     expect(video.props.style).toMatchObject({
       objectFit: "contain",
+    });
+  });
+
+  it("真实转场提供前后视频的局部帧、进度、画布和静音画面节点", () => {
+    const project = createBoundaryTransitionProject();
+    const clip = project.effectClips[0];
+    const result = getTransitionLayerRenderProps(project, clip, 4, {
+      "before-media": "file:///before.mp4",
+      "after-media": "file:///after.mp4",
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.renderProps).toMatchObject({
+      localFrame: 4,
+      canvas: { width: 1920, height: 1080 },
+      before: {
+        clipId: "before-video",
+        sourceFrame: 31,
+        frozen: true,
+      },
+      after: {
+        clipId: "after-video",
+        sourceFrame: 14,
+        frozen: false,
+      },
+    });
+    expect(result?.renderProps.progress).toBeGreaterThan(0);
+    expect(result?.renderProps.progress).toBeLessThan(1);
+
+    for (const frame of [result?.renderProps.before, result?.renderProps.after]) {
+      const sequence = frame?.node as React.ReactElement<{
+        durationInFrames: number;
+        from: number;
+        layout: string;
+        children: React.ReactElement<{ muted: boolean; startFrom: number; trimAfter: number }>;
+      }>;
+      const video = sequence.props.children;
+      expect(sequence.props).toMatchObject({
+        durationInFrames: 1,
+        from: 4,
+        layout: "none",
+      });
+      expect(video.props.muted).toBe(true);
+      expect(video.props.trimAfter).toBe(1);
+    }
+    const beforeSequence = result?.renderProps.before.node as React.ReactElement<{
+      children: React.ReactElement<{ startFrom: number }>;
+    }>;
+    const afterSequence = result?.renderProps.after.node as React.ReactElement<{
+      children: React.ReactElement<{ startFrom: number }>;
+    }>;
+    expect(beforeSequence.props.children.props.startFrom).toBe(31);
+    expect(afterSequence.props.children.props.startFrom).toBe(14);
+  });
+
+  it("真实转场使用派生范围，不延长项目总时长，并在组合中置于视频之上", () => {
+    const project = createBoundaryTransitionProject();
+    expect(getCompositionDurationInFrames(project)).toBe(75);
+
+    const longTransitionProject = createBoundaryTransitionProject();
+    longTransitionProject.effectClips[0].durationInFrames = 100;
+    expect(getCompositionDurationInFrames(longTransitionProject)).toBe(75);
+
+    const element = EditorComposition({
+      project,
+      mediaSources: {
+        "before-media": "file:///before.mp4",
+        "after-media": "file:///after.mp4",
+      },
+    });
+    const rootChildren = (element as React.ReactElement<{ children: React.ReactElement[] }>).props.children;
+    const effectSequences = rootChildren[1] as unknown as React.ReactElement[];
+    const transitionSequence = effectSequences[0] as React.ReactElement<{
+      style: Record<string, unknown>;
+      from: number;
+      durationInFrames: number;
+    }>;
+
+    expect(transitionSequence.props).toMatchObject({
+      from: 30,
+      durationInFrames: 8,
+      style: { zIndex: 2 },
     });
   });
 

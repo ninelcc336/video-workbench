@@ -62,7 +62,7 @@ export function CanvasEffectPreview({
 }: CanvasEffectPreviewProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
-  const activeClips = project.effectClips.filter((clip) => isEffectClipActive(clip, currentFrame));
+  const activeClips = project.effectClips.filter((clip) => isEffectClipActive(clip, currentFrame, project));
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -74,7 +74,7 @@ export function CanvasEffectPreview({
       if (!drag.hasStarted && Math.hypot(deltaX, deltaY) <= CANVAS_DRAG_THRESHOLD) return;
 
       const clip = project.effectClips.find((candidate) => candidate.id === drag.clipId);
-      if (!clip || !isEffectClipActive(clip, currentFrame)) {
+      if (!clip || !isEffectClipActive(clip, currentFrame, project)) {
         // 中文注释：播放头离开生效区间时立即结束直接预览手势，避免继续修改不可见特效。
         dragRef.current = null;
         onPreviewEnd?.();

@@ -140,7 +140,7 @@ export function PreviewCanvas({
   const orientation = getPreviewOrientation(project.settings);
   const durationInFrames = getCompositionDurationInFrames(project);
   // 中文注释：选区与 Remotion 画面共用当前帧对应的生效状态，避免“画面不可见但仍可拖动”。
-  const isSelectedClipActive = selectedClip ? isEffectClipActive(selectedClip, currentFrame) : false;
+  const isSelectedClipActive = selectedClip ? isEffectClipActive(selectedClip, currentFrame, project) : false;
   const stageRef = useRef<HTMLDivElement>(null);
   // 中文注释：画布和工作区控制栏共同操纵同一个 Remotion Player 实例。
   const playerRef = useRef<PlayerRef>(null);

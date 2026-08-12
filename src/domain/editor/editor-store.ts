@@ -1,8 +1,8 @@
 import type { EditProject } from "../project/model";
-import { applyCommand, type EditorCommand } from "./commands";
+import { applyCommandWithResult, type EditorCommand } from "./commands";
 import { createHistory } from "./history";
 
-export type EditorListener = (snapshot: EditProject) => void;
+export type EditorListener = (snapshot: EditProject, notices?: readonly string[]) => void;
 
 export type EditorStore = {
   dispatch: (command: EditorCommand) => void;
@@ -17,17 +17,17 @@ export function createEditorStore(initialProject: EditProject): EditorStore {
   const history = createHistory(initialProject);
   const listeners = new Set<EditorListener>();
 
-  const notify = (): void => {
+  const notify = (notices: readonly string[] = []): void => {
     for (const listener of listeners) {
-      listener(history.getSnapshot());
+      listener(history.getSnapshot(), notices);
     }
   };
 
   return {
     dispatch: (command) => {
-      const nextSnapshot = applyCommand(history.getSnapshot(), command);
-      history.push(nextSnapshot);
-      notify();
+      const result = applyCommandWithResult(history.getSnapshot(), command);
+      history.push(result.project);
+      notify(result.notices);
     },
     getSnapshot: () => history.getSnapshot(),
     undo: () => {

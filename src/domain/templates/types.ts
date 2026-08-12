@@ -220,6 +220,22 @@ export type EffectFamilyRenderProps = TemplateRenderProps & {
   randomSeed: string;
 };
 
+export type TransitionVideoFrame = {
+  clipId: string;
+  sourceFrame: number;
+  frozen: boolean;
+  node: ReactNode;
+};
+
+/** 中文注释：真实片段转场额外接收两个已定位的视频帧；族只负责混合视觉，不负责读取媒体或处理音频。 */
+export type EffectFamilyTransitionRenderProps = EffectFamilyRenderProps & {
+  localFrame: number;
+  progress: number;
+  canvas: { width: number; height: number };
+  before: TransitionVideoFrame;
+  after: TransitionVideoFrame;
+};
+
 export type EffectFamilyMigrationOutput = {
   params: Record<string, unknown>;
   droppedKeys?: ReadonlyArray<string>;
@@ -250,6 +266,8 @@ export type EffectFamilyDefinition = {
   aspectRatioDefaults: Partial<Record<AspectRatio, Readonly<Record<string, unknown>>>>;
   migrations: ReadonlyArray<EffectFamilyMigration>;
   render: (props: EffectFamilyRenderProps) => ReactNode;
+  /** 中文注释：只有真实片段转场实现该接口；普通信息叠加和装饰动画不应读取相邻视频画面。 */
+  renderTransition?: (props: EffectFamilyTransitionRenderProps) => ReactNode;
   legacy?: boolean;
 };
 
@@ -261,7 +279,7 @@ export type StartingStyleSummary = Omit<
 
 export type EffectFamilySummary = Omit<
   EffectFamilyDefinition,
-  "parameters" | "render" | "migrations" | "startingStyles"
+  "parameters" | "render" | "renderTransition" | "migrations" | "startingStyles"
 > & {
   startingStyles: ReadonlyArray<StartingStyleSummary>;
 };

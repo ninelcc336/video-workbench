@@ -367,6 +367,46 @@ describe("特效参数面板", () => {
     expect(screen.getByText(/未知参数/)).toBeTruthy();
   });
 
+  it("显示真实转场源素材尾帧不足的非阻断警告", () => {
+    const clip = createEffectClip();
+    clip.templateId = "basic-transition";
+    clip.params = getTemplate("basic-transition", 1).parameters.reduce<Record<string, unknown>>((params, parameter) => {
+      params[parameter.key] = parameter.defaultValue;
+      return params;
+    }, {});
+    clip.placement = {
+      type: "boundary",
+      beforeVideoClipId: "before-video",
+      afterVideoClipId: "after-video",
+    };
+    const project = createEmptyProject();
+    project.videoClips = [
+      {
+        id: "before-video",
+        mediaId: "before-media",
+        fromFrame: 0,
+        sourceStartFrame: 0,
+        durationInFrames: 30,
+        sourceDurationInFrames: 31,
+        audioEnabled: true,
+      },
+      {
+        id: "after-video",
+        mediaId: "after-media",
+        fromFrame: 30,
+        sourceStartFrame: 0,
+        durationInFrames: 30,
+        sourceDurationInFrames: 60,
+        audioEnabled: true,
+      },
+    ];
+
+    render(<PropertiesPanel project={project} selectedClip={clip} />);
+
+    expect(screen.getByRole("status", { name: "特效参数警告" })).toBeTruthy();
+    expect(screen.getByText(/前视频素材尾帧不足/)).toBeTruthy();
+  });
+
   it("把阻断错误关联到具体控件并标记结构化参数无效", () => {
     const clip = createStructuredEffectClip();
     clip.params = { ...clip.params, title: 123, items: "不是数组" };

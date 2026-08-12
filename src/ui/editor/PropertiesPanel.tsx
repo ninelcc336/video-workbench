@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { EditProject, EffectClip } from "../../domain/project/model";
+import { getBoundaryTransitionWarnings } from "../../domain/project/transition";
 import {
   createEffectFamilyInstance,
   getAspectRatioForCanvas,
@@ -1194,6 +1195,15 @@ export function PropertiesPanel({
   const parameters = getPanelParameters(template);
   const normalized = normalizeParameterValuesWithDiagnostics(parameters, rawParams);
   const diagnostics = buildPanelDiagnostics(parameters, rawParams, normalized);
+  if (selectedClip.placement?.type === "boundary") {
+    diagnostics.push(
+      ...getBoundaryTransitionWarnings(project, selectedClip).map((message, index) => ({
+        code: `transition_warning_${index}`,
+        message,
+        severity: "warning" as const,
+      })),
+    );
+  }
   const basicParameters = getBasicParameters(parameters);
   const resetParams = getResetParams(template, project);
   const values = mode === "basic"

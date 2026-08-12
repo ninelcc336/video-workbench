@@ -128,6 +128,83 @@ function createStore() {
 }
 
 describe("命令式编辑器核心", () => {
+  it("绑定相邻视频片段创建真实转场，并可整体撤销和重做", () => {
+    const store = createStore();
+    store.dispatch({ type: "add-video-clip", clip: videoClip });
+    store.dispatch({
+      type: "add-video-clip",
+      clip: { ...videoClip, id: "video-2", mediaId: "media-2", fromFrame: 30 },
+    });
+    const transition: EffectClip = {
+      ...effectClip,
+      id: "boundary-transition",
+      templateId: "basic-transition",
+      placement: {
+        type: "boundary",
+        beforeVideoClipId: "video-1",
+        afterVideoClipId: "video-2",
+      },
+    };
+
+    store.dispatch({ type: "add-effect-clip", clip: transition });
+    expect(store.getSnapshot().effectClips[0]).toMatchObject({ fromFrame: 30, placement: transition.placement });
+
+    store.undo();
+    expect(store.getSnapshot().effectClips).toEqual([]);
+
+    store.redo();
+    expect(store.getSnapshot().effectClips[0]).toMatchObject({
+      fromFrame: 30,
+      placement: transition.placement,
+    });
+  });
+
+  it("绑定失效时在同一命令中移除转场并通知用户，删除操作可一次撤销恢复", () => {
+    const store = createStore();
+    const notices: string[][] = [];
+    store.subscribe((_snapshot, currentNotices = []) => notices.push([...currentNotices]));
+    store.dispatch({ type: "add-video-clip", clip: videoClip });
+    store.dispatch({
+      type: "add-video-clip",
+      clip: { ...videoClip, id: "video-2", mediaId: "media-2", fromFrame: 30 },
+    });
+    store.dispatch({
+      type: "add-effect-clip",
+      clip: {
+        ...effectClip,
+        id: "boundary-transition",
+        placement: {
+          type: "boundary",
+          beforeVideoClipId: "video-1",
+          afterVideoClipId: "video-2",
+        },
+      },
+    });
+
+    store.dispatch({ type: "delete-video-clip", clipId: "video-1" });
+
+    expect(store.getSnapshot().effectClips).toEqual([]);
+    expect(notices.at(-1)?.[0]).toContain("已移除");
+    store.undo();
+    expect(store.getSnapshot().effectClips).toHaveLength(1);
+  });
+
+  it("拒绝把非法交界点转场作为普通范围特效创建", () => {
+    const store = createStore();
+    expect(() => store.dispatch({
+      type: "add-effect-clip",
+      clip: {
+        ...effectClip,
+        placement: {
+          type: "boundary",
+          beforeVideoClipId: "missing-before",
+          afterVideoClipId: "missing-after",
+        },
+      },
+    })).toThrow("片段转场只能绑定当前相邻的视频片段交界点");
+    expect(store.getSnapshot().effectClips).toEqual([]);
+  });
+
   it("可以添加、移动和删除视频片段", () => {
     const store = createStore();
 

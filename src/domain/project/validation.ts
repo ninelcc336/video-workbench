@@ -25,6 +25,7 @@ const projectSchema = z.object({
       fromFrame: z.number().int().nonnegative(),
       sourceStartFrame: z.number().int().nonnegative(),
       durationInFrames: z.number().int().positive(),
+      sourceDurationInFrames: z.number().int().positive().optional(),
       audioEnabled: z.boolean(),
     }),
   ),
