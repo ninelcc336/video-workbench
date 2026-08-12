@@ -118,6 +118,15 @@ describe("特效固定帧验证矩阵", () => {
     expect(fixedFrameCase?.renderProps.randomSeed).toBe("effect-visual-verification-v1");
   });
 
+  it("按显式选项为方形画布补充入场和出场固定帧", () => {
+    const cases = buildVisualVerificationMatrix({
+      includeSquareFrameStages: true,
+      scope: { kind: "family", familyId: fixtureFamily.id },
+    }).filter((item) => item.scenario === "default" && item.aspectRatio === "1:1");
+
+    expect(cases.map((item) => item.frameStage)).toEqual(["enter", "middle", "exit"]);
+  });
+
   it("覆盖默认、最小、最大、长文本、最大条目和高级越界场景", () => {
     const cases = buildVisualVerificationMatrix({
       scope: { kind: "style", familyId: fixtureFamily.id, startingStyleId: "fixture-style" },

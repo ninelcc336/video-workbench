@@ -10,6 +10,7 @@ import { validateBuiltInAssets } from "./validate-built-in-assets";
 describe("内置素材槽位", () => {
   it("通过稳定 ID 解析到浏览器和 Remotion 共用的本地 URL", () => {
     const font = resolveBuiltInAsset("font.system-sans");
+    const monoFont = resolveBuiltInAsset("font.system-mono");
     const icon = resolveBuiltInAsset("icon.check");
 
     expect(font).toMatchObject({
@@ -24,6 +25,11 @@ describe("内置素材槽位", () => {
       url: "/effect-assets/icons/check.svg",
     });
     expect(font.filePath).not.toMatch(/^https?:/);
+    expect(monoFont).toMatchObject({
+      id: "font.system-mono",
+      kind: "font",
+      filePath: "effect-assets/fonts/system-mono.css",
+    });
   });
 
   it("提供带来源、许可证和再分发说明的素材台账", () => {

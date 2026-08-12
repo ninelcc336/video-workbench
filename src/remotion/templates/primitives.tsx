@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { staticFile } from "remotion";
 import {
   getBuiltInFontFamily,
   resolveBuiltInAsset,
@@ -7,6 +8,11 @@ import type { GradientValue } from "../../domain/templates/types";
 import { createSeededRandom } from "./random";
 
 const PARTICLE_LIMIT = 64;
+
+/** 中文注释：通过 Remotion 静态文件解析器生成环境相关 URL，开发预览和 bundle 渲染共享同一素材路径。 */
+function resolveAssetUrl(assetId: string): string {
+  return staticFile(resolveBuiltInAsset(assetId).filePath);
+}
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
@@ -19,6 +25,46 @@ function estimateTextUnits(text: string): number {
   }, 0);
 }
 
+/** 中文注释：按字符宽度估算换行行数，为不同画幅和显式换行提供统一的垂直空间约束。 */
+function estimateTextLines(text: string, maxWidth: number, fontSize: number): number {
+  const unitsPerLine = Math.max(1, maxWidth / (Math.max(1, fontSize) * 0.62));
+  return text.split(/\r?\n/).reduce(
+    (total, line) => total + Math.max(1, Math.ceil(estimateTextUnits(line) / unitsPerLine)),
+    0,
+  );
+}
+
+/** 中文注释：在宽度和高度约束内寻找最大字号；必要时突破可读下限以避免响应式文字被静默裁切。 */
+function resolveFittingFontSize(input: {
+  text: string;
+  maxWidth: number;
+  height: number;
+  requestedFontSize: number;
+  minFontSize: number;
+}): number {
+  const widthLimitedFontSize = input.maxWidth / (
+    Math.max(1, estimateTextUnits(input.text.split(/\r?\n/).sort((left, right) => estimateTextUnits(right) - estimateTextUnits(left))[0])) * 0.62
+  );
+  const upperBound = Math.min(
+    input.requestedFontSize,
+    Math.max(input.minFontSize, widthLimitedFontSize),
+  );
+  const fitsHeight = (fontSize: number): boolean =>
+    estimateTextLines(input.text, input.maxWidth, fontSize) * fontSize * 1.28 <= input.height;
+
+  if (fitsHeight(upperBound)) return upperBound;
+
+  // 中文注释：二分求值保持固定次数，保证相同输入在浏览器和离线渲染中得到同一字号。
+  let low = 1;
+  let high = upperBound;
+  for (let index = 0; index < 24; index += 1) {
+    const middle = (low + high) / 2;
+    if (fitsHeight(middle)) low = middle;
+    else high = middle;
+  }
+  return low;
+}
+
 export type ResponsiveTextLayout = {
   fontSize: number;
   lineHeight: number;
@@ -27,7 +73,7 @@ export type ResponsiveTextLayout = {
 };
 
 /**
- * 中文注释：按画幅安全比例和估算字符宽度计算字号；长文本只缩小到可读下限，不静默截断内容。
+ * 中文注释：按画幅安全比例、估算字符宽度和可用高度计算字号；极端长文本优先保留完整内容。
  */
 export function resolveResponsiveTextLayout(input: {
   text: string;
@@ -49,22 +95,22 @@ export function resolveResponsiveTextLayout(input: {
   const minFontSize = Number.isFinite(input.minFontSize)
     ? Math.max(1, input.minFontSize ?? 1)
     : Math.max(10, Math.min(14, height * 0.012));
-  const longestLineUnits = Math.max(
-    1,
-    ...input.text.split(/\r?\n/).map(estimateTextUnits),
-  );
-  const fittingFontSize = maxWidth / (longestLineUnits * 0.62);
-  const fontSize = clamp(
-    Math.min(requestedFontSize, fittingFontSize),
-    minFontSize,
+  const requestedLines = Math.max(1, Math.round(input.maxLines ?? (portrait ? 5 : 3)));
+  const fontSize = resolveFittingFontSize({
+    text: input.text,
+    maxWidth,
+    height,
     requestedFontSize,
-  );
+    minFontSize,
+  });
+  const estimatedLines = estimateTextLines(input.text, maxWidth, fontSize);
 
   return {
     fontSize,
     lineHeight: fontSize * 1.28,
     maxWidth,
-    maxLines: Math.max(1, Math.round(input.maxLines ?? (portrait ? 5 : 3))),
+    // 中文注释：高度不足时仍保留完整估算行数，只有异常极端输入才由上层明确裁切。
+    maxLines: Math.max(requestedLines, estimatedLines),
   };
 }
 
@@ -192,18 +238,20 @@ export function ResponsiveText({
   const layout = resolveResponsiveTextLayout({ text, width, height, fontSize, maxWidth, maxLines });
   const fontAsset = resolveBuiltInAsset(fontAssetId);
   const fontFamily = getBuiltInFontFamily(fontAssetId);
+  const fontAssetUrl = resolveAssetUrl(fontAssetId);
 
   return (
     <div
       data-font-asset-id={fontAsset.id}
-      data-font-asset-url={fontAsset.url}
+      data-font-asset-url={fontAssetUrl}
       data-effect-primitive="responsive-text"
       style={{
         boxSizing: "border-box",
         display: "-webkit-box",
         fontSize: layout.fontSize,
         fontFamily,
-        lineHeight: layout.lineHeight,
+        // 中文注释：布局函数返回的是绝对像素行高，必须保留单位，避免浏览器把数字误解为字号倍数。
+        lineHeight: `${layout.lineHeight}px`,
         maxWidth: layout.maxWidth,
         overflow: "hidden",
         overflowWrap: "anywhere",
@@ -229,9 +277,9 @@ export function BuiltInFontStyles({ assetId }: { assetId: string }) {
   return (
     <style
       data-effect-primitive="font-styles"
-      data-font-asset-url={asset.url}
+      data-font-asset-url={resolveAssetUrl(assetId)}
     >
-      {`@import url("${asset.url}");`}
+      {`@import url("${resolveAssetUrl(assetId)}");`}
     </style>
   );
 }
@@ -250,6 +298,7 @@ export function BuiltInAssetImage({
   if (asset.kind === "font") {
     throw new Error(`字体素材不能作为图像渲染：${assetId}`);
   }
+  const assetUrl = resolveAssetUrl(assetId);
 
   return (
     <img
@@ -257,7 +306,7 @@ export function BuiltInAssetImage({
       aria-hidden={alt ? undefined : true}
       data-asset-id={asset.id}
       data-effect-primitive="asset-image"
-      src={asset.url}
+      src={assetUrl}
       style={style}
     />
   );

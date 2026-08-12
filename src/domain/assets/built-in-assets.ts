@@ -25,6 +25,16 @@ export const BUILT_IN_ASSETS = [
     fontFamilyVariable: "--effect-font-system-sans",
   },
   {
+    id: "font.system-mono",
+    kind: "font",
+    filePath: "effect-assets/fonts/system-mono.css",
+    label: "系统等宽字体栈",
+    source: "仓库内置字体栈声明",
+    license: "系统字体许可",
+    redistribution: "仅再分发字体栈声明文件，实际字体遵循运行平台许可",
+    fontFamilyVariable: "--effect-font-system-mono",
+  },
+  {
     id: "icon.check",
     kind: "icon",
     filePath: "effect-assets/icons/check.svg",

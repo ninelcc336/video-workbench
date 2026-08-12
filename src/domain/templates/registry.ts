@@ -1,7 +1,7 @@
 import { BubbleDecoration } from "../../remotion/templates/BubbleDecoration";
 import { CardOverlay } from "../../remotion/templates/CardOverlay";
 import { BasicTransition } from "../../remotion/templates/BasicTransition";
-import { ChecklistOverlay } from "../../remotion/templates/ChecklistOverlay";
+import { ChecklistSteps } from "../../remotion/templates/ChecklistSteps";
 import { CommentPanelOverlay } from "../../remotion/templates/CommentPanelOverlay";
 import { SectionTitleOverlay } from "../../remotion/templates/SectionTitleOverlay";
 import { TagPillsOverlay } from "../../remotion/templates/TagPillsOverlay";
@@ -16,7 +16,7 @@ registerEffectFamily(CardOverlay.definition);
 registerEffectFamily(BubbleDecoration.definition);
 registerEffectFamily(BasicTransition.definition);
 registerEffectFamily(SectionTitleOverlay.definition);
-registerEffectFamily(ChecklistOverlay.definition);
+registerEffectFamily(ChecklistSteps.definition);
 registerEffectFamily(CommentPanelOverlay.definition);
 registerEffectFamily(TagPillsOverlay.definition);
 

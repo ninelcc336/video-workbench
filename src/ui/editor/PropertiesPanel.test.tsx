@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EffectClip } from "../../domain/project/model";
-import { registerEffectFamily } from "../../domain/templates/effect-family";
+import { createEffectFamilyInstance, registerEffectFamily } from "../../domain/templates/effect-family";
 import { getEffectFamily } from "../../domain/templates/registry";
 import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -233,6 +233,24 @@ function createStructuredEffectClip(): EffectClip {
   };
 }
 
+/** 中文注释：使用真实清单与步骤族构造面板夹具，验证结构化编辑器没有退化为测试专用字段协议。 */
+function createChecklistStepsClip(): EffectClip {
+  const family = getEffectFamily("checklist-steps", 1);
+  const instance = createEffectFamilyInstance(family, "information-list", "9:16");
+  return {
+    id: "checklist-steps-effect-1",
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: instance.startingStyleId,
+    placement: { type: "range" },
+    trackId: "effects-1",
+    fromFrame: 0,
+    durationInFrames: instance.durationInFrames,
+    params: instance.params,
+  };
+}
+
 describe("特效参数面板", () => {
   it("显示特效族起始样式并把切换交给页面命令", () => {
     const onSwitchStartingStyle = vi.fn();
@@ -343,6 +361,32 @@ describe("特效参数面板", () => {
     expect(onChangeParams).toHaveBeenLastCalledWith("structured-effect-1", {
       items: [{ label: "粘贴第一行" }, { label: "粘贴第二行" }],
     });
+  });
+
+  it("清单与步骤族通过真实 schema 提供条目编辑、排序和高级参数", () => {
+    const onChangeParams = vi.fn();
+    render(
+      <PropertiesPanel
+        project={createEmptyProject()}
+        selectedClip={createChecklistStepsClip()}
+        onChangeParams={onChangeParams}
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: "清单条目" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("正文第1项"), { target: { value: "新的第一步" } });
+    expect(onChangeParams).toHaveBeenLastCalledWith("checklist-steps-effect-1", expect.objectContaining({
+      items: expect.arrayContaining([expect.objectContaining({ body: "新的第一步" })]),
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "添加条目" }));
+    expect(onChangeParams.mock.lastCall?.[1].items).toHaveLength(4);
+    fireEvent.click(screen.getByRole("button", { name: "上移第2项" }));
+    expect(onChangeParams.mock.lastCall?.[1].items[0].body).toBe("再组织信息");
+
+    fireEvent.click(screen.getByRole("button", { name: "显示高级特效参数" }));
+    expect(screen.getByLabelText("字体")).toBeTruthy();
+    expect(screen.getByLabelText("动画阶段入场交错")).toBeTruthy();
   });
 
   it("显示非法参数、画面越界、低对比和高渲染负载警告", () => {

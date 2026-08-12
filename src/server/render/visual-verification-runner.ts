@@ -101,12 +101,13 @@ async function startVisualVerificationServer(): Promise<{ server: ViteDevServer;
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
   await server.listen();
-  const baseUrl = server.resolvedUrls?.local[0];
-  if (!baseUrl) {
+  const address = server.httpServer?.address();
+  if (!address || typeof address === "string") {
     await server.close();
     throw new Error("视觉验证无法取得 Vite 服务地址");
   }
-  return { server, baseUrl };
+  // 中文注释：服务明确绑定回环 IPv4 时也使用同一地址，避免 localhost 解析到其他本地监听器。
+  return { server, baseUrl: `http://127.0.0.1:${address.port}/` };
 }
 
 /** 中文注释：等待字体和验证根节点稳定后截图，避免截图发生在 React 尚未挂载或字体尚未加载的瞬间。 */
@@ -123,6 +124,29 @@ async function captureBrowserFrame(
   await page.evaluate(async () => {
     if (document.fonts?.ready) await document.fonts.ready;
   });
+  const missingImages = await page.evaluate(() => Array.from(
+    document.querySelectorAll<HTMLImageElement>("img[data-asset-id]"),
+  )
+    .filter((image) => !image.complete || image.naturalWidth === 0)
+    .map((image) => image.dataset.assetId ?? "unknown"));
+  if (missingImages.length > 0) {
+    throw new Error(`视觉验证内置图标未加载：${missingImages.join(", ")}`);
+  }
+  const fontAssetUrls = await page.evaluate(() => [...new Set(
+    Array.from(document.querySelectorAll<HTMLElement>("[data-font-asset-url]"))
+      .map((element) => element.dataset.fontAssetUrl)
+      .filter((url): url is string => Boolean(url)),
+  )]);
+  const missingFonts = await page.evaluate(async (urls) => {
+    const results = await Promise.all(urls.map(async (url) => {
+      const response = await fetch(url);
+      return response.ok ? undefined : url;
+    }));
+    return results.filter((url): url is string => Boolean(url));
+  }, fontAssetUrls);
+  if (missingFonts.length > 0) {
+    throw new Error(`视觉验证内置字体未加载：${missingFonts.join(", ")}`);
+  }
   await mkdir(dirname(outputPath), { recursive: true });
   await page.locator('[data-effect-frame="true"]').screenshot({ path: outputPath });
 }

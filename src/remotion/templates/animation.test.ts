@@ -96,6 +96,115 @@ describe("特效片段入场和出场进度", () => {
     expect(duringExit.visibility).toBeCloseTo(0.875, 3);
   });
 
+  it("把持续、延迟、时长、缓动和独立出场阶段暴露为可观察契约", () => {
+    // 中文注释：使用未压缩的长片段比较同一帧，避免阶段压缩掩盖单个参数的真实影响。
+    const baseStages = {
+      enter: {
+        durationInFrames: 8,
+        delayInFrames: 0,
+        direction: "none",
+        easing: "linear",
+        intensity: 0,
+        stagger: 0,
+      },
+      sustain: {
+        durationInFrames: 20,
+        delayInFrames: 0,
+        direction: "none",
+        easing: "linear",
+        intensity: 1,
+        stagger: 0,
+      },
+      exit: {
+        durationInFrames: 8,
+        delayInFrames: 0,
+        direction: "none",
+        easing: "linear",
+        intensity: 1,
+        stagger: 0,
+      },
+    } as const;
+
+    const duringSustain = evaluateAnimationStages({
+      frame: 12,
+      durationInFrames: 60,
+      stages: baseStages,
+    });
+    expect(duringSustain.activeStage).toBe("sustain");
+    expect(duringSustain.visibility).toBe(1);
+
+    const delayed = evaluateAnimationStages({
+      frame: 3,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        enter: { ...baseStages.enter, delayInFrames: 4 },
+      },
+    });
+    const withoutDelay = evaluateAnimationStages({
+      frame: 3,
+      durationInFrames: 60,
+      stages: baseStages,
+    });
+    expect(delayed.enter.startFrame).toBe(4);
+    expect(delayed.enter.active).toBe(false);
+    expect(delayed.visibility).toBe(0);
+    expect(withoutDelay.visibility).toBeGreaterThan(0);
+
+    const shortEnter = evaluateAnimationStages({
+      frame: 2,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        enter: { ...baseStages.enter, durationInFrames: 4 },
+      },
+    });
+    const longEnter = evaluateAnimationStages({
+      frame: 2,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        enter: { ...baseStages.enter, durationInFrames: 8 },
+      },
+    });
+    expect(shortEnter.enter.progress).toBe(0.5);
+    expect(longEnter.enter.progress).toBe(0.25);
+
+    const linearEnter = evaluateAnimationStages({
+      frame: 2,
+      durationInFrames: 60,
+      stages: baseStages,
+    });
+    const easedEnter = evaluateAnimationStages({
+      frame: 2,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        enter: { ...baseStages.enter, easing: "ease-out" },
+      },
+    });
+    expect(linearEnter.enter.progress).toBe(0.25);
+    expect(easedEnter.enter.progress).toBeCloseTo(0.578125, 6);
+
+    const withExit = evaluateAnimationStages({
+      frame: 30,
+      durationInFrames: 60,
+      stages: baseStages,
+    });
+    const withoutExit = evaluateAnimationStages({
+      frame: 30,
+      durationInFrames: 60,
+      stages: {
+        enter: baseStages.enter,
+        sustain: baseStages.sustain,
+      },
+    });
+    expect(withExit.activeStage).toBe("exit");
+    expect(withExit.visibility).toBe(0.75);
+    expect(withoutExit.exit.declared).toBe(false);
+    expect(withoutExit.visibility).toBe(1);
+  });
+
   it("阶段总时长超过片段时按固定比例压缩并返回警告", () => {
     const evaluation = evaluateAnimationStages({
       frame: 3,

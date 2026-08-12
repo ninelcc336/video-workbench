@@ -15,7 +15,7 @@ vi.mock("../preview/PreviewPlayer", () => ({
 
 afterEach(cleanup);
 
-/** 中文注释：构造带有明确生效区间的特效片段，复用真实 CanvasSelection 验证预览接缝。 */
+/** 中文注释：构造带有明确生效区间的特效片段，复用真实 CanvasSelection 验证预览接缝；默认使用族首个起始样式。 */
 function createEffectClip(
   templateId = "card-overlay",
   fromFrame = 10,
@@ -23,13 +23,14 @@ function createEffectClip(
   id = "effect-1",
 ): EffectClip {
   const family = getEffectFamily(templateId, 1);
-  const instance = createEffectFamilyInstance(family, "default", "16:9");
+  const startingStyleId = family.startingStyles[0].id;
+  const instance = createEffectFamilyInstance(family, startingStyleId, "16:9");
   return {
     id,
     templateId: family.id,
     templateVersion: family.version,
     effectFamilyId: family.id,
-    startingStyleId: "default",
+    startingStyleId,
     placement: { type: "range" },
     trackId: "effects-1",
     fromFrame,
@@ -103,7 +104,7 @@ describe("预览画布尺寸", () => {
 
   it.each([
     "section-title-overlay",
-    "checklist-overlay",
+    "checklist-steps",
     "comment-panel-overlay",
     "tag-pills-overlay",
   ])("新增信息叠加模板 %s 在实时预览中提供可拖拽选区", (templateId) => {

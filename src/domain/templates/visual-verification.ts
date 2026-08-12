@@ -70,6 +70,8 @@ export type VisualVerificationCase = {
 export type VisualVerificationMatrixOptions = {
   scope?: VisualVerificationScope;
   randomSeed?: string;
+  /** 中文注释：按票据需要为方形画布补充入场和出场固定帧，默认仍遵循规格的中段最小矩阵。 */
+  includeSquareFrameStages?: boolean;
 };
 
 type BoundarySide = "minimum" | "maximum";
@@ -116,6 +118,7 @@ export function selectVisualVerificationTargets(
 export function getVisualVerificationFrameSamples(
   durationInFrames: number,
   aspectRatio: AspectRatio,
+  includeSquareFrameStages = false,
 ): Array<{ stage: VisualVerificationFrameStage; frame: number }> {
   const duration = Number.isFinite(durationInFrames) && durationInFrames > 0
     ? Math.max(1, Math.round(durationInFrames))
@@ -125,7 +128,7 @@ export function getVisualVerificationFrameSamples(
     { stage: "middle", frame: middle },
   ];
 
-  if (aspectRatio === "1:1") return samples;
+  if (aspectRatio === "1:1" && !includeSquareFrameStages) return samples;
 
   return [
     { stage: "enter", frame: 0 },
@@ -296,7 +299,11 @@ export function buildVisualVerificationMatrix(
     const instance = createEffectFamilyInstance(family, style.id, aspectRatio);
     const scenarios = createScenarioInputs(family, instance.params);
 
-    const frameSamples = getVisualVerificationFrameSamples(instance.durationInFrames, aspectRatio);
+    const frameSamples = getVisualVerificationFrameSamples(
+      instance.durationInFrames,
+      aspectRatio,
+      options.includeSquareFrameStages,
+    );
     return scenarios.flatMap(({ scenario, parameterKey, params }) => {
       // 中文注释：默认参数建立三段式视觉基线，极端参数集中验证中段，避免全目录重复渲染同一边界场景。
       const samples = scenario === "default"

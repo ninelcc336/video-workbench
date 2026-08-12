@@ -37,6 +37,45 @@ describe("2D 渲染原语", () => {
     expect(long.lineHeight).toBeGreaterThan(long.fontSize);
   });
 
+  it("在显式换行和紧张高度下缩小字号并为完整估算行数保留空间", () => {
+    const layout = resolveResponsiveTextLayout({
+      text: "第一行\n第二行\n第三行\n第四行",
+      width: 200,
+      height: 20,
+      fontSize: 24,
+      maxLines: 2,
+      minFontSize: 1,
+    });
+
+    expect(layout.fontSize).toBeLessThan(24);
+    expect(layout.maxLines).toBe(4);
+    expect(layout.maxLines * layout.lineHeight).toBeLessThanOrEqual(20.001);
+  });
+
+  it("在无法同时满足极端宽高约束时仍返回有限的正字号", () => {
+    // 中文注释：极端内容允许突破可读下限，但不能把零或非有限 CSS 数值传入渲染器。
+    const layout = resolveResponsiveTextLayout({
+      text: "超长文本".repeat(1000),
+      width: 1,
+      height: 1,
+      fontSize: 72,
+    });
+
+    expect(Number.isFinite(layout.fontSize)).toBe(true);
+    expect(layout.fontSize).toBeGreaterThan(0);
+    expect(Number.isFinite(layout.lineHeight)).toBe(true);
+    expect(layout.lineHeight).toBeGreaterThan(0);
+  });
+
+  it("把响应式文字的绝对行高以像素单位写入 DOM", () => {
+    const layout = resolveResponsiveTextLayout({ text: "可读标题", width: 640, height: 360 });
+    const markup = renderToStaticMarkup(
+      <ResponsiveText fontAssetId="font.system-sans" text="可读标题" width={640} height={360} />,
+    );
+
+    expect(markup).toContain(`line-height:${layout.lineHeight}px`);
+  });
+
   it("生成渐变、阴影、遮罩和路径绘制的稳定样式值", () => {
     expect(gradientToCss({
       angle: 135,

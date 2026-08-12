@@ -20,7 +20,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       continue;
     }
     const [key, inlineValue] = argument.slice(2).split("=", 2);
-    if (key === "help" || key === "update") {
+    if (key === "help" || key === "update" || key === "square-stages") {
       values.set(key, true);
       continue;
     }
@@ -75,6 +75,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       artifactDirectory: values.get("artifact-dir") as string | undefined,
       baseUrl: values.get("base-url") as string | undefined,
       serveUrl: values.get("serve-url") as string | undefined,
+      includeSquareFrameStages: values.has("square-stages"),
     },
   };
 }
@@ -83,8 +84,8 @@ function parseArguments(argv: string[]): ParsedArguments {
 function printHelp(): void {
   console.log(`用法：
   npm run test:visual
-  npm run test:visual -- --family checklist-overlay
-  npm run test:visual -- --family checklist-overlay --style default
+  npm run test:visual -- --family checklist-steps
+  npm run test:visual -- --family checklist-steps --style information-list
   npm run test:visual -- --update
 
 选项：
@@ -97,6 +98,7 @@ function printHelp(): void {
   --artifact-dir <path>      覆盖截图和差异图目录
   --base-url <url>            使用已运行的浏览器验证页面服务
   --serve-url <url>           使用已打包的 Remotion 服务
+  --square-stages              为 1:1 画布额外验证入场和出场固定帧
   --help                      显示本帮助
 `);
 }
