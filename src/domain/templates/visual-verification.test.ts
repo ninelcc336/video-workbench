@@ -57,7 +57,7 @@ const fixtureFamily: EffectFamilyDefinition = {
       type: "position",
       defaultValue: { x: 0.5, y: 0.5 },
       group: "layout",
-      level: "advanced",
+      level: "basic",
       styleSwitch: "preserve",
       safety: "warn-on-overflow",
     },

@@ -24,6 +24,7 @@ describe("特效族注册表", () => {
         expect.objectContaining({ id: "checklist-steps", category: "information-overlay" }),
         expect.objectContaining({ id: "comment-panel-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "tag-pills-overlay", category: "information-overlay" }),
+        expect.objectContaining({ id: "hand-drawn-emphasis", category: "decorative-animation" }),
       ]),
     );
   });
@@ -31,8 +32,11 @@ describe("特效族注册表", () => {
   it("支持按分类过滤当前特效族摘要", () => {
     const families = listEffectFamilies({ category: "decorative-animation" });
 
-    expect(families).toHaveLength(1);
-    expect(families[0]).toMatchObject({ id: "bubble-decoration" });
+    expect(families).toHaveLength(2);
+    expect(families).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "bubble-decoration" }),
+      expect.objectContaining({ id: "hand-drawn-emphasis" }),
+    ]));
   });
 
   it("按特效族 ID 和当前版本查找声明", () => {

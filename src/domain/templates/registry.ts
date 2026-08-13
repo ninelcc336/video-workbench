@@ -5,6 +5,7 @@ import { ChecklistSteps } from "../../remotion/templates/ChecklistSteps";
 import { CommentPanelOverlay } from "../../remotion/templates/CommentPanelOverlay";
 import { SectionTitleOverlay } from "../../remotion/templates/SectionTitleOverlay";
 import { TagPillsOverlay } from "../../remotion/templates/TagPillsOverlay";
+import { HandDrawnEmphasis } from "../../remotion/templates/HandDrawnEmphasis";
 import {
   getEffectFamily,
   listEffectFamilies,
@@ -19,5 +20,6 @@ registerEffectFamily(SectionTitleOverlay.definition);
 registerEffectFamily(ChecklistSteps.definition);
 registerEffectFamily(CommentPanelOverlay.definition);
 registerEffectFamily(TagPillsOverlay.definition);
+registerEffectFamily(HandDrawnEmphasis.definition);
 
 export { getEffectFamily, listEffectFamilies, registerEffectFamily };

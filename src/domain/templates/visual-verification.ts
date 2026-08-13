@@ -246,7 +246,6 @@ function createScenarioInputs(
     }
 
     if (
-      parameter.level === "advanced" &&
       parameter.safety === "warn-on-overflow" &&
       supportsAdvancedOverflow(parameter)
     ) {
@@ -278,9 +277,7 @@ function supportsAdvancedOverflow(
   }
   if (parameter.type === "size") {
     return (
-      (parameter.minWidth === undefined || parameter.minWidth <= 0) &&
       (parameter.maxWidth === undefined || parameter.maxWidth >= 1.12) &&
-      (parameter.minHeight === undefined || parameter.minHeight <= 0) &&
       (parameter.maxHeight === undefined || parameter.maxHeight >= 1.12)
     );
   }

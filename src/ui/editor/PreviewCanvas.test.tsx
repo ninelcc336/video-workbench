@@ -107,7 +107,8 @@ describe("预览画布尺寸", () => {
     "checklist-steps",
     "comment-panel-overlay",
     "tag-pills-overlay",
-  ])("新增信息叠加模板 %s 在实时预览中提供可拖拽选区", (templateId) => {
+    "hand-drawn-emphasis",
+  ])("新增特效族 %s 在实时预览中提供可拖拽选区", (templateId) => {
     const project = createEmptyProject();
     const clip = createEffectClip(templateId);
 
