@@ -24,8 +24,8 @@ function createBoundaryEffect(overrides: Partial<EffectClip> = {}): EffectClip {
     id: "transition-1",
     templateId: "directional-transition",
     templateVersion: 1,
-    effectFamilyId: "basic-transition",
-    startingStyleId: "default",
+    effectFamilyId: "directional-transition",
+    startingStyleId: "push-pull",
     trackId: "effects-1",
     fromFrame: 999,
     durationInFrames: 8,
@@ -115,6 +115,19 @@ describe("真实片段转场模型", () => {
 
     expect(getTransitionVideoFrames(edgeTailResolved, 7).beforeFrozen).toBe(true);
     expect(edgeTailResolved.warnings).toContain("前视频素材尾帧不足，转场期间将冻结最后一个有效画面");
+  });
+
+  it("后视频片段始终按正常源时间播放，不因已知源时长额外冻结", () => {
+    const project = createBoundaryProject();
+    project.videoClips[1].sourceDurationInFrames = 12;
+    const resolved = resolveBoundaryTransition(project, project.effectClips[0]);
+    if (!resolved) throw new Error("后片段时长测试转场应当可以解析");
+
+    expect(getTransitionVideoFrames(resolved, 7)).toMatchObject({
+      afterSourceFrame: 17,
+      afterFrozen: false,
+    });
+    expect(resolved.warnings).not.toContain("后视频素材帧数不足，转场期间将冻结最后一个有效画面");
   });
 
   it("绑定的视频片段不再相邻时移除转场，仍相邻时更新派生位置", () => {

@@ -65,13 +65,6 @@ export function resolveBoundaryTransition(
     warnings.push("前视频素材尾帧不足，转场期间将冻结最后一个有效画面");
   }
 
-  const afterAvailableFrames = afterVideoClip.sourceDurationInFrames === undefined
-    ? Number.POSITIVE_INFINITY
-    : Math.max(0, afterVideoClip.sourceDurationInFrames - afterVideoClip.sourceStartFrame);
-  if (afterAvailableFrames < effectClip.durationInFrames) {
-    warnings.push("后视频素材帧数不足，转场期间将冻结最后一个有效画面");
-  }
-
   return {
     effectClipId: effectClip.id,
     beforeVideoClip,
@@ -83,7 +76,7 @@ export function resolveBoundaryTransition(
 }
 
 /**
- * 中文注释：按转场窗口内局部帧计算两个视频的源帧，并在源素材尾部做确定性钳制。
+ * 中文注释：按转场窗口内局部帧计算两个视频的源帧，只对前片段尾部做确定性钳制。
  * 该函数不读取文件或真实媒体时钟，渲染器可以在任意暂停、跳转帧直接求值。
  */
 export function getTransitionVideoFrames(
@@ -105,20 +98,14 @@ export function getTransitionVideoFrames(
     beforeLastTimelineFrame + 1 + safeLocalFrame,
     beforeLastAvailableFrame,
   );
-  const afterUnclampedFrame = transition.afterVideoClip.sourceStartFrame + safeLocalFrame;
-  const afterLastAvailableFrame = transition.afterVideoClip.sourceDurationInFrames === undefined
-    ? afterUnclampedFrame
-    : Math.max(
-        transition.afterVideoClip.sourceStartFrame,
-        transition.afterVideoClip.sourceDurationInFrames - 1,
-      );
-  const afterSourceFrame = Math.min(afterUnclampedFrame, afterLastAvailableFrame);
+  // 中文注释：后片段必须按正常源时间播放；只有前片段的尾帧不足属于本转场的冻结回退。
+  const afterSourceFrame = transition.afterVideoClip.sourceStartFrame + safeLocalFrame;
 
   return {
     beforeSourceFrame,
     afterSourceFrame,
     beforeFrozen: beforeSourceFrame < beforeLastTimelineFrame + 1 + safeLocalFrame,
-    afterFrozen: afterSourceFrame < afterUnclampedFrame,
+    afterFrozen: false,
   };
 }
 

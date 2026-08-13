@@ -19,7 +19,7 @@ describe("特效族注册表", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "card-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "bubble-decoration", category: "decorative-animation" }),
-        expect.objectContaining({ id: "basic-transition", category: "transition" }),
+        expect.objectContaining({ id: "directional-transition", category: "transition" }),
         expect.objectContaining({ id: "section-title-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "checklist-steps", category: "information-overlay" }),
         expect.objectContaining({ id: "comment-panel-overlay", category: "information-overlay" }),

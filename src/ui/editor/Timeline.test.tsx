@@ -261,9 +261,9 @@ describe("基础时间轴", () => {
   it("非法位置拖入片段转场时只提示，不把它创建成普通范围特效", () => {
     const onDropTemplate = vi.fn();
     const onInvalidTemplateDrop = vi.fn();
-    const template = getEffectFamily("basic-transition", 1);
+    const template = getEffectFamily("directional-transition", 1);
     const values = new Map<string, string>([
-      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "default" })],
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "push-pull" })],
     ]);
     const dataTransfer = {
       dropEffect: "none",
@@ -302,7 +302,7 @@ describe("基础时间轴", () => {
 
   it("拖入片段转场到合法交界点时传递前后视频片段身份", () => {
     const onDropTransition = vi.fn();
-    const template = getEffectFamily("basic-transition", 1);
+    const template = getEffectFamily("directional-transition", 1);
     const project = createTimelineProject();
     project.videoClips.push({
       ...project.videoClips[0],
@@ -310,7 +310,7 @@ describe("基础时间轴", () => {
       fromFrame: 90,
     });
     const values = new Map<string, string>([
-      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "default" })],
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "push-pull" })],
     ]);
     const dataTransfer = {
       dropEffect: "none",
@@ -342,7 +342,7 @@ describe("基础时间轴", () => {
     Object.defineProperty(dropEvent, "clientX", { value: 1000 });
     fireEvent(effectTrack, dropEvent);
 
-    expect(onDropTransition).toHaveBeenCalledWith(template, "default", {
+    expect(onDropTransition).toHaveBeenCalledWith(template, "push-pull", {
       beforeVideoClipId: "video-1",
       afterVideoClipId: "video-2",
       frame: 90,

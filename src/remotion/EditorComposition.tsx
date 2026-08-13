@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Easing, interpolate, OffthreadVideo, Sequence, useCurrentFrame } from "remotion";
+import { AbsoluteFill, interpolate, OffthreadVideo, Sequence, useCurrentFrame } from "remotion";
 import type { EditProject, EffectClip } from "../domain/project/model";
 import {
   getEffectClipFrameRange,
@@ -161,11 +161,12 @@ export function getTransitionLayerRenderProps(
   });
   const localFrame = renderInput.renderProps.frame;
   const videoFrames = getTransitionVideoFrames(resolved, localFrame);
+  // 中文注释：组合层只提供线性原始进度，实际缓动由特效族根据公开参数求值，避免固定缓动覆盖用户设置。
   const progress = interpolate(
     localFrame,
     [0, Math.max(1, durationInFrames - 1)],
     [0, 1],
-    { easing: Easing.inOut(Easing.quad), extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const before: TransitionVideoFrame = {
     clipId: resolved.beforeVideoClip.id,

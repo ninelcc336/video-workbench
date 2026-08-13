@@ -70,10 +70,10 @@ function createBoundaryTransitionProject(): EditProject {
   ];
   project.effectClips = [{
     id: "boundary-transition",
-    templateId: "basic-transition",
+    templateId: "directional-transition",
     templateVersion: 1,
-    effectFamilyId: "basic-transition",
-    startingStyleId: "default",
+    effectFamilyId: "directional-transition",
+    startingStyleId: "push-pull",
     placement: {
       type: "boundary",
       beforeVideoClipId: "before-video",
@@ -82,7 +82,7 @@ function createBoundaryTransitionProject(): EditProject {
     trackId: "effects-1",
     fromFrame: 999,
     durationInFrames: 8,
-    params: createEffectFamilyInstance(getEffectFamily("basic-transition", 1), "default", "16:9").params,
+    params: createEffectFamilyInstance(getEffectFamily("directional-transition", 1), "push-pull", "16:9").params,
   }];
   return project;
 }

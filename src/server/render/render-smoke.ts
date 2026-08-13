@@ -22,6 +22,7 @@ export function createSmokeProject(mediaId: string, audioEnabled = true): EditPr
 export function createTransitionSmokeProject(
   beforeMediaId: string,
   afterMediaId: string,
+  startingStyleId: "push-pull" | "directional-wipe" | "split-wipe" = "push-pull",
 ): EditProject {
   const project = createEmptyProject({ width: 64, height: 64, fps: 30 });
   project.videoClips = [
@@ -46,10 +47,10 @@ export function createTransitionSmokeProject(
   ];
   project.effectClips = [{
     id: "transition-smoke-effect",
-    templateId: "basic-transition",
+    templateId: "directional-transition",
     templateVersion: 1,
-    effectFamilyId: "basic-transition",
-    startingStyleId: "default",
+    effectFamilyId: "directional-transition",
+    startingStyleId,
     placement: {
       type: "boundary",
       beforeVideoClipId: "transition-before",
@@ -58,7 +59,14 @@ export function createTransitionSmokeProject(
     trackId: "effects-1",
     fromFrame: 15,
     durationInFrames: 8,
-    params: { style: "fade", color: "#000000" },
+    params: {
+      mode: startingStyleId,
+      direction: "left",
+      easing: "ease-in-out",
+      softness: 8,
+      splitCount: 4,
+      accentColor: "#38bdf8",
+    },
   }];
   return project;
 }
@@ -79,8 +87,9 @@ export function renderTransitionSmokeMedia(
   beforePath: string,
   afterPath: string,
   outputPath: string,
+  startingStyleId: "push-pull" | "directional-wipe" | "split-wipe" = "push-pull",
 ): Promise<RenderResult> {
-  const project = createTransitionSmokeProject("transition-before-media", "transition-after-media");
+  const project = createTransitionSmokeProject("transition-before-media", "transition-after-media", startingStyleId);
   return renderProject(project, outputPath, {
     cancelSignal: () => false,
     mediaSources: {

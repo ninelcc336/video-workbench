@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerEffectFamily } from "../../domain/templates/effect-family";
 import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { TEMPLATE_DRAG_MIME } from "./drag-and-drop";
 import { TemplateLibrary } from "./TemplateLibrary";
+import "../../domain/templates/registry";
 
 const discoveryFamily: EffectFamilyDefinition = {
   id: "library-discovery-fixture",
@@ -68,7 +69,7 @@ describe("特效模板库", () => {
     const onAddTemplateAtFrame = vi.fn();
     render(<TemplateLibrary currentFrame={42.4} onAddTemplateAtFrame={onAddTemplateAtFrame} />);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /^添加/ })[0]);
+    fireEvent.click(within(screen.getByRole("article", { name: "步骤清单特效族" })).getByRole("button", { name: "添加步骤清单" }));
 
     expect(onAddTemplateAtFrame).toHaveBeenCalledWith(
       expect.objectContaining({ id: expect.any(String) }) as EffectFamilyDefinition,
@@ -97,8 +98,9 @@ describe("特效模板库", () => {
     const onAddTemplateAtFrame = vi.fn();
     render(<TemplateLibrary currentFrame={42} onAddTemplateAtFrame={onAddTemplateAtFrame} />);
 
-    fireEvent.click(screen.getByRole("radio", { name: "编号步骤" }));
-    fireEvent.click(screen.getByRole("button", { name: "添加步骤清单" }));
+    const card = screen.getByRole("article", { name: "步骤清单特效族" });
+    fireEvent.click(within(card).getByRole("radio", { name: "编号步骤" }));
+    fireEvent.click(within(card).getByRole("button", { name: "添加步骤清单" }));
 
     expect(onAddTemplateAtFrame).toHaveBeenCalledWith(
       expect.objectContaining({ id: discoveryFamily.id }) as EffectFamilyDefinition,
@@ -107,12 +109,46 @@ describe("特效模板库", () => {
     );
   });
 
-  it("保留片段转场分类，但不把历史全屏转场作为普通目录卡片展示", () => {
+  it("显示方向推拉与擦除族的三个起始样式，而不是历史全屏转场", () => {
     render(<TemplateLibrary />);
     fireEvent.click(screen.getByRole("tab", { name: "片段转场" }));
 
     expect(screen.getByRole("tabpanel")).toBeTruthy();
+    const card = screen.getByRole("article", { name: "方向推拉与擦除特效族" });
     expect(screen.queryByRole("article", { name: "基础转场特效族" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "推拉" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "方向擦除" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "分割擦除" })).toBeTruthy();
+    expect(card).toBeTruthy();
+  });
+
+  it("只有存在合法交界点时才能从族卡片添加片段转场", () => {
+    const onAddTransitionAtBoundary = vi.fn();
+    const onInvalidTransition = vi.fn();
+    const boundary = {
+      beforeVideoClipId: "before-video",
+      afterVideoClipId: "after-video",
+      frame: 30,
+    };
+
+    render(
+      <TemplateLibrary
+        onAddTransitionAtBoundary={onAddTransitionAtBoundary}
+        onInvalidTransition={onInvalidTransition}
+        transitionBoundary={boundary}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "片段转场" }));
+    fireEvent.click(screen.getByRole("radio", { name: "分割擦除" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加方向推拉与擦除" }));
+
+    expect(onAddTransitionAtBoundary).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "directional-transition" }),
+      "split-wipe",
+      boundary,
+    );
+    expect(onInvalidTransition).not.toHaveBeenCalled();
   });
 
   it("添加后可以从最近使用入口找到同一个特效族，且记录不进入视频工作区数据", () => {
@@ -133,8 +169,9 @@ describe("特效模板库", () => {
     } as unknown as DataTransfer;
     render(<TemplateLibrary />);
 
-    fireEvent.click(screen.getByRole("radio", { name: "编号步骤" }));
-    fireEvent.dragStart(screen.getByRole("article", { name: "步骤清单特效族" }), { dataTransfer });
+    const card = screen.getByRole("article", { name: "步骤清单特效族" });
+    fireEvent.click(within(card).getByRole("radio", { name: "编号步骤" }));
+    fireEvent.dragStart(card, { dataTransfer });
 
     expect(JSON.parse(values.get(TEMPLATE_DRAG_MIME) ?? "{}")).toMatchObject({
       startingStyleId: "numbered",

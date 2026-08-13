@@ -2,9 +2,14 @@ import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../project/factories";
 import type { EditProject, EffectClip, VideoClip } from "../project/model";
-import { registerEffectFamily } from "../templates/effect-family";
+import {
+  createEffectFamilyInstance,
+  getEffectFamily,
+  registerEffectFamily,
+} from "../templates/effect-family";
 import type { EffectFamilyDefinition } from "../templates/types";
 import { createEditorStore } from "./editor-store";
+import "../templates/registry";
 
 const videoClip: VideoClip = {
   id: "video-1",
@@ -101,7 +106,10 @@ describe("命令式编辑器核心", () => {
     const transition: EffectClip = {
       ...effectClip,
       id: "boundary-transition",
-      templateId: "basic-transition",
+      templateId: "directional-transition",
+      effectFamilyId: "directional-transition",
+      startingStyleId: "push-pull",
+      params: createEffectFamilyInstance(getEffectFamily("directional-transition", 1), "push-pull", "16:9").params,
       placement: {
         type: "boundary",
         beforeVideoClipId: "video-1",
@@ -158,6 +166,9 @@ describe("命令式编辑器核心", () => {
       type: "add-effect-clip",
       clip: {
         ...effectClip,
+        templateId: "directional-transition",
+        effectFamilyId: "directional-transition",
+        startingStyleId: "push-pull",
         placement: {
           type: "boundary",
           beforeVideoClipId: "missing-before",

@@ -88,7 +88,7 @@ describe("项目仓储", () => {
       effectClips: [
         {
           id: "legacy-transition",
-          templateId: "basic-transition",
+          templateId: "directional-transition",
           templateVersion: 1,
           trackId: "effects-1",
           fromFrame: 45,

@@ -487,8 +487,10 @@ describe("特效参数面板", () => {
 
   it("显示真实转场源素材尾帧不足的非阻断警告", () => {
     const clip = createEffectClip();
-    clip.templateId = "basic-transition";
-    clip.params = getEffectFamily("basic-transition", 1).parameters.reduce<Record<string, unknown>>((params, parameter) => {
+    clip.templateId = "directional-transition";
+    clip.effectFamilyId = "directional-transition";
+    clip.startingStyleId = "push-pull";
+    clip.params = getEffectFamily("directional-transition", 1).parameters.reduce<Record<string, unknown>>((params, parameter) => {
       params[parameter.key] = parameter.defaultValue;
       return params;
     }, {});
