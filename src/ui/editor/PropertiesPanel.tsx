@@ -40,6 +40,8 @@ export type PropertiesPanelProps = {
   /** 中文注释：连续控件手势只更新过程预览，不直接增加编辑历史。 */
   onPreviewParams?: (clipId: string, params: Record<string, unknown>) => void;
   onChangeParams?: (clipId: string, params: Record<string, unknown>) => void;
+  /** 中文注释：片段持续时间属于通用时间范围字段，交界点转场也通过这个回调修改时长。 */
+  onChangeDuration?: (clipId: string, durationInFrames: number) => void;
   /** 中文注释：样式选择只向页面命令层发送族内样式身份，面板不直接修改项目快照。 */
   onSwitchStartingStyle?: (clipId: string, startingStyleId: string) => void;
 };
@@ -1256,6 +1258,7 @@ export function PropertiesPanel({
   paramsSnapshot,
   onPreviewParams,
   onChangeParams,
+  onChangeDuration,
   onSwitchStartingStyle,
 }: PropertiesPanelProps) {
   const [mode, setMode] = useState<EditorMode>("basic");
@@ -1378,6 +1381,19 @@ export function PropertiesPanel({
         </section>
       ) : null}
       <div className="properties-form">
+        <section aria-label="片段时间范围" className="property-fieldset property-fieldset--timing">
+          <legend>片段时间范围</legend>
+          <label>
+            <span>持续时间（帧）</span>
+            <EditableNumberInput
+              label="持续时间（帧）"
+              min={1}
+              onCommit={(nextValue) => onChangeDuration?.(selectedClip.id, Math.max(1, Math.round(nextValue)))}
+              step={1}
+              value={selectedClip.durationInFrames}
+            />
+          </label>
+        </section>
         {!advanced ? (
           <section aria-label="基础特效参数" className="properties-basic">
             {basicParameters.map((definition) => (

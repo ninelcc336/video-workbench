@@ -41,6 +41,36 @@ function createTimelineProject(): EditProject {
   return project;
 }
 
+/** 中文注释：构造带真实边界转场的双视频项目，拖动后视频即可稳定制造“出现间隔”的过程预览。 */
+function createBoundaryTimelineProject(): EditProject {
+  const project = createTimelineProject();
+  const transitionFamily = getEffectFamily("directional-transition", 1);
+  const transition = createEffectFamilyInstance(transitionFamily, "push-pull", "16:9");
+  project.videoClips.push({
+    ...project.videoClips[0],
+    id: "video-2",
+    mediaId: "media-2",
+    fromFrame: 90,
+  });
+  project.effectClips = [{
+    id: "transition-1",
+    templateId: transitionFamily.id,
+    templateVersion: transitionFamily.version,
+    effectFamilyId: transitionFamily.id,
+    startingStyleId: transition.startingStyleId,
+    placement: {
+      type: "boundary",
+      beforeVideoClipId: "video-1",
+      afterVideoClipId: "video-2",
+    },
+    trackId: "effects-1",
+    fromFrame: 90,
+    durationInFrames: transition.durationInFrames,
+    params: transition.params,
+  }];
+  return project;
+}
+
 describe("基础时间轴", () => {
   it("把时间轴高度限制在视口的一半，并支持拖拽调整", () => {
     expect(getTimelineHeightBounds(1000)).toEqual({ min: 160, max: 500 });
@@ -150,6 +180,28 @@ describe("基础时间轴", () => {
 
     fireEvent.mouseUp(window);
     expect(onPreviewProject).toHaveBeenLastCalledWith(null);
+  });
+
+  it("视频拖动产生间隔时保留失效转场标记并发出过程提示", () => {
+    const onPreviewNotice = vi.fn();
+
+    render(
+      <Timeline
+        onMoveClip={vi.fn()}
+        onPreviewNotice={onPreviewNotice}
+        onPreviewProject={vi.fn()}
+        pixelsPerFrame={10}
+        project={createBoundaryTimelineProject()}
+        selectedClipId={null}
+      />,
+    );
+
+    const videoClips = screen.getAllByRole("button", { name: /视频片段/ });
+    fireEvent.mouseDown(videoClips[1], { button: 0, clientX: 900 });
+    fireEvent.mouseMove(window, { clientX: 1100 });
+
+    expect(screen.getByRole("button", { name: /方向推拉与擦除.*绑定失效/ })).toBeTruthy();
+    expect(onPreviewNotice).toHaveBeenLastCalledWith(expect.stringContaining("松开鼠标后该转场将被移除"));
   });
 
   it("拖动标尺期间持续更新播放头且鼠标松开结束手势", () => {

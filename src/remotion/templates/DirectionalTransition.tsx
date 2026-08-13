@@ -23,6 +23,29 @@ type DirectionalTransitionParams = {
   accentColor: string;
 };
 
+type TransitionMaskDirection = "left" | "right" | "up" | "down";
+
+export type SplitSegmentGeometry = {
+  index: number;
+  start: number;
+  end: number;
+  delay: number;
+  progress: number;
+  travel: number;
+  clipPath: string;
+};
+
+/** 中文注释：集中维护用户方向对应的位移和遮罩语义，避免不同渲染分支各自解释方向。 */
+const directionGeometry: Record<TransitionDirection, {
+  vector: { x: number; y: number };
+  mask: TransitionMaskDirection;
+}> = {
+  left: { mask: "left", vector: { x: -1, y: 0 } },
+  right: { mask: "right", vector: { x: 1, y: 0 } },
+  top: { mask: "down", vector: { x: 0, y: -1 } },
+  bottom: { mask: "up", vector: { x: 0, y: 1 } },
+};
+
 const transitionDefaults: DirectionalTransitionParams = {
   mode: "push-pull",
   direction: "left",
@@ -187,24 +210,75 @@ function easeProgress(rawProgress: number, easing: TransitionEasing): number {
 
 /** 中文注释：方向向量统一约定为“后画面从该方向进入”，推拉样式据此让前画面向反方向退出。 */
 function getDirectionVector(direction: TransitionDirection): { x: number; y: number } {
-  switch (direction) {
-    case "left":
-      return { x: -1, y: 0 };
-    case "right":
-      return { x: 1, y: 0 };
-    case "top":
-      return { x: 0, y: -1 };
-    case "bottom":
-      return { x: 0, y: 1 };
-  }
+  return directionGeometry[direction].vector;
 }
 
 /** 中文注释：基础遮罩原语使用 up/down 命名，族声明对用户保持 top/bottom 语义。 */
-function getMaskDirection(direction: TransitionDirection): "left" | "right" | "up" | "down" {
-  // 中文注释：遮罩原语的 up/down 表示“揭示方向”，与用户看到的“画面从哪里进入”相反。
-  if (direction === "top") return "down";
-  if (direction === "bottom") return "up";
-  return direction;
+function getMaskDirection(direction: TransitionDirection): TransitionMaskDirection {
+  return directionGeometry[direction].mask;
+}
+
+/** 中文注释：分割擦除把每条带的局部进度转换为全画布裁切范围，避免嵌套百分比遮罩互相抵消。 */
+function getSplitSegmentClipPath(
+  start: number,
+  end: number,
+  progress: number,
+  direction: "left" | "right" | "up" | "down",
+): string {
+  const segmentSize = end - start;
+  const visibleStart = end - segmentSize * progress;
+  const visibleEnd = start + segmentSize * progress;
+
+  switch (direction) {
+    case "right":
+      return `inset(0 ${100 - end}% 0 ${visibleStart}%)`;
+    case "up":
+      return `inset(${visibleStart}% 0 ${100 - end}% 0)`;
+    case "down":
+      return `inset(${start}% 0 ${100 - visibleEnd}% 0)`;
+    case "left":
+    default:
+      return `inset(0 ${100 - visibleEnd}% 0 ${start}%)`;
+  }
+}
+
+/**
+ * 中文注释：计算分割擦除的条带边界、交错延迟和位移，渲染层与契约测试共同消费这份几何结果。
+ * 关键约束：条带数量必须影响每条带的边界和时序；非法数量会回退为至少一条，避免生成空渲染。
+ */
+export function getSplitSegmentGeometry(
+  segmentCount: number,
+  progress: number,
+  direction: TransitionMaskDirection,
+): SplitSegmentGeometry[] {
+  const safeSegmentCount = Number.isFinite(segmentCount)
+    ? Math.max(1, Math.round(segmentCount))
+    : 1;
+  const safeProgress = clamp(progress, 0, 1);
+  const maxSegmentStagger = 0.28;
+
+  return Array.from({ length: safeSegmentCount }, (_, index) => {
+    const start = (index / safeSegmentCount) * 100;
+    const end = ((index + 1) / safeSegmentCount) * 100;
+    const delay = safeSegmentCount <= 1
+      ? 0
+      : (index / (safeSegmentCount - 1)) * maxSegmentStagger;
+    const segmentProgress = clamp(
+      (safeProgress - delay) / (1 - maxSegmentStagger),
+      0,
+      1,
+    );
+
+    return {
+      clipPath: getSplitSegmentClipPath(start, end, segmentProgress, direction),
+      delay,
+      end,
+      index,
+      progress: segmentProgress,
+      start,
+      travel: (1 - segmentProgress) * 100,
+    };
+  });
 }
 
 /** 中文注释：强调色边界是三种样式共享的可见节拍，同时把边界柔化限制在有限像素范围内。 */
@@ -314,8 +388,9 @@ function renderTransitionLayers(input: TransitionLayerInput): React.ReactElement
   }
 
   const segmentCount = values.splitCount;
-  const isHorizontalDirection = values.direction === "left" || values.direction === "right";
   const maskDirection = getMaskDirection(values.direction);
+  const directionVector = getDirectionVector(values.direction);
+  const segments = getSplitSegmentGeometry(segmentCount, progress, maskDirection);
   return (
     <div
       data-transition-style={styleId}
@@ -323,22 +398,15 @@ function renderTransitionLayers(input: TransitionLayerInput): React.ReactElement
       style={rootStyle}
     >
       {createVideoLayer(before.node, "before", {})}
-      {Array.from({ length: segmentCount }, (_, index) => {
-        const start = (index / segmentCount) * 100;
-        const end = ((index + 1) / segmentCount) * 100;
-        const segmentProgress = clamp(progress * 1.12 - (index % 2) * 0.08, 0, 1);
-        const segmentClipPath = isHorizontalDirection
-          ? `inset(0 ${100 - end}% 0 ${start}%)`
-          : `inset(${start}% 0 ${100 - end}% 0)`;
-
+      {segments.map(({ clipPath, index, travel }) => {
         return (
           <div
             data-transition-segment={index}
             key={index}
-            style={{ clipPath: segmentClipPath, inset: 0, position: "absolute" }}
+            style={{ clipPath, inset: 0, position: "absolute" }}
           >
             {createVideoLayer(after.node, "after", {
-              clipPath: resolveMaskClipPath(segmentProgress, maskDirection),
+              transform: `translate(${directionVector.x * travel}%, ${directionVector.y * travel}%)`,
               filter: values.softness > 0 ? `blur(${Math.min(8, values.softness / 4)}px)` : undefined,
             })}
           </div>

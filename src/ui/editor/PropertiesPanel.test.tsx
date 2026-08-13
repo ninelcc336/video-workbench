@@ -36,6 +36,28 @@ function createEffectClip(): EffectClip {
   };
 }
 
+/** 中文注释：构造真实转场片段，专门验证交界点特效的通用时间字段不会被参数 schema 吞掉。 */
+function createDirectionalTransitionClip(): EffectClip {
+  const family = getEffectFamily("directional-transition", 1);
+  const instance = createEffectFamilyInstance(family, "push-pull", "16:9");
+  return {
+    id: "transition-effect-1",
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: instance.startingStyleId,
+    placement: {
+      type: "boundary",
+      beforeVideoClipId: "video-before",
+      afterVideoClipId: "video-after",
+    },
+    trackId: "effects-1",
+    fromFrame: 30,
+    durationInFrames: instance.durationInFrames,
+    params: instance.params,
+  };
+}
+
 const structuredPropertiesFamily: EffectFamilyDefinition = {
   id: "properties-panel-fixture",
   version: 1,
@@ -252,6 +274,25 @@ function createChecklistStepsClip(): EffectClip {
 }
 
 describe("特效参数面板", () => {
+  it("为片段提供通用持续时间控件，并把转场时长交给时间范围命令", () => {
+    const onChangeDuration = vi.fn();
+
+    render(
+      <PropertiesPanel
+        onChangeDuration={onChangeDuration}
+        project={createEmptyProject()}
+        selectedClip={createDirectionalTransitionClip()}
+      />,
+    );
+
+    const duration = screen.getByLabelText("持续时间（帧）") as HTMLInputElement;
+    expect(duration.value).toBe("15");
+    fireEvent.change(duration, { target: { value: "24" } });
+    fireEvent.blur(duration);
+
+    expect(onChangeDuration).toHaveBeenLastCalledWith("transition-effect-1", 24);
+  });
+
   it("显示特效族起始样式并把切换交给页面命令", () => {
     const onSwitchStartingStyle = vi.fn();
 

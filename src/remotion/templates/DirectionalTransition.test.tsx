@@ -6,6 +6,7 @@ import {
   createEffectRenderInput,
   getEffectFamily,
 } from "../../domain/templates/effect-family";
+import { getSplitSegmentGeometry } from "./DirectionalTransition";
 import type { EffectFamilyTransitionRenderProps } from "../../domain/templates/types";
 import "../../domain/templates/registry";
 
@@ -152,5 +153,22 @@ describe("方向推拉与擦除特效族", () => {
     expect(render({ softness: 0 })).not.toBe(render({ softness: 24 }));
     expect(render({ accentColor: "#ef4444" })).toContain("#ef4444");
     expect(render({ splitCount: 4 }).match(/data-transition-segment=/g)).toHaveLength(4);
+  });
+
+  it("分割数量变化时为每条带生成独立的可见运动进度", () => {
+    const twoSegments = getSplitSegmentGeometry(2, 0.5, "down");
+    const eightSegments = getSplitSegmentGeometry(8, 0.5, "down");
+
+    // 中文注释：直接比较渲染几何而不是 React 节点数量，证明最小和最大分割数会改变真实遮罩边界与交错时序。
+    expect(twoSegments).toHaveLength(2);
+    expect(eightSegments).toHaveLength(8);
+    expect(twoSegments.map(({ clipPath }) => clipPath)).not.toEqual(
+      eightSegments.slice(0, 2).map(({ clipPath }) => clipPath),
+    );
+    expect(twoSegments.map(({ delay }) => delay)).not.toEqual(
+      eightSegments.slice(0, 2).map(({ delay }) => delay),
+    );
+    expect(twoSegments[0].end).toBe(50);
+    expect(eightSegments[0].end).toBe(12.5);
   });
 });

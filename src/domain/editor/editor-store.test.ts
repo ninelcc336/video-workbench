@@ -160,6 +160,40 @@ describe("命令式编辑器核心", () => {
     expect(store.getSnapshot().effectClips).toHaveLength(1);
   });
 
+  it("后视频片段向后移动产生间隔时移除转场并保留可撤销通知", () => {
+    const store = createStore();
+    const notices: string[][] = [];
+    store.subscribe((_snapshot, currentNotices = []) => notices.push([...currentNotices]));
+    store.dispatch({ type: "add-video-clip", clip: videoClip });
+    store.dispatch({
+      type: "add-video-clip",
+      clip: { ...videoClip, id: "video-2", mediaId: "media-2", fromFrame: 30 },
+    });
+    store.dispatch({
+      type: "add-effect-clip",
+      clip: {
+        ...effectClip,
+        id: "boundary-transition",
+        templateId: "directional-transition",
+        effectFamilyId: "directional-transition",
+        startingStyleId: "push-pull",
+        placement: {
+          type: "boundary",
+          beforeVideoClipId: "video-1",
+          afterVideoClipId: "video-2",
+        },
+      },
+    });
+
+    store.dispatch({ type: "move-video-clip", clipId: "video-2", fromFrame: 36 });
+
+    expect(store.getSnapshot().effectClips).toEqual([]);
+    expect(notices.at(-1)?.[0]).toContain("不再相邻而已移除");
+    store.undo();
+    expect(store.getSnapshot().effectClips).toHaveLength(1);
+    expect(store.getSnapshot().videoClips.find((clip) => clip.id === "video-2")?.fromFrame).toBe(30);
+  });
+
   it("拒绝把非法交界点转场作为普通范围特效创建", () => {
     const store = createStore();
     expect(() => store.dispatch({

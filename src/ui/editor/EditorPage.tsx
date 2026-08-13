@@ -182,6 +182,8 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const [mediaSources, setMediaSources] = useState<MediaSources>(initialMediaSources);
   const [missingMediaIds, setMissingMediaIds] = useState(initialMissingMediaIds);
   const [notice, setNotice] = useState<string | null>(null);
+  // 中文注释：过程预览提示与命令提交提示分开保存，清理拖动快照时不能覆盖 Store 刚发布的正式通知。
+  const [previewNotice, setPreviewNotice] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [presetOpen, setPresetOpen] = useState(false);
   const [videoTemplateOpen, setVideoTemplateOpen] = useState(false);
@@ -219,6 +221,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
     setMediaSources(initialMediaSources);
     setMissingMediaIds(initialMissingMediaIds);
     setPreviewProject(null);
+    setPreviewNotice(null);
     setSelectedClipId(null);
     setCurrentFrame(0);
     setMediaAssets([]);
@@ -267,6 +270,7 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
   const dispatch = (command: EditorCommand): boolean => {
     // 中文注释：先清理上一条提示，再让 Store 同步发布本次命令产生的移除或冻结警告，避免成功命令把新提示覆盖掉。
     setNotice(null);
+    setPreviewNotice(null);
     try {
       // 中文注释：重置后的其他编辑操作会改变历史栈，不能再把其撤销误判为撤销重置。
       if (command.type !== "reset-project") frameBeforeProjectReset.current = null;
@@ -591,6 +595,19 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
       : { type: "resize-effect-clip", clipId, fromFrame, durationInFrames });
   };
 
+  /** 中文注释：属性面板只修改通用时长字段，交界点的实际起点仍由领域命令从当前视频边界派生。 */
+  const changeEffectDuration = (clipId: string, durationInFrames: number) => {
+    const clip = project.effectClips.find((candidate) => candidate.id === clipId);
+    if (!clip) return;
+    dispatch({
+      type: "resize-effect-clip",
+      clipId,
+      fromFrame: clip.fromFrame,
+      durationInFrames: Math.max(1, Math.round(durationInFrames)),
+    });
+    setPreviewProject(null);
+  };
+
   const deleteClip = (clipId: string, kind: ClipKind) => {
     dispatch(kind === "video" ? { type: "delete-video-clip", clipId } : { type: "delete-effect-clip", clipId });
     setSelectedClipId((current) => current === clipId ? null : current);
@@ -762,13 +779,13 @@ export function EditorPage({ store: providedStore, mediaSources: initialMediaSou
         <div className="topbar-theme"><ThemeSelector /></div>
         </header>
         {projectError ? <div aria-label="视频工作区错误" className="workspace-error" role="alert"><span>{projectError}</span><button onClick={onRetryProject} type="button">重试</button>{backupAvailable && onRecoverProject ? <button onClick={onRecoverProject} type="button">从最近备份恢复</button> : null}<button onClick={onDismissProjectError} type="button">返回编辑</button></div> : null}
-      {notice && <div className="editor-notice" role="status">{notice}<button aria-label="关闭提示" onClick={() => setNotice(null)} type="button">×</button></div>}
+      {(previewNotice ?? notice) && <div className="editor-notice" role="status">{previewNotice ?? notice}<button aria-label="关闭提示" onClick={() => { setNotice(null); setPreviewNotice(null); }} type="button">×</button></div>}
       <EditorPanelLayout>
         <aside className="left-sidebar panel"><MediaBin mediaAssets={mediaAssets} missingMediaIds={missingMediaIds} onAddMedia={addMediaToTimeline} onDeleteMedia={deleteMedia} onImportMedia={importMedia} onRelinkMedia={(mediaId, file) => void relinkMedia(mediaId, file)} onRenameMedia={renameMedia} onUndoRelinkMedia={undoRelinkMedia} project={project} relinkedMediaId={relinkedMediaId} /><div className="section-divider" /><TemplateLibrary currentFrame={currentFrame} onAddTemplate={addTemplate} onAddTemplateAtFrame={addTemplateAtFrame} onAddTransitionAtBoundary={addTransitionAtBoundary} onInvalidTransition={() => setNotice("片段转场只能放在相邻视频片段交界点。") } onOpenPresets={() => { setPresetError(selectedStoredEffectClip ? undefined : "请先选择一个特效片段，再保存或套用个人预设。"); setPresetOpen(true); }} selectedEffectFamilyId={selectedEffectClip?.effectFamilyId ?? selectedEffectClip?.templateId ?? null} transitionBoundary={transitionBoundary} /></aside>
         <PreviewCanvas currentFrame={currentFrame} mediaSources={mediaSources} onChangeParams={commitEffectParams} onFrameChange={seekFrame} onPreviewEnd={() => setPreviewProject(null)} onPreviewParams={previewEffectParams} onSelectClip={selectClip} project={visibleProject} selectedClip={selectedEffectClip} />
-        <PropertiesPanel onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} onSwitchStartingStyle={requestStartingStyleSwitch} project={visibleProject} selectedClip={selectedEffectClip} />
+        <PropertiesPanel onChangeDuration={changeEffectDuration} onChangeParams={commitEffectParams} onPreviewParams={previewEffectParams} onSwitchStartingStyle={requestStartingStyleSwitch} project={visibleProject} selectedClip={selectedEffectClip} />
       </EditorPanelLayout>
-      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onDropTransition={addTransitionAtBoundary} onInvalidTemplateDrop={setNotice} onMoveClip={moveClip} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
+      <Timeline currentFrame={currentFrame} onDeleteClip={deleteClip} onDropTemplate={addTemplateAtFrame} onDropTransition={addTransitionAtBoundary} onInvalidTemplateDrop={setNotice} onMoveClip={moveClip} onPreviewNotice={setPreviewNotice} onPreviewProject={setPreviewProject} onResizeClip={resizeClip} onSeekFrame={seekFrame} onSelectClip={selectClip} project={project} selectedClipId={selectedClipId} />
       <RenderStatus onCancel={() => void cancelRender()} onDismiss={dismissRenderStatus} onRetry={() => void retryRender()} resultUrl={renderJobId ? `/api/render/${renderJobId}/file` : undefined} snapshot={renderSnapshot} />
       <ResetProjectDialog onConfirm={resetProject} onOpenChange={setResetDialogOpen} open={resetDialogOpen} />
       <ExportDialog onClose={() => setExportOpen(false)} onSubmit={submitExport} open={exportOpen} project={project} returnFocusRef={exportTriggerRef} />

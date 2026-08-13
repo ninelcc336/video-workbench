@@ -444,6 +444,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="button"]
 .timeline-clip:hover { z-index: 2; filter: brightness(1.06); transform: translateY(-1px); }
 .timeline-clip.selected, .timeline-clip[aria-pressed="true"] { z-index: 3; border: 2px solid var(--color-white); box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 5px var(--color-accent-focus), 0 7px 18px var(--color-shadow); }
 .timeline-clip.dragging { z-index: 5; cursor: grabbing; opacity: .9; transform: translateY(-2px) scale(1.01); box-shadow: 0 0 0 2px var(--color-accent), 0 10px 26px var(--color-shadow-strong); }
+/* 中文注释：边界转场在过程预览中暂时失去相邻绑定时保留片段，并用警告色提示松开后会被移除。 */
+.timeline-clip.invalid { border-color: var(--color-danger); color: var(--color-danger-text); background: repeating-linear-gradient(135deg, var(--color-danger-surface), var(--color-danger-surface) 8px, color-mix(in srgb, var(--color-danger-surface) 65%, var(--color-danger)) 8px, color-mix(in srgb, var(--color-danger-surface) 65%, var(--color-danger)) 16px); }
 .timeline-clip:focus-visible { z-index: 4; outline: 2px solid var(--color-white); outline-offset: 2px; }
 .timeline-clip__label { display: block; overflow: hidden; max-width: 100%; font-size: 10px; font-weight: 800; line-height: 34px; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 /* 中文注释：调整手柄始终保留细窄抓手，悬停时扩宽以提高时间轴精细裁剪的命中率。 */

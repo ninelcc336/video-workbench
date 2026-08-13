@@ -11,6 +11,8 @@ export type TimelineClipProps = {
   durationInFrames: number;
   pixelsPerFrame: number;
   selected: boolean;
+  /** 中文注释：过程预览中绑定失效的转场仍保留在原轨道，但必须以警告状态呈现。 */
+  invalid?: boolean;
   onSelect: (clipId: string) => void;
   onMove: (clipId: string, fromFrame: number) => void;
   onResize: (clipId: string, fromFrame: number, durationInFrames: number, mode: DragState["mode"]) => void;
@@ -35,6 +37,7 @@ export function TimelineClip({
   durationInFrames,
   pixelsPerFrame,
   selected,
+  invalid = false,
   onSelect,
   onMove,
   onPreviewMove,
@@ -125,7 +128,8 @@ export function TimelineClip({
     <button
       aria-label={`${label}，${kind === "video" ? "视频" : "特效"}片段`}
       aria-pressed={selected}
-      className={`timeline-clip ${kind}-clip${selected ? " selected" : ""}${isDragging ? " dragging" : ""}`}
+      className={`timeline-clip ${kind}-clip${selected ? " selected" : ""}${isDragging ? " dragging" : ""}${invalid ? " invalid" : ""}`}
+      title={invalid ? "绑定的视频片段已不再相邻，松开鼠标后该转场将被移除" : undefined}
       onClick={() => onSelect(clip.id)}
       onMouseDown={(event) => beginDrag("move", event)}
       style={{

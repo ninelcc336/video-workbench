@@ -54,6 +54,8 @@ export type TimelineProps = {
   onDropTemplate?: (family: EffectFamilyDefinition, startingStyleId: string, frame: number) => void;
   onDropTransition?: (family: EffectFamilyDefinition, startingStyleId: string, boundary: TemplateTransitionBoundary) => void;
   onInvalidTemplateDrop?: (message: string) => void;
+  /** 中文注释：视频拖动期间把暂时失效的边界转场反馈给页面，避免预览阶段静默消失。 */
+  onPreviewNotice?: (message: string | null) => void;
   onPreviewProject?: (project: EditProject | null) => void;
 };
 
@@ -93,6 +95,12 @@ function clipLabel(clip: VideoClip | EffectClip, kind: ClipKind): string {
   }
 }
 
+/** 中文注释：只把过程预览中失去当前相邻绑定的边界转场标为失效，范围特效不受此规则影响。 */
+function isInvalidBoundaryTransition(project: EditProject, clip: EffectClip): boolean {
+  return clip.placement?.type === "boundary"
+    && getEffectClipFrameRange(project, clip) === null;
+}
+
 /** 中文注释：把边界特效的当前交界点范围投影到时间轴，失效绑定不会继续占据旧坐标。 */
 function getTimelineEffectClips(project: EditProject): EffectClip[] {
   return project.effectClips.flatMap((clip) => {
@@ -125,6 +133,7 @@ export function Timeline({
   onDropTemplate,
   onDropTransition,
   onInvalidTemplateDrop,
+  onPreviewNotice,
   onPreviewProject,
 }: TimelineProps) {
   const [previewProject, setPreviewProject] = useState<EditProject | null>(null);
@@ -273,8 +282,13 @@ export function Timeline({
         ? baseProject.effectClips.map((candidate) => candidate.id === clipId ? { ...candidate, ...range } : candidate)
         : baseProject.effectClips.map((candidate) => ({ ...candidate, params: { ...candidate.params } })),
     };
+    const hasInvalidBoundaryTransition = kind === "video"
+      && nextProject.effectClips.some((effectClip) => isInvalidBoundaryTransition(nextProject, effectClip));
     previewProjectRef.current = nextProject;
     setPreviewProject(nextProject);
+    onPreviewNotice?.(hasInvalidBoundaryTransition
+      ? "绑定的视频片段已不再相邻，松开鼠标后该转场将被移除。"
+      : null);
     onPreviewProject?.(nextProject);
   };
 
@@ -282,6 +296,7 @@ export function Timeline({
   const clearPreview = () => {
     previewProjectRef.current = null;
     setPreviewProject(null);
+    onPreviewNotice?.(null);
     onPreviewProject?.(null);
   };
 
@@ -452,9 +467,10 @@ export function Timeline({
                     clip={clip}
                     durationInFrames={clip.durationInFrames}
                     fromFrame={clip.fromFrame}
+                    invalid={Boolean(previewProject && isInvalidBoundaryTransition(timelineProject, clip))}
                     key={clip.id}
                     kind="effect"
-                    label={clipLabel(clip, "effect")}
+                    label={`${clipLabel(clip, "effect")}${previewProject && isInvalidBoundaryTransition(timelineProject, clip) ? "（绑定失效）" : ""}`}
                     onMove={(clipId, fromFrame) => move(clipId, "effect", fromFrame)}
                     onPreviewMove={(clipId, fromFrame) => previewRange(clipId, "effect", fromFrame, clip.durationInFrames, "move")}
                     onPreviewResize={(clipId, fromFrame, durationInFrames, mode) => previewRange(clipId, "effect", fromFrame, durationInFrames, mode)}

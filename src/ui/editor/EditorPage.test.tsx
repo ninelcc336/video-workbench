@@ -25,10 +25,11 @@ vi.mock("./PreviewCanvas", () => ({
 }));
 vi.mock("./Timeline", () => ({
   // 中文注释：用定位按钮驱动页面播放头，验证重置操作会同时归零预览状态。
-  Timeline: ({ onSeekFrame, onSelectClip, selectedClipId }: { onSeekFrame?: (frame: number) => void; onSelectClip?: (clipId: string) => void; selectedClipId?: string | null }) => (
+  Timeline: ({ onPreviewNotice, onSeekFrame, onSelectClip, selectedClipId }: { onPreviewNotice?: (message: string | null) => void; onSeekFrame?: (frame: number) => void; onSelectClip?: (clipId: string) => void; selectedClipId?: string | null }) => (
     <>
       <button onClick={() => onSeekFrame?.(10)} type="button">定位播放头</button>
       <button onClick={() => onSelectClip?.("video-1")} type="button">选择视频片段</button>
+      <button onClick={() => onPreviewNotice?.("绑定的视频片段已不再相邻，松开鼠标后该转场将被移除。")} type="button">模拟转场预览失效</button>
       <span data-testid="selected-clip-id">{selectedClipId ?? ""}</span>
     </>
   ),
@@ -122,6 +123,16 @@ afterEach(() => {
 });
 
 describe("编辑项目的素材导入", () => {
+  it("在过程预览中显示转场绑定失效提示", () => {
+    const store = createLandscapeProjectStore();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ json: async () => [], ok: true } as Response);
+
+    render(<EditorPage store={store} />);
+    fireEvent.click(screen.getByRole("button", { name: "模拟转场预览失效" }));
+
+    expect(screen.getByText(/松开鼠标后该转场将被移除/)).toBeTruthy();
+  });
+
   // 中文注释：主题属于应用外观状态，切换它不能进入编辑器历史或修改当前时间轴快照。
   it("切换界面主题不改变视频工作区快照", async () => {
     const store = createLandscapeProjectStore();
