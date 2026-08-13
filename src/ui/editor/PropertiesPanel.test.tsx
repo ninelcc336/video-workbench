@@ -300,6 +300,77 @@ describe("特效参数面板", () => {
     expect(clip.params.text).toBe("旧文字");
   });
 
+  it("允许直接编辑数值中间态，并在失焦后提交最终数值", () => {
+    const onChangeParams = vi.fn();
+    render(
+      <PropertiesPanel
+        project={createEmptyProject()}
+        selectedClip={createStructuredEffectClip()}
+        onChangeParams={onChangeParams}
+      />,
+    );
+
+    // 中文注释：先验证 number 参数可以保留 0. 这类中间态，再验证完成输入前不会提交半成品。
+    const opacity = screen.getByLabelText("透明度精确输入") as HTMLInputElement;
+    fireEvent.change(opacity, { target: { value: "0." } });
+    expect(opacity.value).toBe("0.");
+    fireEvent.change(opacity, { target: { value: "0.25" } });
+    expect(opacity.value).toBe("0.25");
+    expect(onChangeParams).not.toHaveBeenCalled();
+    fireEvent.blur(opacity);
+
+    expect(onChangeParams).toHaveBeenLastCalledWith("structured-effect-1", { opacity: 0.25 });
+  });
+
+  it("允许直接输入尺寸小数，而不是只能点击数值按钮", () => {
+    const onChangeParams = vi.fn();
+    render(
+      <PropertiesPanel
+        project={createEmptyProject()}
+        selectedClip={createEffectClip()}
+        onChangeParams={onChangeParams}
+      />,
+    );
+
+    const width = screen.getByLabelText("尺寸宽度") as HTMLInputElement;
+    fireEvent.change(width, { target: { value: "0." } });
+    expect(width.value).toBe("0.");
+    fireEvent.change(width, { target: { value: "0.25" } });
+    expect(width.value).toBe("0.25");
+    fireEvent.blur(width);
+
+    expect(onChangeParams).toHaveBeenLastCalledWith("effect-1", {
+      size: expect.objectContaining({ width: 0.25 }),
+    });
+  });
+
+  it("基础模式夹取数值边界，高级模式保留有意越界输入", () => {
+    const onChangeParams = vi.fn();
+    render(
+      <PropertiesPanel
+        project={createEmptyProject()}
+        selectedClip={createStructuredEffectClip()}
+        onChangeParams={onChangeParams}
+      />,
+    );
+
+    const basicPosition = screen.getByLabelText("位置X") as HTMLInputElement;
+    fireEvent.change(basicPosition, { target: { value: "1.2" } });
+    fireEvent.blur(basicPosition);
+    expect(onChangeParams).toHaveBeenLastCalledWith("structured-effect-1", {
+      position: { x: 1, y: 0.5 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "显示高级特效参数" }));
+    const advancedPosition = screen.getByLabelText("位置X") as HTMLInputElement;
+    fireEvent.change(advancedPosition, { target: { value: "1.2" } });
+    expect(advancedPosition.value).toBe("1.2");
+    fireEvent.blur(advancedPosition);
+    expect(onChangeParams).toHaveBeenLastCalledWith("structured-effect-1", {
+      position: { x: 1.2, y: 0.5 },
+    });
+  });
+
   it("没有选中特效时显示引导文案", () => {
     render(<PropertiesPanel project={createEmptyProject()} selectedClip={null} />);
 

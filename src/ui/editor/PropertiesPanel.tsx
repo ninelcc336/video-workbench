@@ -139,6 +139,118 @@ function clamp(value: number, min: number | undefined, max: number | undefined):
   return Math.min(max ?? value, Math.max(min ?? value, value));
 }
 
+/**
+ * 中文注释：提供可保留编辑中间态的数值输入，避免原生 number 输入在输入 0. 时立即规范化为 0。
+ * 只有失焦、回车或步进操作才提交数值；空值或非法文本在失焦时恢复到最近一次有效值。
+ */
+function EditableNumberInput({
+  value,
+  label,
+  min,
+  max,
+  step,
+  describedBy,
+  errorMessageId,
+  invalid = false,
+  onCommit,
+}: {
+  value: number;
+  label: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  describedBy?: string;
+  errorMessageId?: string;
+  invalid?: boolean;
+  onCommit: (value: number) => void;
+}) {
+  const formatValue = (nextValue: number): string => String(nextValue);
+  const [draftValue, setDraftValue] = useState(() => formatValue(value));
+  const draftRef = useRef(formatValue(value));
+  const editingRef = useRef(false);
+  const committedRef = useRef(value);
+
+  useEffect(() => {
+    if (editingRef.current) return;
+    const nextDraft = formatValue(value);
+    setDraftValue(nextDraft);
+    draftRef.current = nextDraft;
+    committedRef.current = value;
+  }, [value]);
+
+  const restoreValue = () => {
+    const nextDraft = formatValue(value);
+    editingRef.current = false;
+    setDraftValue(nextDraft);
+    draftRef.current = nextDraft;
+    committedRef.current = value;
+  };
+
+  const commitDraft = (nextValue?: number) => {
+    const parsed = nextValue ?? parseFiniteNumber(draftRef.current);
+    if (parsed === undefined) {
+      restoreValue();
+      return;
+    }
+    const constrainedValue = clamp(parsed, min, max);
+    const nextDraft = formatValue(constrainedValue);
+    editingRef.current = false;
+    setDraftValue(nextDraft);
+    draftRef.current = nextDraft;
+    if (!Object.is(constrainedValue, committedRef.current)) {
+      committedRef.current = constrainedValue;
+      onCommit(constrainedValue);
+    }
+  };
+
+  const parsedDraft = parseFiniteNumber(draftValue);
+  return (
+    <input
+      aria-describedby={describedBy}
+      aria-errormessage={invalid ? errorMessageId : undefined}
+      aria-invalid={invalid || undefined}
+      aria-valuemax={max}
+      aria-valuemin={min}
+      aria-valuenow={parsedDraft}
+      aria-valuetext={draftValue}
+      aria-label={label}
+      inputMode="decimal"
+      onBlur={() => commitDraft()}
+      onChange={(event) => {
+        editingRef.current = true;
+        draftRef.current = event.target.value;
+        setDraftValue(event.target.value);
+      }}
+      onFocus={() => {
+        editingRef.current = true;
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commitDraft();
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          restoreValue();
+          return;
+        }
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          const current = parseFiniteNumber(draftRef.current);
+          if (current === undefined) return;
+          event.preventDefault();
+          const direction = event.key === "ArrowUp" ? 1 : -1;
+          commitDraft(current + direction * (step ?? 1));
+        }
+      }}
+      role="spinbutton"
+      step={step}
+      type="text"
+      value={draftValue}
+    />
+  );
+}
+
 /** 中文注释：基础模式给可越界布局强制补上 0 到 1 的安全边界，高级模式才允许输入越界值。 */
 function getLayoutBounds(
   definition: PositionParameterDefinition | SizeParameterDefinition,
@@ -392,15 +504,15 @@ function NumericParameterControl({
     }
   };
 
-  const updateExactValue = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = parseFiniteNumber(event.target.value);
-    if (nextValue === undefined) return;
-    const constrainedValue = clamp(nextValue, definition.min, definition.max);
-    setDraftValue(constrainedValue);
-    draftRef.current = constrainedValue;
+  /** 中文注释：精确输入完成后才写入参数快照，避免每个键盘中间态都触发编辑器命令。 */
+  const commitExactValue = (nextValue: number) => {
+    setDraftValue(nextValue);
+    draftRef.current = nextValue;
     previewingRef.current = false;
-    onChange({ [definition.key]: constrainedValue });
-    committedRef.current = constrainedValue;
+    if (!Object.is(nextValue, committedRef.current)) {
+      onChange({ [definition.key]: nextValue });
+      committedRef.current = nextValue;
+    }
   };
 
   return (
@@ -430,16 +542,15 @@ function NumericParameterControl({
           value={draftValue}
         />
       ) : null}
-      <input
-        aria-describedby={describedBy}
-        aria-errormessage={invalid ? errorMessageId : undefined}
-        aria-label={hasRange ? `${label}精确输入` : label}
-        aria-invalid={invalid || undefined}
+      <EditableNumberInput
+        describedBy={describedBy}
+        errorMessageId={errorMessageId}
+        invalid={invalid}
+        label={hasRange ? `${label}精确输入` : label}
         max={definition.max}
         min={definition.min}
-        onChange={updateExactValue}
+        onCommit={commitExactValue}
         step={definition.step}
-        type="number"
         value={draftValue}
       />
     </div>
@@ -496,9 +607,8 @@ function ParameterControl({
     const secondLabel = isPosition ? "Y" : "高度";
     const firstBounds = getLayoutBounds(definition, firstKey, mode);
     const secondBounds = getLayoutBounds(definition, secondKey, mode);
-    const updateLayoutValue = (field: string, bounds: { min?: number; max?: number }, event: ChangeEvent<HTMLInputElement>) => {
-      const parsed = parseFiniteNumber(event.target.value);
-      if (parsed === undefined) return;
+    /** 中文注释：尺寸和位置只在可编辑草稿确认后提交，基础模式仍在提交边界执行安全区域夹取。 */
+    const updateLayoutValue = (field: string, bounds: { min?: number; max?: number }, parsed: number) => {
       const nextValue = mode === "basic" && definition.safety === "warn-on-overflow"
         ? clamp(parsed, bounds.min, bounds.max)
         : parsed;
@@ -512,31 +622,29 @@ function ParameterControl({
         <div className="property-grid property-grid--two">
           <label>
             <span>{firstLabel}</span>
-            <input
-              aria-describedby={describedBy}
-              aria-errormessage={hasError ? diagnosticId : undefined}
-              aria-label={`${label}${firstLabel}`}
-              aria-invalid={hasError || undefined}
+            <EditableNumberInput
+              describedBy={describedBy}
+              errorMessageId={hasError ? diagnosticId : undefined}
+              invalid={hasError}
+              label={`${label}${firstLabel}`}
               max={firstBounds.max}
               min={firstBounds.min}
-              onChange={(event) => updateLayoutValue(firstKey, firstBounds, event)}
+              onCommit={(nextValue) => updateLayoutValue(firstKey, firstBounds, nextValue)}
               step={0.01}
-              type="number"
               value={Number(objectValue[firstKey] ?? 0)}
             />
           </label>
           <label>
             <span>{secondLabel}</span>
-            <input
-              aria-describedby={describedBy}
-              aria-errormessage={hasError ? diagnosticId : undefined}
-              aria-label={`${label}${secondLabel}`}
-              aria-invalid={hasError || undefined}
+            <EditableNumberInput
+              describedBy={describedBy}
+              errorMessageId={hasError ? diagnosticId : undefined}
+              invalid={hasError}
+              label={`${label}${secondLabel}`}
               max={secondBounds.max}
               min={secondBounds.min}
-              onChange={(event) => updateLayoutValue(secondKey, secondBounds, event)}
+              onCommit={(nextValue) => updateLayoutValue(secondKey, secondBounds, nextValue)}
               step={0.01}
-              type="number"
               value={Number(objectValue[secondKey] ?? 0)}
             />
           </label>
@@ -871,16 +979,14 @@ function GradientControl({
     <div aria-errormessage={invalid ? errorMessageId : undefined} aria-invalid={invalid || undefined} aria-label={label} className="gradient-control" role="group">
       <label>
         <span>角度</span>
-        <input
-          aria-label={`${label}角度`}
+        <EditableNumberInput
+          errorMessageId={errorMessageId}
+          invalid={invalid}
+          label={`${label}角度`}
           max={360}
           min={-360}
-          onChange={(event) => {
-            const nextAngle = parseFiniteNumber(event.target.value);
-            if (nextAngle !== undefined) onChange({ angle: nextAngle, stops });
-          }}
+          onCommit={(nextAngle) => onChange({ angle: nextAngle, stops })}
           step={1}
-          type="number"
           value={gradient.angle}
         />
       </label>
@@ -896,16 +1002,14 @@ function GradientControl({
               />
               <label>
                 <span>位置</span>
-                <input
-                  aria-label={`${stopLabel}位置`}
+                <EditableNumberInput
+                  errorMessageId={errorMessageId}
+                  invalid={invalid}
+                  label={`${stopLabel}位置`}
                   max={1}
                   min={0}
-                  onChange={(event) => {
-                    const nextOffset = parseFiniteNumber(event.target.value);
-                    if (nextOffset !== undefined) updateStop(index, "offset", clamp(nextOffset, 0, 1));
-                  }}
+                  onCommit={(nextOffset) => updateStop(index, "offset", nextOffset)}
                   step={0.01}
-                  type="number"
                   value={stop.offset}
                 />
               </label>
@@ -954,25 +1058,20 @@ function SpacingControl({
       {fields.map(([field, fieldLabel]) => (
         <label key={field}>
           <span>{fieldLabel}</span>
-          <input
-            aria-label={`${label}${fieldLabel}`}
-            aria-errormessage={invalid ? errorMessageId : undefined}
-            aria-invalid={invalid || undefined}
+          <EditableNumberInput
+            errorMessageId={errorMessageId}
+            invalid={invalid}
+            label={`${label}${fieldLabel}`}
             max={definition.max}
             min={definition.min}
-            onChange={(event) => {
-              const nextValue = parseFiniteNumber(event.target.value);
-              if (nextValue === undefined) return;
-              onChange({
-                top: Number(spacing.top ?? 0),
-                right: Number(spacing.right ?? 0),
-                bottom: Number(spacing.bottom ?? 0),
-                left: Number(spacing.left ?? 0),
-                [field]: clamp(nextValue, definition.min, definition.max),
-              });
-            }}
+            onCommit={(nextValue) => onChange({
+              top: Number(spacing.top ?? 0),
+              right: Number(spacing.right ?? 0),
+              bottom: Number(spacing.bottom ?? 0),
+              left: Number(spacing.left ?? 0),
+              [field]: nextValue,
+            })}
             step={definition.step}
-            type="number"
             value={Number(spacing[field] ?? 0)}
           />
         </label>
@@ -1039,11 +1138,23 @@ function AnimationStageControl({
             <div className="property-grid property-grid--two">
               <label>
                 <span>时长</span>
-                <input aria-label={`${label}${stageLabel}时长`} min={0} onChange={(event) => { const next = parseFiniteNumber(event.target.value); if (next !== undefined) updatePhase(stage, "durationInFrames", next); }} step={1} type="number" value={Number(phase.durationInFrames)} />
+                <EditableNumberInput
+                  label={`${label}${stageLabel}时长`}
+                  min={0}
+                  onCommit={(nextValue) => updatePhase(stage, "durationInFrames", nextValue)}
+                  step={1}
+                  value={Number(phase.durationInFrames)}
+                />
               </label>
               <label>
                 <span>延迟</span>
-                <input aria-label={`${label}${stageLabel}延迟`} min={0} onChange={(event) => { const next = parseFiniteNumber(event.target.value); if (next !== undefined) updatePhase(stage, "delayInFrames", next); }} step={1} type="number" value={Number(phase.delayInFrames)} />
+                <EditableNumberInput
+                  label={`${label}${stageLabel}延迟`}
+                  min={0}
+                  onCommit={(nextValue) => updatePhase(stage, "delayInFrames", nextValue)}
+                  step={1}
+                  value={Number(phase.delayInFrames)}
+                />
               </label>
               <label>
                 <span>方向</span>
@@ -1059,11 +1170,23 @@ function AnimationStageControl({
               </label>
               <label>
                 <span>强度</span>
-                <input aria-label={`${label}${stageLabel}强度`} min={0} onChange={(event) => { const next = parseFiniteNumber(event.target.value); if (next !== undefined) updatePhase(stage, "intensity", next); }} step={0.01} type="number" value={Number(phase.intensity)} />
+                <EditableNumberInput
+                  label={`${label}${stageLabel}强度`}
+                  min={0}
+                  onCommit={(nextValue) => updatePhase(stage, "intensity", nextValue)}
+                  step={0.01}
+                  value={Number(phase.intensity)}
+                />
               </label>
               <label>
                 <span>交错</span>
-                <input aria-label={`${label}${stageLabel}交错`} min={0} onChange={(event) => { const next = parseFiniteNumber(event.target.value); if (next !== undefined) updatePhase(stage, "stagger", next); }} step={1} type="number" value={Number(phase.stagger)} />
+                <EditableNumberInput
+                  label={`${label}${stageLabel}交错`}
+                  min={0}
+                  onCommit={(nextValue) => updatePhase(stage, "stagger", nextValue)}
+                  step={1}
+                  value={Number(phase.stagger)}
+                />
               </label>
             </div>
           </fieldset>
