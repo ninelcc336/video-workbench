@@ -152,6 +152,16 @@ describe("特效固定帧验证矩阵", () => {
     expect(cases.filter((item) => item.scenario !== "default").every((item) => item.frameStage === "middle")).toBe(true);
   });
 
+  it("quick 矩阵只保留默认固定帧，不改变默认完整矩阵", () => {
+    const cases = buildVisualVerificationMatrix({
+      scenarioMode: "quick",
+      scope: { kind: "style", familyId: fixtureFamily.id, startingStyleId: "fixture-style" },
+    });
+
+    expect(cases.every((item) => item.scenario === "default")).toBe(true);
+    expect(cases).toHaveLength(7);
+  });
+
   it("失败时给出包含范围和起始样式的明确错误", () => {
     expect(() => selectVisualVerificationTargets({
       kind: "style",

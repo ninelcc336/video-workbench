@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { chromium } from "@playwright/test";
+import { openBrowser, type HeadlessBrowser } from "@remotion/renderer";
 import { createServer, type ViteDevServer } from "vite";
 import { listBuiltInAssets } from "../../domain/assets/built-in-assets";
 import {
@@ -14,16 +15,26 @@ import {
   type VisualVerificationScope,
 } from "../../domain/templates/visual-verification";
 import {
-  comparePngFiles,
+  comparePngBuffers,
   DEFAULT_PNG_COMPARISON_OPTIONS,
   type PngComparisonResult,
 } from "./visual-image-comparison";
-import { renderEffectFrame } from "./effect-visual-renderer";
 import {
-  verifyOrUpdateVisualBaseline,
+  renderEffectFrameBuffer,
+  selectEffectFrameComposition,
+} from "./effect-visual-renderer";
+import {
+  verifyOrUpdateVisualBaselineBuffer,
   type VisualBaselineResult,
 } from "./visual-verification-artifacts";
-import type { RemotionBundleFunction } from "./remotion-bundler";
+import {
+  cleanupStaleRemotionBundleSessions,
+  cleanupNewRemotionChromiumProfiles,
+  createRemotionBundleSession,
+  snapshotRemotionChromiumProfiles,
+  type RemotionBundleFunction,
+  type RemotionBundleSession,
+} from "./remotion-bundler";
 
 export const DEFAULT_VISUAL_BASELINE_DIRECTORY = resolve(
   process.cwd(),
@@ -34,6 +45,8 @@ export const DEFAULT_VISUAL_ARTIFACT_DIRECTORY = resolve(
   "test-results/effect-visual-verification",
 );
 
+export type VisualArtifactRetention = "failed" | "default" | "all";
+
 export type VisualVerificationRunOptions = VisualVerificationMatrixOptions & {
   update?: boolean;
   baselineDirectory?: string;
@@ -42,6 +55,10 @@ export type VisualVerificationRunOptions = VisualVerificationMatrixOptions & {
   serveUrl?: string;
   bundle?: RemotionBundleFunction;
   timeoutInMilliseconds?: number;
+  /** 中文注释：failed 只保留失败证据，default 额外保留默认固定帧，all 才保留完整案例 PNG。 */
+  retainArtifacts?: VisualArtifactRetention;
+  /** 中文注释：收到中断信号后停止接收新案例，当前案例结束后仍执行完整资源清理。 */
+  signal?: AbortSignal;
 };
 
 export type VisualVerificationCaseResult = {
@@ -115,8 +132,7 @@ async function captureBrowserFrame(
   page: Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>,
   baseUrl: string,
   item: VisualVerificationCase,
-  outputPath: string,
-): Promise<void> {
+): Promise<Buffer> {
   const url = new URL("visual-verification.html", baseUrl);
   url.searchParams.set("renderProps", JSON.stringify(item.renderProps));
   await page.goto(url.toString(), { waitUntil: "networkidle" });
@@ -147,62 +163,152 @@ async function captureBrowserFrame(
   if (missingFonts.length > 0) {
     throw new Error(`视觉验证内置字体未加载：${missingFonts.join(", ")}`);
   }
-  await mkdir(dirname(outputPath), { recursive: true });
-  await page.locator('[data-effect-frame="true"]').screenshot({ path: outputPath });
+  return page.locator('[data-effect-frame="true"]').screenshot();
 }
 
-/** 中文注释：顺序运行案例以限制 Chromium 和 Remotion 的峰值负载，并让失败输出稳定可复现。 */
+/** 中文注释：删除上次运行留下的已知视觉产物，避免保留策略只影响本次而让旧 PNG 无限累积。 */
+async function resetVisualArtifactDirectory(artifactDirectory: string): Promise<void> {
+  await Promise.all([
+    rm(join(artifactDirectory, "remotion"), { force: true, recursive: true }),
+    rm(join(artifactDirectory, "browser"), { force: true, recursive: true }),
+    rm(join(artifactDirectory, "diff"), { force: true, recursive: true }),
+    rm(join(artifactDirectory, "manifest.json"), { force: true }),
+  ]);
+  await mkdir(artifactDirectory, { recursive: true });
+}
+
+/** 中文注释：只在保留策略命中或案例失败时写 PNG，成功参数案例默认只留内存比较结果。 */
+async function writeCaseArtifacts(
+  paths: ReturnType<typeof getCasePaths>,
+  remotionBuffer: Buffer,
+  browserBuffer: Buffer,
+  writeDiff: Buffer | undefined,
+): Promise<void> {
+  await Promise.all([
+    mkdir(dirname(paths.remotionPath), { recursive: true }).then(() => writeFile(paths.remotionPath, remotionBuffer)),
+    mkdir(dirname(paths.browserPath), { recursive: true }).then(() => writeFile(paths.browserPath, browserBuffer)),
+    writeDiff
+      ? mkdir(dirname(paths.diffPath), { recursive: true }).then(() => writeFile(paths.diffPath, writeDiff))
+      : Promise.resolve(),
+  ]);
+}
+
+/** 中文注释：并行等待所有关闭动作，避免单个 close 失败阻断后续 bundle 和服务清理。 */
+async function cleanupVisualVerificationResources(resources: {
+  page?: Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
+  browser?: Awaited<ReturnType<typeof chromium.launch>>;
+  remotionBrowser?: HeadlessBrowser;
+  remotionChromiumProfilesBefore?: ReadonlySet<string>;
+  bundleSession?: RemotionBundleSession;
+  temporaryServer?: Awaited<ReturnType<typeof startVisualVerificationServer>>;
+}): Promise<void> {
+  const tasks: Promise<unknown>[] = [];
+  if (resources.page) tasks.push(resources.page.close());
+  if (resources.browser) tasks.push(resources.browser.close());
+  if (resources.remotionBrowser || resources.remotionChromiumProfilesBefore) {
+    tasks.push((async () => {
+      try {
+        await resources.remotionBrowser?.close({ silent: true });
+      } finally {
+        if (resources.remotionChromiumProfilesBefore) {
+          await cleanupNewRemotionChromiumProfiles(resources.remotionChromiumProfilesBefore);
+        }
+      }
+    })());
+  }
+  if (resources.bundleSession) tasks.push(resources.bundleSession.cleanup());
+  if (resources.temporaryServer) tasks.push(resources.temporaryServer.server.close());
+  const cleanupResults = await Promise.allSettled(tasks);
+  const failure = cleanupResults.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failure) throw failure.reason;
+}
+
+/** 中文注释：只在案例边界检查中断状态，让 Ctrl+C 走 finally，而不是留下半关闭的浏览器和 bundle。 */
+function throwIfVerificationAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("视觉验证已取消");
+}
+
+/** 中文注释：顺序运行案例以限制峰值负载，但整次运行复用 Remotion 浏览器和 bundle。 */
 export async function runVisualVerification(
   options: VisualVerificationRunOptions = {},
 ): Promise<VisualVerificationReport> {
   const matrix = buildVisualVerificationMatrix(options);
   const baselineDirectory = options.baselineDirectory ?? DEFAULT_VISUAL_BASELINE_DIRECTORY;
   const artifactDirectory = options.artifactDirectory ?? DEFAULT_VISUAL_ARTIFACT_DIRECTORY;
-  await mkdir(artifactDirectory, { recursive: true });
-  await writeFile(
-    join(artifactDirectory, "manifest.json"),
-    JSON.stringify({
-      comparison: DEFAULT_PNG_COMPARISON_OPTIONS,
-      fonts: listBuiltInAssets("font").map((asset) => asset.id),
-      fontFamily: VISUAL_VERIFICATION_FONT_FAMILY,
-      chromiumArgs: [...VISUAL_VERIFICATION_CHROMIUM_ARGS],
-      randomSeed: options.randomSeed ?? VISUAL_VERIFICATION_RANDOM_SEED,
-      viewports: VISUAL_VERIFICATION_VIEWPORTS,
-      browser: { deviceScaleFactor: 1, viewport: { width: 1920, height: 1080 } },
-    }, null, 2),
-  );
-  const temporaryServer = options.baseUrl ? undefined : await startVisualVerificationServer();
-  const baseUrl = options.baseUrl ?? temporaryServer?.baseUrl;
-  if (!baseUrl) throw new Error("视觉验证缺少浏览器服务地址");
-
-  const browser = await chromium.launch({
-    args: [...VISUAL_VERIFICATION_CHROMIUM_ARGS],
-    headless: true,
-  });
-  const page = await browser.newPage({
-    deviceScaleFactor: 1,
-    viewport: { width: 1920, height: 1080 },
-  });
   const results: VisualVerificationCaseResult[] = [];
+  const retainArtifacts = options.retainArtifacts ?? "default";
+  let temporaryServer: Awaited<ReturnType<typeof startVisualVerificationServer>> | undefined;
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  let page: Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>> | undefined;
+  let remotionBrowser: HeadlessBrowser | undefined;
+  let remotionChromiumProfilesBefore: ReadonlySet<string> | undefined;
+  let bundleSession: RemotionBundleSession | undefined;
 
   try {
+    await resetVisualArtifactDirectory(artifactDirectory);
+    await writeFile(
+      join(artifactDirectory, "manifest.json"),
+      JSON.stringify({
+        comparison: DEFAULT_PNG_COMPARISON_OPTIONS,
+        fonts: listBuiltInAssets("font").map((asset) => asset.id),
+        fontFamily: VISUAL_VERIFICATION_FONT_FAMILY,
+        chromiumArgs: [...VISUAL_VERIFICATION_CHROMIUM_ARGS],
+        randomSeed: options.randomSeed ?? VISUAL_VERIFICATION_RANDOM_SEED,
+        viewports: VISUAL_VERIFICATION_VIEWPORTS,
+        browser: { deviceScaleFactor: 1, viewport: { width: 1920, height: 1080 } },
+        scenarioMode: options.scenarioMode ?? "full",
+        retainArtifacts,
+      }, null, 2),
+    );
+
+    temporaryServer = options.baseUrl ? undefined : await startVisualVerificationServer();
+    const baseUrl = options.baseUrl ?? temporaryServer?.baseUrl;
+    if (!baseUrl) throw new Error("视觉验证缺少浏览器服务地址");
+
+    const explicitServeUrl = options.serveUrl ?? process.env.REMOTION_SERVE_URL;
+    const serveUrl = explicitServeUrl ?? (
+      await (async () => {
+        await cleanupStaleRemotionBundleSessions();
+        bundleSession = await createRemotionBundleSession(options.bundle);
+        return bundleSession.serveUrl;
+      })()
+    );
+
+    browser = await chromium.launch({
+      args: [...VISUAL_VERIFICATION_CHROMIUM_ARGS],
+      headless: true,
+    });
+    page = await browser.newPage({
+      deviceScaleFactor: 1,
+      viewport: { width: 1920, height: 1080 },
+    });
+
+    if (matrix.length > 0) {
+      remotionChromiumProfilesBefore = await snapshotRemotionChromiumProfiles();
+      remotionBrowser = await openBrowser("chrome", { logLevel: "error" });
+    }
     for (const item of matrix) {
+      throwIfVerificationAborted(options.signal);
       const paths = getCasePaths(item, baselineDirectory, artifactDirectory);
       const identity = formatVisualVerificationCase(item);
       try {
-        await renderEffectFrame(item.renderProps, paths.remotionPath, {
-          bundle: options.bundle,
-          serveUrl: options.serveUrl,
+        // 中文注释：组合 props 会随案例变化，必须逐案例解析；浏览器和 bundle 仍在整次运行内复用。
+        const composition = await selectEffectFrameComposition(item.renderProps, {
+          puppeteerInstance: remotionBrowser,
+          serveUrl,
           timeoutInMilliseconds: options.timeoutInMilliseconds,
         });
-        await captureBrowserFrame(page, baseUrl, item, paths.browserPath);
+        const remotionBuffer = await renderEffectFrameBuffer(item.renderProps, {
+          composition,
+          puppeteerInstance: remotionBrowser,
+          serveUrl,
+          timeoutInMilliseconds: options.timeoutInMilliseconds,
+        });
+        const browserBuffer = await captureBrowserFrame(page!, baseUrl, item);
 
-        const engineComparison = await comparePngFiles(paths.remotionPath, paths.browserPath);
+        const engineComparison = comparePngBuffers(remotionBuffer, browserBuffer);
         if (!engineComparison.matches) {
-          if (engineComparison.diffPng) {
-            await mkdir(dirname(paths.diffPath), { recursive: true });
-            await writeFile(paths.diffPath, engineComparison.diffPng);
-          }
+          await writeCaseArtifacts(paths, remotionBuffer, browserBuffer, engineComparison.diffPng);
           results.push({
             case: item,
             status: "failed",
@@ -217,32 +323,40 @@ export async function runVisualVerification(
 
         if (item.scenario !== "default") {
           // 中文注释：极端参数属于行为矩阵，只需确认两端观察结果一致；默认场景才写入版本化固定帧基线。
+          if (retainArtifacts === "all") {
+            await writeCaseArtifacts(paths, remotionBuffer, browserBuffer, undefined);
+          }
           results.push({
             case: item,
             status: "passed",
             message: `${identity}：参数矩阵通过（浏览器与 Remotion 一致）`,
-            remotionPath: paths.remotionPath,
-            browserPath: paths.browserPath,
-            diffPath: paths.diffPath,
+            remotionPath: retainArtifacts === "all" ? paths.remotionPath : undefined,
+            browserPath: retainArtifacts === "all" ? paths.browserPath : undefined,
             engineComparison,
           });
           continue;
         }
 
-        const baselineComparison = await verifyOrUpdateVisualBaseline({
-          actualPath: paths.remotionPath,
+        const baselineComparison = await verifyOrUpdateVisualBaselineBuffer({
+          actualBuffer: remotionBuffer,
           baselinePath: paths.baselinePath,
           diffPath: paths.diffPath,
           update: options.update === true,
         });
+        const keepDefaultArtifacts = retainArtifacts === "all"
+          || retainArtifacts === "default"
+          || baselineComparison.status !== "passed";
+        if (keepDefaultArtifacts) {
+          await writeCaseArtifacts(paths, remotionBuffer, browserBuffer, undefined);
+        }
         results.push({
           case: item,
           status: baselineComparison.status,
           message: `${identity}：${baselineComparison.message}`,
-          remotionPath: paths.remotionPath,
-          browserPath: paths.browserPath,
+          remotionPath: keepDefaultArtifacts ? paths.remotionPath : undefined,
+          browserPath: keepDefaultArtifacts ? paths.browserPath : undefined,
           baselinePath: paths.baselinePath,
-          diffPath: paths.diffPath,
+          diffPath: baselineComparison.comparison?.diffPng ? paths.diffPath : undefined,
           engineComparison,
           baselineComparison,
         });
@@ -259,9 +373,14 @@ export async function runVisualVerification(
       }
     }
   } finally {
-    await page.close();
-    await browser.close();
-    await temporaryServer?.server.close();
+    await cleanupVisualVerificationResources({
+      page,
+      browser,
+      remotionBrowser,
+      remotionChromiumProfilesBefore,
+      bundleSession,
+      temporaryServer,
+    });
   }
 
   return {

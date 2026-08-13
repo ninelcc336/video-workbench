@@ -10,6 +10,7 @@
     "test": "vitest run src",
     "test:render-smoke": "tsx scripts/render-smoke.ts",
     "test:visual": "tsx scripts/verify-effect-visuals.ts",
+    "test:visual:quick": "tsx scripts/verify-effect-visuals.ts --quick",
     "check:assets": "tsx scripts/check-built-in-assets.ts",
     "build": "npm run check:assets && tsc --noEmit && vite build",
     "test:e2e": "playwright test"

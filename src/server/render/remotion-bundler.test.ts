@@ -1,5 +1,15 @@
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getRemotionServeUrl, resetRemotionBundle } from "./remotion-bundler";
+import {
+  cleanupStaleRemotionBundleSessions,
+  cleanupNewRemotionChromiumProfiles,
+  createRemotionBundleSession,
+  getRemotionServeUrl,
+  resetRemotionBundle,
+  snapshotRemotionChromiumProfiles,
+} from "./remotion-bundler";
 
 afterEach(() => resetRemotionBundle());
 
@@ -21,5 +31,68 @@ describe("Remotion 自动 bundle", () => {
     });
 
     await expect(getRemotionServeUrl(bundle)).rejects.toThrow("Remotion 自动打包失败：Webpack 配置失败");
+  });
+
+  it("视觉验证 bundle 使用受控目录，并且清理操作可重复调用", async () => {
+    const rootDirectory = await mkdtemp(join(tmpdir(), "effect-bundle-root-"));
+    const bundle = vi.fn(async ({ outDir }: { outDir?: string }) => {
+      if (!outDir) throw new Error("缺少 bundle 输出目录");
+      await writeFile(join(outDir, "index.html"), "bundle");
+      return `file://${outDir}`;
+    });
+
+    try {
+      const session = await createRemotionBundleSession(bundle, rootDirectory);
+
+      expect(session.directory.startsWith(rootDirectory)).toBe(true);
+      expect(bundle).toHaveBeenCalledWith(expect.objectContaining({
+        enableCaching: true,
+        outDir: session.directory,
+      }));
+      await session.cleanup();
+      await session.cleanup();
+      await expect(access(session.directory)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(rootDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("只清理受控目录中超过保留期限的运行目录", async () => {
+    const rootDirectory = await mkdtemp(join(tmpdir(), "effect-bundle-root-"));
+    const staleDirectory = await mkdtemp(join(rootDirectory, "run-"));
+    const freshDirectory = await mkdtemp(join(rootDirectory, "run-"));
+    const unrelatedDirectory = await mkdtemp(join(rootDirectory, "keep-"));
+
+    try {
+      const oldTime = new Date(Date.now() - 60_000);
+      const { utimes } = await import("node:fs/promises");
+      await utimes(staleDirectory, oldTime, oldTime);
+      await cleanupStaleRemotionBundleSessions(rootDirectory, 1_000);
+
+      await expect(access(staleDirectory)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(freshDirectory)).resolves.toBeUndefined();
+      await expect(access(unrelatedDirectory)).resolves.toBeUndefined();
+    } finally {
+      await rm(rootDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("只清理本次运行新增的 Chromium profile", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "effect-chrome-profile-root-"));
+    const existingProfile = await mkdtemp(join(temporaryDirectory, "puppeteer_dev_chrome_profile-"));
+    const unrelatedDirectory = await mkdtemp(join(temporaryDirectory, "keep-"));
+
+    try {
+      const existingProfiles = await snapshotRemotionChromiumProfiles(temporaryDirectory);
+      const createdProfile = await mkdtemp(join(temporaryDirectory, "puppeteer_dev_chrome_profile-"));
+      const remainingProfiles = await cleanupNewRemotionChromiumProfiles(existingProfiles, temporaryDirectory);
+
+      expect(remainingProfiles).toEqual([]);
+      await expect(access(existingProfile)).resolves.toBeUndefined();
+      await expect(access(createdProfile)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(unrelatedDirectory)).resolves.toBeUndefined();
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
   });
 });

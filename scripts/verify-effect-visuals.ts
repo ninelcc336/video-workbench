@@ -20,7 +20,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       continue;
     }
     const [key, inlineValue] = argument.slice(2).split("=", 2);
-    if (key === "help" || key === "update" || key === "square-stages") {
+    if (key === "help" || key === "update" || key === "square-stages" || key === "quick") {
       values.set(key, true);
       continue;
     }
@@ -28,7 +28,7 @@ function parseArguments(argv: string[]): ParsedArguments {
     if (!nextValue || nextValue.startsWith("--")) {
       throw new Error(`命令行选项缺少值：--${key}`);
     }
-    if (!["family", "family-id", "style", "starting-style", "version", "baseline-dir", "artifact-dir", "base-url", "serve-url"].includes(key)) {
+    if (!["family", "family-id", "style", "starting-style", "version", "baseline-dir", "artifact-dir", "base-url", "serve-url", "retain-artifacts"].includes(key)) {
       throw new Error(`未知视觉验证选项：--${key}`);
     }
     values.set(key, nextValue);
@@ -57,6 +57,11 @@ function parseArguments(argv: string[]): ParsedArguments {
     throw new Error("--style 必须和 --family 一起使用");
   }
 
+  const retainArtifacts = values.get("retain-artifacts");
+  if (retainArtifacts !== undefined && !["failed", "default", "all"].includes(String(retainArtifacts))) {
+    throw new Error(`视觉产物保留策略无效：${String(retainArtifacts)}，可选 failed、default、all`);
+  }
+
   let scope: VisualVerificationScope = { kind: "catalog" };
   if (familyId) {
     scope = startingStyleId
@@ -75,6 +80,8 @@ function parseArguments(argv: string[]): ParsedArguments {
       artifactDirectory: values.get("artifact-dir") as string | undefined,
       baseUrl: values.get("base-url") as string | undefined,
       serveUrl: values.get("serve-url") as string | undefined,
+      retainArtifacts: (retainArtifacts ?? "default") as "failed" | "default" | "all",
+      scenarioMode: values.has("quick") ? "quick" : "full",
       includeSquareFrameStages: values.has("square-stages"),
     },
   };
@@ -86,6 +93,7 @@ function printHelp(): void {
   npm run test:visual
   npm run test:visual -- --family checklist-steps
   npm run test:visual -- --family checklist-steps --style information-list
+  npm run test:visual:quick -- --family checklist-steps
   npm run test:visual -- --update
 
 选项：
@@ -98,6 +106,8 @@ function printHelp(): void {
   --artifact-dir <path>      覆盖截图和差异图目录
   --base-url <url>            使用已运行的浏览器验证页面服务
   --serve-url <url>           使用已打包的 Remotion 服务
+  --quick                     只验证默认固定帧，不展开参数边界矩阵
+  --retain-artifacts <mode>   产物保留：failed、default 或 all（默认 default）
   --square-stages              为 1:1 画布额外验证入场和出场固定帧
   --help                      显示本帮助
 `);
@@ -111,12 +121,22 @@ async function main(): Promise<void> {
     return;
   }
 
-  const report = await runVisualVerification(parsed.options);
-  for (const result of report.results.filter((item) => item.status !== "passed")) {
-    console.log(`[${result.status}] ${result.message}`);
+  const abortController = new AbortController();
+  const abort = () => abortController.abort();
+  process.once("SIGINT", abort);
+  process.once("SIGTERM", abort);
+
+  try {
+    const report = await runVisualVerification({ ...parsed.options, signal: abortController.signal });
+    for (const result of report.results.filter((item) => item.status !== "passed")) {
+      console.log(`[${result.status}] ${result.message}`);
+    }
+    console.log(`视觉验证完成：总计 ${report.total}，通过 ${report.passed}，更新 ${report.updated}，缺失 ${report.missing}，失败 ${report.failed}，错误 ${report.errors}`);
+    if (report.missing > 0 || report.failed > 0 || report.errors > 0) process.exitCode = 1;
+  } finally {
+    process.removeListener("SIGINT", abort);
+    process.removeListener("SIGTERM", abort);
   }
-  console.log(`视觉验证完成：总计 ${report.total}，通过 ${report.passed}，更新 ${report.updated}，缺失 ${report.missing}，失败 ${report.failed}，错误 ${report.errors}`);
-  if (report.missing > 0 || report.failed > 0 || report.errors > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {

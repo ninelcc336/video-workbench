@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { verifyOrUpdateVisualBaseline } from "./visual-verification-artifacts";
+import {
+  verifyOrUpdateVisualBaseline,
+  verifyOrUpdateVisualBaselineBuffer,
+} from "./visual-verification-artifacts";
 import { createSolidPng } from "./visual-test-fixtures";
 
 const roots: string[] = [];
@@ -58,5 +61,22 @@ describe("视觉验证基线产物", () => {
     const updated = await verifyOrUpdateVisualBaseline({ actualPath, baselinePath, diffPath, update: true });
     expect(updated.status).toBe("updated");
     expect(await readFile(baselinePath)).toEqual(await readFile(actualPath));
+  });
+
+  it("内存 PNG 比较不需要先写出 actual 文件", async () => {
+    const root = await mkdtemp(join(tmpdir(), "effect-visual-artifacts-"));
+    roots.push(root);
+    const baselinePath = join(root, "baseline.png");
+    const actualBuffer = createSolidPng(2, 2, [20, 30, 40, 255]);
+    await writeFile(baselinePath, actualBuffer);
+
+    const result = await verifyOrUpdateVisualBaselineBuffer({
+      actualBuffer,
+      baselinePath,
+      update: false,
+    });
+
+    expect(result.status).toBe("passed");
+    expect(result.comparison?.matches).toBe(true);
   });
 });

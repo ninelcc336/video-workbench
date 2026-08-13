@@ -70,6 +70,8 @@ export type VisualVerificationCase = {
 export type VisualVerificationMatrixOptions = {
   scope?: VisualVerificationScope;
   randomSeed?: string;
+  /** 中文注释：quick 只验证默认固定帧，full 才展开参数边界矩阵；默认保持完整覆盖。 */
+  scenarioMode?: "full" | "quick";
   /** 中文注释：按票据需要为方形画布补充入场和出场固定帧，默认仍遵循规格的中段最小矩阵。 */
   includeSquareFrameStages?: boolean;
 };
@@ -294,7 +296,8 @@ export function buildVisualVerificationMatrix(
   return targets.flatMap(({ family, style }) => ASPECT_RATIOS.flatMap((aspectRatio) => {
     const viewport = VISUAL_VERIFICATION_VIEWPORTS[aspectRatio];
     const instance = createEffectFamilyInstance(family, style.id, aspectRatio);
-    const scenarios = createScenarioInputs(family, instance.params);
+    const scenarios = createScenarioInputs(family, instance.params)
+      .filter(({ scenario }) => options.scenarioMode !== "quick" || scenario === "default");
 
     const frameSamples = getVisualVerificationFrameSamples(
       instance.durationInFrames,
