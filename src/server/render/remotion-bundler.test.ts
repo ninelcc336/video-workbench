@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupStaleRemotionBundleSessions,
+  cleanupStaleRemotionChromiumProfiles,
   cleanupNewRemotionChromiumProfiles,
   createRemotionBundleSession,
   getRemotionServeUrl,
@@ -90,6 +91,26 @@ describe("Remotion 自动 bundle", () => {
       expect(remainingProfiles).toEqual([]);
       await expect(access(existingProfile)).resolves.toBeUndefined();
       await expect(access(createdProfile)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(unrelatedDirectory)).resolves.toBeUndefined();
+    } finally {
+      await rm(temporaryDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("清理超过保留期限的历史 Chromium profile，但保留近期和无关目录", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "effect-chrome-profile-root-"));
+    const staleProfile = await mkdtemp(join(temporaryDirectory, "puppeteer_dev_chrome_profile-"));
+    const freshProfile = await mkdtemp(join(temporaryDirectory, "puppeteer_dev_chrome_profile-"));
+    const unrelatedDirectory = await mkdtemp(join(temporaryDirectory, "keep-"));
+
+    try {
+      const oldTime = new Date(Date.now() - 60_000);
+      const { utimes } = await import("node:fs/promises");
+      await utimes(staleProfile, oldTime, oldTime);
+      await cleanupStaleRemotionChromiumProfiles(temporaryDirectory, 1_000);
+
+      await expect(access(staleProfile)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(freshProfile)).resolves.toBeUndefined();
       await expect(access(unrelatedDirectory)).resolves.toBeUndefined();
     } finally {
       await rm(temporaryDirectory, { force: true, recursive: true });

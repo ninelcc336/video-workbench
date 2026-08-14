@@ -29,12 +29,22 @@ import {
 } from "./visual-verification-artifacts";
 import {
   cleanupStaleRemotionBundleSessions,
+  cleanupStaleRemotionChromiumProfiles,
   cleanupNewRemotionChromiumProfiles,
   createRemotionBundleSession,
   snapshotRemotionChromiumProfiles,
   type RemotionBundleFunction,
   type RemotionBundleSession,
 } from "./remotion-bundler";
+import {
+  computeVisualVerificationSourceFingerprint,
+  createVisualVerificationCaseFingerprint,
+  DEFAULT_VISUAL_VERIFICATION_CACHE_FILE,
+  getVisualVerificationBaselineSignature,
+  loadVisualVerificationCache,
+  saveVisualVerificationCache,
+  type VisualVerificationCache,
+} from "./visual-verification-cache";
 
 export const DEFAULT_VISUAL_BASELINE_DIRECTORY = resolve(
   process.cwd(),
@@ -44,6 +54,7 @@ export const DEFAULT_VISUAL_ARTIFACT_DIRECTORY = resolve(
   process.cwd(),
   "test-results/effect-visual-verification",
 );
+export { DEFAULT_VISUAL_VERIFICATION_CACHE_FILE } from "./visual-verification-cache";
 
 export type VisualArtifactRetention = "failed" | "default" | "all";
 
@@ -55,6 +66,10 @@ export type VisualVerificationRunOptions = VisualVerificationMatrixOptions & {
   serveUrl?: string;
   bundle?: RemotionBundleFunction;
   timeoutInMilliseconds?: number;
+  /** 中文注释：只跳过缓存读取并重新执行真实验证，成功案例仍会刷新缓存供后续日常运行复用。 */
+  noCache?: boolean;
+  /** 中文注释：测试可注入独立缓存文件；普通命令默认使用 test-results/.cache。 */
+  cacheFile?: string;
   /** 中文注释：failed 只保留失败证据，default 额外保留默认固定帧，all 才保留完整案例 PNG。 */
   retainArtifacts?: VisualArtifactRetention;
   /** 中文注释：收到中断信号后停止接收新案例，当前案例结束后仍执行完整资源清理。 */
@@ -64,6 +79,7 @@ export type VisualVerificationRunOptions = VisualVerificationMatrixOptions & {
 export type VisualVerificationCaseResult = {
   case: VisualVerificationCase;
   status: "passed" | "missing" | "failed" | "updated" | "error";
+  cached?: boolean;
   message: string;
   remotionPath?: string;
   browserPath?: string;
@@ -76,6 +92,7 @@ export type VisualVerificationCaseResult = {
 export type VisualVerificationReport = {
   total: number;
   passed: number;
+  cached: number;
   updated: number;
   missing: number;
   failed: number;
@@ -228,7 +245,10 @@ function throwIfVerificationAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("视觉验证已取消");
 }
 
-/** 中文注释：顺序运行案例以限制峰值负载，但整次运行复用 Remotion 浏览器和 bundle。 */
+/**
+ * 中文注释：顺序运行未命中的案例以限制峰值负载，并把浏览器、bundle 和缓存都绑定到整次运行生命周期。
+ * 默认只保留失败证据；只有源码、输入或基线变化时才重新执行对应案例，完整门禁仍可用 --no-cache 强制运行。
+ */
 export async function runVisualVerification(
   options: VisualVerificationRunOptions = {},
 ): Promise<VisualVerificationReport> {
@@ -236,16 +256,65 @@ export async function runVisualVerification(
   const baselineDirectory = options.baselineDirectory ?? DEFAULT_VISUAL_BASELINE_DIRECTORY;
   const artifactDirectory = options.artifactDirectory ?? DEFAULT_VISUAL_ARTIFACT_DIRECTORY;
   const results: VisualVerificationCaseResult[] = [];
-  const retainArtifacts = options.retainArtifacts ?? "default";
+  const retainArtifacts = options.retainArtifacts ?? "failed";
+  const cacheEligible = options.update !== true
+    && retainArtifacts === "failed"
+    && !options.baseUrl
+    && !options.serveUrl
+    && !process.env.REMOTION_SERVE_URL;
+  const cacheReadEnabled = cacheEligible && options.noCache !== true;
+  const cacheFile = resolve(options.cacheFile ?? DEFAULT_VISUAL_VERIFICATION_CACHE_FILE);
+  let cacheSourceFingerprint: string | undefined;
+  let visualCache: VisualVerificationCache | undefined;
+  let cachedCount = 0;
   let temporaryServer: Awaited<ReturnType<typeof startVisualVerificationServer>> | undefined;
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   let page: Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>> | undefined;
   let remotionBrowser: HeadlessBrowser | undefined;
   let remotionChromiumProfilesBefore: ReadonlySet<string> | undefined;
   let bundleSession: RemotionBundleSession | undefined;
+  let baseUrl = options.baseUrl;
+  let serveUrl = options.serveUrl ?? process.env.REMOTION_SERVE_URL;
+  let resourcesStarted = false;
+
+  /** 中文注释：只有遇到第一个未命中案例才启动服务和两个浏览器，整目录全命中时无需创建任何渲染进程。 */
+  const ensureRenderingResources = async (): Promise<{ baseUrl: string; serveUrl: string }> => {
+    if (!baseUrl) {
+      temporaryServer = await startVisualVerificationServer();
+      baseUrl = temporaryServer.baseUrl;
+    }
+    if (!serveUrl) {
+      bundleSession = await createRemotionBundleSession(options.bundle);
+      serveUrl = bundleSession.serveUrl;
+    }
+    if (!browser) {
+      browser = await chromium.launch({
+        args: [...VISUAL_VERIFICATION_CHROMIUM_ARGS],
+        headless: true,
+      });
+      page = await browser.newPage({
+        deviceScaleFactor: 1,
+        viewport: { width: 1920, height: 1080 },
+      });
+    }
+    if (!resourcesStarted) {
+      remotionChromiumProfilesBefore = await snapshotRemotionChromiumProfiles();
+      remotionBrowser = await openBrowser("chrome", { logLevel: "error" });
+      resourcesStarted = true;
+    }
+    return { baseUrl, serveUrl };
+  };
 
   try {
     await resetVisualArtifactDirectory(artifactDirectory);
+    await cleanupStaleRemotionBundleSessions();
+    await cleanupStaleRemotionChromiumProfiles();
+
+    if (cacheEligible) {
+      cacheSourceFingerprint = await computeVisualVerificationSourceFingerprint();
+      visualCache = await loadVisualVerificationCache(cacheFile, cacheSourceFingerprint);
+    }
+
     await writeFile(
       join(artifactDirectory, "manifest.json"),
       JSON.stringify({
@@ -258,53 +327,60 @@ export async function runVisualVerification(
         browser: { deviceScaleFactor: 1, viewport: { width: 1920, height: 1080 } },
         scenarioMode: options.scenarioMode ?? "full",
         retainArtifacts,
+        cache: {
+          enabled: cacheEligible,
+          readEnabled: cacheReadEnabled,
+          file: cacheFile,
+          sourceFingerprint: cacheSourceFingerprint ?? null,
+        },
       }, null, 2),
     );
 
-    temporaryServer = options.baseUrl ? undefined : await startVisualVerificationServer();
-    const baseUrl = options.baseUrl ?? temporaryServer?.baseUrl;
-    if (!baseUrl) throw new Error("视觉验证缺少浏览器服务地址");
-
-    const explicitServeUrl = options.serveUrl ?? process.env.REMOTION_SERVE_URL;
-    const serveUrl = explicitServeUrl ?? (
-      await (async () => {
-        await cleanupStaleRemotionBundleSessions();
-        bundleSession = await createRemotionBundleSession(options.bundle);
-        return bundleSession.serveUrl;
-      })()
-    );
-
-    browser = await chromium.launch({
-      args: [...VISUAL_VERIFICATION_CHROMIUM_ARGS],
-      headless: true,
-    });
-    page = await browser.newPage({
-      deviceScaleFactor: 1,
-      viewport: { width: 1920, height: 1080 },
-    });
-
-    if (matrix.length > 0) {
-      remotionChromiumProfilesBefore = await snapshotRemotionChromiumProfiles();
-      remotionBrowser = await openBrowser("chrome", { logLevel: "error" });
-    }
     for (const item of matrix) {
       throwIfVerificationAborted(options.signal);
       const paths = getCasePaths(item, baselineDirectory, artifactDirectory);
       const identity = formatVisualVerificationCase(item);
+      const baselinePath = item.scenario === "default" ? paths.baselinePath : undefined;
+      const caseFingerprint = cacheEligible
+        ? createVisualVerificationCaseFingerprint(item, baselinePath)
+        : undefined;
+      const cachedEntry = visualCache?.entries[item.id];
+      if (cacheReadEnabled && visualCache && caseFingerprint && cachedEntry?.caseFingerprint === caseFingerprint) {
+        const baselineSignature = baselinePath
+          ? await getVisualVerificationBaselineSignature(baselinePath)
+          : null;
+        if (baselineSignature === cachedEntry.baselineSignature) {
+          cachedCount += 1;
+          results.push({
+            case: item,
+            status: "passed",
+            cached: true,
+            message: `${identity}：缓存命中，跳过浏览器与 Remotion 渲染`,
+            baselinePath,
+            baselineComparison: baselinePath
+              ? { status: "passed", message: `视觉验证缓存命中：${baselinePath}` }
+              : undefined,
+          });
+          continue;
+        }
+      }
+
+      if (visualCache) delete visualCache.entries[item.id];
       try {
+        const resources = await ensureRenderingResources();
         // 中文注释：组合 props 会随案例变化，必须逐案例解析；浏览器和 bundle 仍在整次运行内复用。
         const composition = await selectEffectFrameComposition(item.renderProps, {
           puppeteerInstance: remotionBrowser,
-          serveUrl,
+          serveUrl: resources.serveUrl,
           timeoutInMilliseconds: options.timeoutInMilliseconds,
         });
         const remotionBuffer = await renderEffectFrameBuffer(item.renderProps, {
           composition,
           puppeteerInstance: remotionBrowser,
-          serveUrl,
+          serveUrl: resources.serveUrl,
           timeoutInMilliseconds: options.timeoutInMilliseconds,
         });
-        const browserBuffer = await captureBrowserFrame(page!, baseUrl, item);
+        const browserBuffer = await captureBrowserFrame(page!, resources.baseUrl, item);
 
         const engineComparison = comparePngBuffers(remotionBuffer, browserBuffer);
         if (!engineComparison.matches) {
@@ -325,6 +401,13 @@ export async function runVisualVerification(
           // 中文注释：极端参数属于行为矩阵，只需确认两端观察结果一致；默认场景才写入版本化固定帧基线。
           if (retainArtifacts === "all") {
             await writeCaseArtifacts(paths, remotionBuffer, browserBuffer, undefined);
+          }
+          if (visualCache && caseFingerprint) {
+            visualCache.entries[item.id] = {
+              caseFingerprint,
+              baselineSignature: null,
+              verifiedAt: new Date().toISOString(),
+            };
           }
           results.push({
             case: item,
@@ -348,6 +431,16 @@ export async function runVisualVerification(
           || baselineComparison.status !== "passed";
         if (keepDefaultArtifacts) {
           await writeCaseArtifacts(paths, remotionBuffer, browserBuffer, undefined);
+        }
+        if (visualCache && caseFingerprint && baselineComparison.status === "passed") {
+          const baselineSignature = await getVisualVerificationBaselineSignature(paths.baselinePath);
+          if (baselineSignature !== null) {
+            visualCache.entries[item.id] = {
+              caseFingerprint,
+              baselineSignature,
+              verifiedAt: new Date().toISOString(),
+            };
+          }
         }
         results.push({
           case: item,
@@ -373,6 +466,13 @@ export async function runVisualVerification(
       }
     }
   } finally {
+    if (visualCache && cacheSourceFingerprint) {
+      try {
+        await saveVisualVerificationCache(cacheFile, visualCache);
+      } catch {
+        // 中文注释：缓存是可丢弃的性能优化，磁盘权限或中断不应掩盖真实视觉验证结果。
+      }
+    }
     await cleanupVisualVerificationResources({
       page,
       browser,
@@ -386,6 +486,7 @@ export async function runVisualVerification(
   return {
     total: results.length,
     passed: results.filter((result) => result.status === "passed").length,
+    cached: cachedCount,
     updated: results.filter((result) => result.status === "updated").length,
     missing: results.filter((result) => result.status === "missing").length,
     failed: results.filter((result) => result.status === "failed").length,

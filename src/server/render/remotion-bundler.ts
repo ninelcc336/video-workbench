@@ -23,6 +23,7 @@ export const DEFAULT_REMOTION_BUNDLE_ROOT = resolve(
 );
 
 const REMOTION_CHROMIUM_PROFILE_PREFIX = "puppeteer_dev_chrome_profile-";
+export const DEFAULT_REMOTION_TEMP_RESOURCE_MAX_AGE_IN_MILLISECONDS = 2 * 60 * 60 * 1000;
 
 let cachedBundle: Promise<string> | null = null;
 
@@ -62,7 +63,7 @@ export async function createRemotionBundleSession(
 /** 中文注释：清理上次被强制中断遗留的旧 bundle，只触碰项目声明的临时根目录。 */
 export async function cleanupStaleRemotionBundleSessions(
   rootDirectory: string = DEFAULT_REMOTION_BUNDLE_ROOT,
-  maxAgeInMilliseconds = 24 * 60 * 60 * 1000,
+  maxAgeInMilliseconds = DEFAULT_REMOTION_TEMP_RESOURCE_MAX_AGE_IN_MILLISECONDS,
 ): Promise<void> {
   let entries: string[];
   try {
@@ -84,6 +85,42 @@ export async function cleanupStaleRemotionBundleSessions(
         }
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    }));
+}
+
+/**
+ * 中文注释：删除系统 Temp 中超过保留期限的 Remotion Chromium profile，只匹配 Puppeteer 的固定前缀。
+ * 该清理是尽力而为的，若目录仍被其他浏览器进程锁定则保留它，不阻断当前视觉验证。
+ */
+export async function cleanupStaleRemotionChromiumProfiles(
+  temporaryDirectory: string = tmpdir(),
+  maxAgeInMilliseconds = DEFAULT_REMOTION_TEMP_RESOURCE_MAX_AGE_IN_MILLISECONDS,
+): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(temporaryDirectory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+
+  const cutoff = Date.now() - maxAgeInMilliseconds;
+  await Promise.all(entries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(REMOTION_CHROMIUM_PROFILE_PREFIX))
+    .map(async (entry) => {
+      const directory = join(temporaryDirectory, entry.name);
+      try {
+        const details = await stat(directory);
+        if (details.mtimeMs >= cutoff) return;
+        await rm(directory, {
+          force: true,
+          maxRetries: 8,
+          recursive: true,
+          retryDelay: 150,
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") return;
       }
     }));
 }

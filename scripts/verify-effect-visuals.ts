@@ -20,7 +20,7 @@ function parseArguments(argv: string[]): ParsedArguments {
       continue;
     }
     const [key, inlineValue] = argument.slice(2).split("=", 2);
-    if (key === "help" || key === "update" || key === "square-stages" || key === "quick") {
+    if (key === "help" || key === "update" || key === "square-stages" || key === "quick" || key === "no-cache") {
       values.set(key, true);
       continue;
     }
@@ -80,7 +80,8 @@ function parseArguments(argv: string[]): ParsedArguments {
       artifactDirectory: values.get("artifact-dir") as string | undefined,
       baseUrl: values.get("base-url") as string | undefined,
       serveUrl: values.get("serve-url") as string | undefined,
-      retainArtifacts: (retainArtifacts ?? "default") as "failed" | "default" | "all",
+      noCache: values.has("no-cache"),
+      retainArtifacts: (retainArtifacts ?? "failed") as "failed" | "default" | "all",
       scenarioMode: values.has("quick") ? "quick" : "full",
       includeSquareFrameStages: values.has("square-stages"),
     },
@@ -107,7 +108,8 @@ function printHelp(): void {
   --base-url <url>            使用已运行的浏览器验证页面服务
   --serve-url <url>           使用已打包的 Remotion 服务
   --quick                     只验证默认固定帧，不展开参数边界矩阵
-  --retain-artifacts <mode>   产物保留：failed、default 或 all（默认 default）
+  --retain-artifacts <mode>   产物保留：failed、default 或 all（默认 failed）
+  --no-cache                  跳过已通过案例缓存，重新执行真实验证并刷新缓存
   --square-stages              为 1:1 画布额外验证入场和出场固定帧
   --help                      显示本帮助
 `);
@@ -131,7 +133,7 @@ async function main(): Promise<void> {
     for (const result of report.results.filter((item) => item.status !== "passed")) {
       console.log(`[${result.status}] ${result.message}`);
     }
-    console.log(`视觉验证完成：总计 ${report.total}，通过 ${report.passed}，更新 ${report.updated}，缺失 ${report.missing}，失败 ${report.failed}，错误 ${report.errors}`);
+    console.log(`视觉验证完成：总计 ${report.total}，通过 ${report.passed}，缓存命中 ${report.cached}，更新 ${report.updated}，缺失 ${report.missing}，失败 ${report.failed}，错误 ${report.errors}`);
     if (report.missing > 0 || report.failed > 0 || report.errors > 0) process.exitCode = 1;
   } finally {
     process.removeListener("SIGINT", abort);
