@@ -51,7 +51,7 @@ describe("视频工作区仓储", () => {
         fromFrame: 12,
         id: "legacy-effect",
         params: { text: "历史内容" },
-        templateId: "card-overlay",
+        templateId: "emphasis-card",
         templateVersion: 1,
         trackId: "effects-1",
       }],

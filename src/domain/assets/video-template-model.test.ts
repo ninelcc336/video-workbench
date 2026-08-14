@@ -19,10 +19,10 @@ const videoClip: VideoClip = {
 
 const effectClip: EffectClip = {
   id: "effect-1",
-  templateId: "card-overlay",
+  templateId: "emphasis-card",
   templateVersion: 1,
-  effectFamilyId: "card-overlay",
-  startingStyleId: "default",
+  effectFamilyId: "emphasis-card",
+  startingStyleId: "solid-card",
   placement: { type: "range" },
   trackId: "effects-1",
   fromFrame: 30,
@@ -37,10 +37,10 @@ describe("视频模板模型", () => {
 
     expect(template.effectClips).toEqual([
       {
-        templateId: "card-overlay",
+        templateId: "emphasis-card",
         templateVersion: 1,
-        effectFamilyId: "card-overlay",
-        startingStyleId: "default",
+        effectFamilyId: "emphasis-card",
+        startingStyleId: "solid-card",
         placement: { type: "range" },
         trackId: "effects-1",
         fromFrame: 0,
@@ -59,10 +59,10 @@ describe("视频模板模型", () => {
       fps: 30,
       effectClips: [
         {
-          templateId: "card-overlay",
+          templateId: "emphasis-card",
           templateVersion: 1,
-          effectFamilyId: "card-overlay",
-          startingStyleId: "default",
+          effectFamilyId: "emphasis-card",
+          startingStyleId: "solid-card",
           placement: { type: "range" },
           trackId: "effects-1",
           fromFrame: 10,

@@ -12,25 +12,25 @@ import { PropertiesPanel } from "./PropertiesPanel";
 afterEach(cleanup);
 
 function createEffectClip(): EffectClip {
-  const family = getEffectFamily("card-overlay", 1);
+  const family = getEffectFamily("emphasis-card", 1);
   return {
     id: "effect-1",
     templateId: family.id,
     templateVersion: family.version,
     effectFamilyId: family.id,
-    startingStyleId: "default",
+    startingStyleId: "solid-card",
     placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
     durationInFrames: family.defaultDurationInFrames,
     params: {
       text: "旧文字",
-      color: "#111827",
+      cardColor: "#111827",
       textColor: "#ffffff",
       position: { x: 0.5, y: 0.72 },
       size: { width: 0.72, height: 0.14 },
-      enterDirection: "left",
-      animationDuration: 18,
+      cardAppearance: "solid",
+      stages: createEffectFamilyInstance(family, "solid-card", "16:9").params.stages,
       radius: 24,
     },
   };
@@ -318,9 +318,10 @@ describe("特效参数面板", () => {
     );
 
     expect(screen.getByRole("heading", { name: "特效参数" })).toBeTruthy();
-    expect((screen.getByLabelText("文字") as HTMLInputElement).value).toBe("旧文字");
+    expect((screen.getByLabelText("观点正文") as HTMLTextAreaElement).value).toBe("旧文字");
+    fireEvent.click(screen.getByRole("button", { name: "显示高级特效参数" }));
     expect((screen.getByLabelText("卡片颜色") as HTMLInputElement).value).toBe("#111827");
-    expect((screen.getByLabelText("入场方向") as HTMLSelectElement).value).toBe("left");
+    expect((screen.getByLabelText("卡片外观") as HTMLSelectElement).value).toBe("solid");
   });
 
   it("修改控件时只发出参数命令，不直接修改片段对象", () => {
@@ -335,7 +336,7 @@ describe("特效参数面板", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("文字"), { target: { value: "新文字" } });
+    fireEvent.change(screen.getByLabelText("观点正文"), { target: { value: "新文字" } });
 
     expect(onChangeParams).toHaveBeenCalledWith("effect-1", { text: "新文字" });
     expect(clip.params.text).toBe("旧文字");

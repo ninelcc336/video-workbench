@@ -73,10 +73,10 @@ describe("MVP 视频模板原子套用", () => {
       name: "节奏模板",
       fps: 30,
         effectClips: [{
-          templateId: "card-overlay",
+          templateId: "emphasis-card",
           templateVersion: 1,
-          effectFamilyId: "card-overlay",
-          startingStyleId: "default",
+          effectFamilyId: "emphasis-card",
+          startingStyleId: "solid-card",
           placement: { type: "range" },
           trackId: "effects-1",
           fromFrame: 30,

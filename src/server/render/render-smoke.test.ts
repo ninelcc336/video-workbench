@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createSmokeProject, createTransitionSmokeProject } from "./render-smoke";
+import {
+  createDecorationSmokeProject,
+  createInformationSmokeProject,
+  createSmokeProject,
+  createTransitionSmokeProject,
+} from "./render-smoke";
 
 describe("真实 MP4 冒烟项目", () => {
   it("使用稳定 mediaId 构造单视频片段项目", () => {
@@ -14,6 +19,22 @@ describe("真实 MP4 冒烟项目", () => {
       }),
     ]);
     expect(project.settings).toEqual({ width: 64, height: 64, fps: 30 });
+  });
+
+  it("为信息叠加和装饰动画构造当前特效族范围项目", () => {
+    const informationProject = createInformationSmokeProject("information-media");
+    const decorationProject = createDecorationSmokeProject("decoration-media");
+
+    expect(informationProject.effectClips[0]).toMatchObject({
+      effectFamilyId: "emphasis-card",
+      startingStyleId: "solid-card",
+      placement: { type: "range" },
+    });
+    expect(decorationProject.effectClips[0]).toMatchObject({
+      effectFamilyId: "hand-drawn-emphasis",
+      startingStyleId: "underline",
+      placement: { type: "range" },
+    });
   });
 
   it("为三个方向转场样式构造绑定相邻片段的双画面项目", () => {

@@ -28,9 +28,9 @@ describe("特效固定帧 Remotion 渲染器", () => {
       height: 1920,
       durationInFrames: 30,
       params: { text: "固定帧" },
-      effectFamilyId: "card-overlay",
+      effectFamilyId: "emphasis-card",
       effectFamilyVersion: 1,
-      startingStyleId: "default",
+      startingStyleId: "solid-card",
       aspectRatio: "9:16" as const,
       randomSeed: "visual-test-seed",
     };
@@ -61,9 +61,9 @@ describe("特效固定帧 Remotion 渲染器", () => {
       height: 1080,
       durationInFrames: 30,
       params: {},
-      effectFamilyId: "card-overlay",
+      effectFamilyId: "emphasis-card",
       effectFamilyVersion: 1,
-      startingStyleId: "default",
+      startingStyleId: "solid-card",
       aspectRatio: "16:9" as const,
       randomSeed: "visual-test-seed",
     };

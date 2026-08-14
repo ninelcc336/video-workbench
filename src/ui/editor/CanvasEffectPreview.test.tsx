@@ -45,14 +45,14 @@ afterEach(cleanup);
 /** 中文注释：构造包含位置参数的特效项目，验证临时快照不会直接污染编辑器存储。 */
 function createEffectStore() {
   const store = createEditorStore(createEmptyProject());
-  const family = getEffectFamily("card-overlay", 1);
-  const instance = createEffectFamilyInstance(family, "default", "16:9");
+  const family = getEffectFamily("emphasis-card", 1);
+  const instance = createEffectFamilyInstance(family, "solid-card", "16:9");
   const clip: EffectClip = {
     id: "effect-1",
     templateId: family.id,
     templateVersion: family.version,
     effectFamilyId: family.id,
-    startingStyleId: "default",
+    startingStyleId: "solid-card",
     placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
@@ -76,12 +76,12 @@ describe("实时预览中的特效过程预览", () => {
       expect(screen.getByTestId("preview-canvas").dataset.position).toBe(JSON.stringify({ x: 0.8, y: 0.7 }));
       expect((screen.getByLabelText("位置X") as HTMLInputElement).value).toBe("0.8");
     });
-    expect(store.getSnapshot().effectClips[0].params.position).toEqual({ x: 0.5, y: 0.72 });
+    expect(store.getSnapshot().effectClips[0].params.position).toEqual({ x: 0.5, y: 0.68 });
 
     fireEvent.click(screen.getByRole("button", { name: "提交特效拖动" }));
     await waitFor(() => expect(store.getSnapshot().effectClips[0].params.position).toEqual({ x: 0.8, y: 0.7 }));
 
     fireEvent.click(screen.getByRole("button", { name: "撤销" }));
-    await waitFor(() => expect(store.getSnapshot().effectClips[0].params.position).toEqual({ x: 0.5, y: 0.72 }));
+    await waitFor(() => expect(store.getSnapshot().effectClips[0].params.position).toEqual({ x: 0.5, y: 0.68 }));
   });
 });

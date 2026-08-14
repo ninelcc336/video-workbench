@@ -4,6 +4,8 @@ import { cp, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  renderDecorationSmokeMedia,
+  renderInformationSmokeMedia,
   renderSmokeMedia,
   renderTransitionSmokeMedia,
 } from "../src/server/render/render-smoke";
@@ -98,12 +100,15 @@ function assertSmokeOutput(
   }
 }
 
+/** 中文注释：生成自包含测试素材并依次验证信息叠加、装饰动画和真实片段转场的 MP4 导出契约。 */
 async function main(): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "video-effect-render-smoke-"));
   const inputPath = join(directory, "input.mp4");
   const beforePath = join(directory, "before.mp4");
   const afterPath = join(directory, "after.mp4");
   const outputPath = join(directory, "output.mp4");
+  const informationOutputPath = join(directory, "information-overlay-output.mp4");
+  const decorationOutputPath = join(directory, "decorative-animation-output.mp4");
 
   try {
     // 中文注释：用 FFmpeg 生成带静音音轨的真实 MP4，避免冒烟测试依赖用户私有素材。
@@ -128,6 +133,28 @@ async function main(): Promise<void> {
       `真实 MP4 渲染冒烟通过：${outputPath}（${outputStats.size} 字节，` +
       `视频 ${outputProbe.videoDurationInSeconds.toFixed(3)} 秒/${outputProbe.videoFrameCount} 帧，` +
       `容器 ${outputProbe.durationInSeconds.toFixed(3)} 秒，音频流 ${inputProbe.audioStreamCount} -> ${outputProbe.audioStreamCount}）`,
+    );
+    await renderInformationSmokeMedia(inputPath, informationOutputPath);
+    const informationOutputStats = await stat(informationOutputPath);
+    if (informationOutputStats.size <= 0) throw new Error("信息叠加渲染结果为空");
+    const informationProbe = await probeMedia(informationOutputPath);
+    assertSmokeOutput("信息叠加导出", informationProbe, inputProbe.audioStreamCount);
+    console.log(
+      `信息叠加 MP4 渲染冒烟通过：${informationOutputPath}（${informationOutputStats.size} 字节，` +
+      `视频 ${informationProbe.videoDurationInSeconds.toFixed(3)} 秒/${informationProbe.videoFrameCount} 帧，` +
+      `容器 ${informationProbe.durationInSeconds.toFixed(3)} 秒，音频流 ` +
+      `${inputProbe.audioStreamCount} -> ${informationProbe.audioStreamCount}）`,
+    );
+    await renderDecorationSmokeMedia(inputPath, decorationOutputPath);
+    const decorationOutputStats = await stat(decorationOutputPath);
+    if (decorationOutputStats.size <= 0) throw new Error("装饰动画渲染结果为空");
+    const decorationProbe = await probeMedia(decorationOutputPath);
+    assertSmokeOutput("装饰动画导出", decorationProbe, inputProbe.audioStreamCount);
+    console.log(
+      `装饰动画 MP4 渲染冒烟通过：${decorationOutputPath}（${decorationOutputStats.size} 字节，` +
+      `视频 ${decorationProbe.videoDurationInSeconds.toFixed(3)} 秒/${decorationProbe.videoFrameCount} 帧，` +
+      `容器 ${decorationProbe.durationInSeconds.toFixed(3)} 秒，音频流 ` +
+      `${inputProbe.audioStreamCount} -> ${decorationProbe.audioStreamCount}）`,
     );
     const beforeProbe = await probeMedia(beforePath);
     const afterProbe = await probeMedia(afterPath);
@@ -163,6 +190,8 @@ async function main(): Promise<void> {
         { source: beforePath, name: "before.mp4" },
         { source: afterPath, name: "after.mp4" },
         { source: outputPath, name: "single-output.mp4" },
+        { source: informationOutputPath, name: "information-overlay-output.mp4" },
+        { source: decorationOutputPath, name: "decorative-animation-output.mp4" },
         ...retainedOutputs.map(({ file, styleId }) => ({
           source: file,
           name: `${styleId}-output.mp4`,
@@ -175,6 +204,8 @@ async function main(): Promise<void> {
           generatedAt: new Date().toISOString(),
           outputs: {
             single: { file: "single-output.mp4", media: outputProbe },
+            informationOverlay: { file: "information-overlay-output.mp4", media: informationProbe },
+            decorativeAnimation: { file: "decorative-animation-output.mp4", media: decorationProbe },
             ...Object.fromEntries(retainedOutputs.map(({ media, styleId }) => [
               styleId,
               { file: `${styleId}-output.mp4`, media },

@@ -17,7 +17,7 @@ afterEach(cleanup);
 
 /** 中文注释：构造带有明确生效区间的特效片段，复用真实 CanvasSelection 验证预览接缝；默认使用族首个起始样式。 */
 function createEffectClip(
-  templateId = "card-overlay",
+  templateId = "emphasis-card",
   fromFrame = 10,
   durationInFrames = 20,
   id = "effect-1",
@@ -103,10 +103,10 @@ describe("预览画布尺寸", () => {
   });
 
   it.each([
-    "section-title-overlay",
+    "title-layer",
     "checklist-steps",
-    "comment-panel-overlay",
-    "tag-pills-overlay",
+    "quote-comment",
+    "tag-status",
     "hand-drawn-emphasis",
   ])("新增特效族 %s 在实时预览中提供可拖拽选区", (templateId) => {
     const project = createEmptyProject();
@@ -122,7 +122,7 @@ describe("预览画布尺寸", () => {
 describe("实时预览直接选择特效", () => {
   it("点击当前生效特效的边界框即可选中特效片段", () => {
     const project = createEmptyProject();
-    const clip = createEffectClip("section-title-overlay");
+    const clip = createEffectClip("title-layer");
     project.effectClips = [clip];
     const onSelectClip = vi.fn();
 
@@ -134,14 +134,14 @@ describe("实时预览直接选择特效", () => {
       />,
     );
 
-    fireEvent.mouseDown(screen.getByRole("button", { name: "选择特效：章节标题卡" }));
+    fireEvent.mouseDown(screen.getByRole("button", { name: "选择特效：标题层" }));
 
     expect(onSelectClip).toHaveBeenCalledWith("effect-1");
   });
 
   it("点击预览空白区域可以取消当前特效选择", () => {
     const project = createEmptyProject();
-    const clip = createEffectClip("section-title-overlay");
+    const clip = createEffectClip("title-layer");
     project.effectClips = [clip];
     const onSelectClip = vi.fn();
 
@@ -161,18 +161,18 @@ describe("实时预览直接选择特效", () => {
 
   it("播放头不在生效区间时不提供预览特效选择目标", () => {
     const project = createEmptyProject();
-    project.effectClips = [createEffectClip("section-title-overlay")];
+    project.effectClips = [createEffectClip("title-layer")];
 
     render(<PreviewCanvas currentFrame={9} project={project} />);
 
-    expect(screen.queryByRole("button", { name: "选择特效：章节标题卡" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "选择特效：标题层" })).toBeNull();
   });
 
   it("重叠特效按预览层级优先命中最上层特效", () => {
     const project = createEmptyProject();
     project.effectClips = [
-      createEffectClip("section-title-overlay", 10, 20, "effect-1"),
-      createEffectClip("section-title-overlay", 10, 20, "effect-2"),
+      createEffectClip("title-layer", 10, 20, "effect-1"),
+      createEffectClip("title-layer", 10, 20, "effect-2"),
     ];
     const onSelectClip = vi.fn();
 
@@ -184,7 +184,7 @@ describe("实时预览直接选择特效", () => {
       />,
     );
 
-    const targets = screen.getAllByRole("button", { name: "选择特效：章节标题卡" });
+    const targets = screen.getAllByRole("button", { name: "选择特效：标题层" });
     expect(Number(targets[1].getAttribute("style")?.match(/z-index: (\d+)/)?.[1])).toBeGreaterThan(
       Number(targets[0].getAttribute("style")?.match(/z-index: (\d+)/)?.[1]),
     );
@@ -195,7 +195,7 @@ describe("实时预览直接选择特效", () => {
 
   it("从未选中特效按下并移动超过阈值后进行位置过程预览并一次提交", () => {
     const project = createEmptyProject();
-    const clip = createEffectClip("section-title-overlay");
+    const clip = createEffectClip("title-layer");
     project.effectClips = [clip];
     const onSelectClip = vi.fn();
     const onPreviewParams = vi.fn();
@@ -218,26 +218,26 @@ describe("实时预览直接选择特效", () => {
       configurable: true,
       value: () => ({ bottom: 1000, height: 1000, left: 0, right: 1000, top: 0, width: 1000 }),
     });
-    const target = screen.getByRole("button", { name: "选择特效：章节标题卡" });
+    const target = screen.getByRole("button", { name: "选择特效：标题层" });
     fireEvent.mouseDown(target, { button: 0, clientX: 100, clientY: 100 });
     fireEvent.mouseMove(window, { clientX: 101, clientY: 101 });
     expect(onPreviewParams).not.toHaveBeenCalled();
 
     fireEvent.mouseMove(window, { clientX: 200, clientY: 200 });
     expect(onPreviewParams).toHaveBeenLastCalledWith("effect-1", {
-      position: { x: 0.41, y: 0.33 },
+      position: { x: 0.38, y: 0.38 },
     });
     fireEvent.mouseUp(window);
 
     expect(onChangeParams).toHaveBeenCalledWith("effect-1", {
-      position: { x: 0.41, y: 0.33 },
+      position: { x: 0.38, y: 0.38 },
     });
     expect(onPreviewEnd).toHaveBeenCalledTimes(1);
   });
 
   it("直接拖动期间播放头离开生效区间时取消手势且不提交位置", () => {
     const project = createEmptyProject();
-    const clip = createEffectClip("section-title-overlay");
+    const clip = createEffectClip("title-layer");
     project.effectClips = [clip];
     const onPreviewEnd = vi.fn();
     const onChangeParams = vi.fn();
@@ -255,7 +255,7 @@ describe("实时预览直接选择特效", () => {
       configurable: true,
       value: () => ({ bottom: 1000, height: 1000, left: 0, right: 1000, top: 0, width: 1000 }),
     });
-    fireEvent.mouseDown(screen.getByRole("button", { name: "选择特效：章节标题卡" }), {
+    fireEvent.mouseDown(screen.getByRole("button", { name: "选择特效：标题层" }), {
       button: 0,
       clientX: 100,
       clientY: 100,

@@ -7,7 +7,7 @@ import { createEditorStore } from "../../domain/editor/editor-store";
 import type { Preset } from "../../domain/assets/preset-model";
 import type { VideoTemplate } from "../../domain/assets/video-template-model";
 import { createEmptyProject } from "../../domain/project/factories";
-import { registerEffectFamily } from "../../domain/templates/effect-family";
+import { getEffectFamily, registerEffectFamily } from "../../domain/templates/effect-family";
 import type { EffectFamilyDefinition } from "../../domain/templates/types";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { EditorPage } from "./EditorPage";
@@ -74,7 +74,7 @@ function createEffectProjectStore() {
   const store = createEditorStore(createEmptyProject());
   store.dispatch({
     type: "add-effect-clip",
-    clip: { durationInFrames: 20, effectFamilyId: "card-overlay", fromFrame: 6, id: "effect-1", params: { text: "原始文案" }, placement: { type: "range" }, startingStyleId: "default", templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" },
+    clip: { durationInFrames: 20, effectFamilyId: "emphasis-card", fromFrame: 6, id: "effect-1", params: { text: "原始文案" }, placement: { type: "range" }, startingStyleId: "solid-card", templateId: "emphasis-card", templateVersion: 1, trackId: "effects-1" },
   });
   return store;
 }
@@ -279,13 +279,13 @@ describe("编辑项目的素材导入", () => {
       type: "add-effect-clip",
       clip: {
         durationInFrames: 20,
-        effectFamilyId: "card-overlay",
+        effectFamilyId: "emphasis-card",
         fromFrame: 0,
         id: "effect-1",
         params: {},
         placement: { type: "range" },
-        startingStyleId: "default",
-        templateId: "card-overlay",
+        startingStyleId: "solid-card",
+        templateId: "emphasis-card",
         templateVersion: 1,
         trackId: "effects-1",
       },
@@ -323,7 +323,7 @@ describe("编辑项目的素材导入", () => {
   });
 
   it("保存、套用和删除个人预设时只更新当前特效参数，并使用应用内确认对话框", async () => {
-    const preset: Preset = { effectFamilyId: "card-overlay", id: "preset-1", name: "强调版", scope: "full", params: { text: "预设文案" }, templateId: "card-overlay", templateVersion: 1 };
+    const preset: Preset = { effectFamilyId: "emphasis-card", id: "preset-1", name: "强调版", scope: "full", params: { text: "预设文案" }, templateId: "emphasis-card", templateVersion: 1 };
     const store = createEffectProjectStore();
     const fetchMock = mockAssetApi([preset]);
 
@@ -339,7 +339,10 @@ describe("编辑项目的素材导入", () => {
     fireEvent.click(screen.getByRole("button", { name: "个人预设" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "套用“强调版”" }));
-    await waitFor(() => expect(store.getSnapshot().effectClips[0].params).toEqual({ text: "预设文案" }));
+    await waitFor(() => expect(store.getSnapshot().effectClips[0].params).toMatchObject({ text: "预设文案" }));
+    expect(Object.keys(store.getSnapshot().effectClips[0].params).sort()).toEqual(
+      getEffectFamily("emphasis-card", 1).parameters.map((parameter) => parameter.key).sort(),
+    );
     expect(store.getSnapshot().effectClips[0].fromFrame).toBe(6);
 
     fireEvent.click(screen.getByRole("button", { name: "删除个人预设强调版" }));
@@ -356,7 +359,7 @@ describe("编辑项目的素材导入", () => {
       id: "video-template-1",
       name: "片头布局",
       fps: 30,
-      effectClips: [{ durationInFrames: 10, effectFamilyId: "card-overlay", fromFrame: 0, params: { text: "模板文案" }, placement: { type: "range" }, startingStyleId: "default", templateId: "card-overlay", templateVersion: 1, trackId: "effects-1" }],
+      effectClips: [{ durationInFrames: 10, effectFamilyId: "emphasis-card", fromFrame: 0, params: { text: "模板文案" }, placement: { type: "range" }, startingStyleId: "solid-card", templateId: "emphasis-card", templateVersion: 1, trackId: "effects-1" }],
     };
     const store = createEffectProjectStore();
     const fetchMock = mockAssetApi([], [template]);

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ensureWorkspaceDirectories, getWorkspacePaths } from "../workspace/workspace-paths";
 import { PresetRepository } from "./preset-repository";
 import { VideoTemplateRepository } from "./video-template-repository";
+import { getEffectFamily } from "../../domain/templates/effect-family";
 
 const roots: string[] = [];
 
@@ -29,25 +30,29 @@ describe("个人资产仓储", () => {
     const { root, presetRepository } = await createRepositories();
 
     const saved = await presetRepository.savePreset(
-      "card-overlay",
+      "emphasis-card",
       1,
       { text: "知识点" },
       "我的卡片",
       "preset-1",
       "full",
-      "card-overlay",
+      "emphasis-card",
     );
 
     await expect(presetRepository.loadPreset("preset-1")).resolves.toEqual(saved);
     const raw = await readFile(join(root, "presets", "preset-1.json"), "utf8");
-    expect(JSON.parse(raw)).toEqual({
-      effectFamilyId: "card-overlay",
-      templateId: "card-overlay",
+    const serialized = JSON.parse(raw) as { params: Record<string, unknown> };
+    expect(serialized).toMatchObject({
+      effectFamilyId: "emphasis-card",
+      templateId: "emphasis-card",
       templateVersion: 1,
       name: "我的卡片",
       scope: "full",
-      params: { text: "知识点" },
     });
+    expect(serialized.params).toMatchObject({ text: "知识点" });
+    expect(Object.keys(serialized.params)).toEqual(
+      getEffectFamily("emphasis-card", 1).parameters.map((parameter) => parameter.key),
+    );
     await expect(presetRepository.listPresets()).resolves.toHaveLength(1);
   });
 
@@ -57,7 +62,7 @@ describe("个人资产仓储", () => {
     await writeFile(
       legacyPresetPath,
       `${JSON.stringify({
-        templateId: "card-overlay",
+        templateId: "emphasis-card",
         templateVersion: 1,
         name: "旧版卡片",
         params: { text: "保留旧文案" },
@@ -76,10 +81,10 @@ describe("个人资产仓储", () => {
       fps: 30,
       effectClips: [
         {
-          templateId: "card-overlay",
+          templateId: "emphasis-card",
           templateVersion: 1,
-          effectFamilyId: "card-overlay",
-          startingStyleId: "default",
+          effectFamilyId: "emphasis-card",
+          startingStyleId: "solid-card",
           placement: { type: "range" },
           trackId: "effects-1",
           fromFrame: 0,

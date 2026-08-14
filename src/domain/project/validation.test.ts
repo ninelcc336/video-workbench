@@ -3,6 +3,7 @@ import { createEmptyProject } from "./factories";
 import type { EditProject } from "./model";
 import { validateProject } from "./validation";
 
+/** 中文注释：构造带一个视频和一个范围特效的合法项目，供字段级校验用例复用。 */
 function createProjectWithClips(): EditProject {
   return {
     ...createEmptyProject(),
@@ -19,10 +20,10 @@ function createProjectWithClips(): EditProject {
     effectClips: [
       {
         id: "effect-1",
-        templateId: "card-overlay",
+        templateId: "emphasis-card",
         templateVersion: 1,
-        effectFamilyId: "card-overlay",
-        startingStyleId: "default",
+        effectFamilyId: "emphasis-card",
+        startingStyleId: "solid-card",
         placement: { type: "range" },
         trackId: "effects-1",
         fromFrame: 30,

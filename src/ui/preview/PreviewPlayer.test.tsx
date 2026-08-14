@@ -104,10 +104,10 @@ describe("实时预览播放同步", () => {
       ...project,
       effectClips: [{
         id: "effect-1",
-        templateId: "card-overlay",
+        templateId: "emphasis-card",
         templateVersion: 1,
-        effectFamilyId: "card-overlay",
-        startingStyleId: "default",
+        effectFamilyId: "emphasis-card",
+        startingStyleId: "solid-card",
         placement: { type: "range" },
         trackId: "effects-1",
         fromFrame: 0,

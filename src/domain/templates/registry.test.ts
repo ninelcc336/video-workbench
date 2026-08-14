@@ -17,14 +17,14 @@ describe("特效族注册表", () => {
     // 中文注释：目录只暴露当前特效族，首次发布前不再混入旧模板兼容条目。
     expect(listEffectFamilies()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "card-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "bubble-decoration", category: "decorative-animation" }),
         expect.objectContaining({ id: "directional-transition", category: "transition" }),
-        expect.objectContaining({ id: "section-title-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "checklist-steps", category: "information-overlay" }),
-        expect.objectContaining({ id: "comment-panel-overlay", category: "information-overlay" }),
-        expect.objectContaining({ id: "tag-pills-overlay", category: "information-overlay" }),
         expect.objectContaining({ id: "hand-drawn-emphasis", category: "decorative-animation" }),
+        expect.objectContaining({ id: "title-layer", category: "information-overlay" }),
+        expect.objectContaining({ id: "emphasis-card", category: "information-overlay" }),
+        expect.objectContaining({ id: "quote-comment", category: "information-overlay" }),
+        expect.objectContaining({ id: "tag-status", category: "information-overlay" }),
       ]),
     );
   });
@@ -40,29 +40,29 @@ describe("特效族注册表", () => {
   });
 
   it("按特效族 ID 和当前版本查找声明", () => {
-    expect(getEffectFamily("card-overlay", 1)).toMatchObject({
-      id: "card-overlay",
+    expect(getEffectFamily("emphasis-card", 1)).toMatchObject({
+      id: "emphasis-card",
       version: 1,
     });
   });
 
   it("拒绝重复的特效族 ID 和版本", () => {
-    const family = getEffectFamily("card-overlay", 1);
+    const family = getEffectFamily("emphasis-card", 1);
 
     expect(() => registerEffectFamily(family)).toThrow(/重复/);
   });
 
   it("通过特效族深模块归一化参数并使用声明默认值兜底", () => {
-    const family = getEffectFamily("card-overlay", 1);
+    const family = getEffectFamily("emphasis-card", 1);
     const result = validateEffectFamilyParams(family, {
       text: "重点",
-      color: "不是颜色",
+      cardColor: "不是颜色",
       unexpected: "不会进入渲染输入",
     });
 
     expect(result.params).toMatchObject({
       text: "重点",
-      color: "#111827",
+      cardColor: "#111827",
     });
     expect(result.params).not.toHaveProperty("unexpected");
   });
@@ -92,7 +92,7 @@ describe("特效族注册表", () => {
   });
 
   it("当前特效族摘要包含用途与视觉方向，但不暴露渲染实现和默认参数", () => {
-    const family = getEffectFamily("card-overlay", 1);
+    const family = getEffectFamily("emphasis-card", 1);
     const summary = listEffectFamilies({ text: family.name }).find((item) => item.id === family.id);
 
     expect(summary).toMatchObject({
@@ -104,12 +104,12 @@ describe("特效族注册表", () => {
   });
 
   it("当前特效族通过统一渲染输入生成稳定可观察的节点", () => {
-    const family = getEffectFamily("card-overlay", 1);
-    const instance = createEffectFamilyInstance(family, "default", "16:9");
+    const family = getEffectFamily("emphasis-card", 1);
+    const instance = createEffectFamilyInstance(family, "solid-card", "16:9");
     const input = createEffectRenderInput({
       familyId: family.id,
       version: family.version,
-      startingStyleId: "default",
+      startingStyleId: "solid-card",
       aspectRatio: "16:9",
       frame: 24,
       fps: 30,

@@ -59,11 +59,11 @@ describe("视频工作区 HTTP 路由", () => {
 
     const saved = await fetch(`${baseUrl}/api/workspaces/${workspacePath}/presets`, {
       body: JSON.stringify({
-        effectFamilyId: "card-overlay",
+        effectFamilyId: "emphasis-card",
         name: "品牌样式",
         params: { color: "#38bdf8" },
         scope: "style",
-        templateId: "card-overlay",
+        templateId: "emphasis-card",
         templateVersion: 1,
       }),
       headers: { "Content-Type": "application/json" },
@@ -72,15 +72,15 @@ describe("视频工作区 HTTP 路由", () => {
 
     expect(saved.status).toBe(201);
     await expect(saved.json()).resolves.toMatchObject({
-      effectFamilyId: "card-overlay",
+      effectFamilyId: "emphasis-card",
       scope: "style",
-      templateId: "card-overlay",
+      templateId: "emphasis-card",
       templateVersion: 1,
     });
 
     const listed = await fetch(`${baseUrl}/api/workspaces/${workspacePath}/presets`);
     await expect(listed.json()).resolves.toEqual([
-      expect.objectContaining({ effectFamilyId: "card-overlay", name: "品牌样式", scope: "style" }),
+      expect.objectContaining({ effectFamilyId: "emphasis-card", name: "品牌样式", scope: "style" }),
     ]);
   });
 

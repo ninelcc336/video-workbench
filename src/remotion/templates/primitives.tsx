@@ -17,6 +17,20 @@ function resolveAssetUrl(assetId: string): string {
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+/** 中文注释：把十六进制颜色转换为带透明度的 CSS 颜色，供所有信息族共享并对非法输入做安全回退。 */
+export function withAlpha(color: string, opacity: number): string {
+  const normalized = /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(color)
+    ? color.slice(1)
+    : "000000";
+  const rgb = normalized.length <= 4
+    ? normalized.slice(0, 3).split("").map((channel) => `${channel}${channel}`).join("")
+    : normalized.slice(0, 6);
+  const alpha = Math.round(Math.min(1, Math.max(0, opacity)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `#${rgb}${alpha}`;
+}
+
 /** 中文注释：用字符宽度估算文本占用，避免渲染阶段依赖浏览器测量或不可复现的布局状态。 */
 function estimateTextUnits(text: string): number {
   return Array.from(text).reduce((total, character) => {

@@ -13,7 +13,7 @@ afterEach(cleanup);
 
 function createTimelineProject(): EditProject {
   const project = createEmptyProject();
-  const family = getEffectFamily("card-overlay", 1);
+  const family = getEffectFamily("emphasis-card", 1);
   project.videoClips = [
     {
       id: "video-1",
@@ -27,15 +27,15 @@ function createTimelineProject(): EditProject {
   project.effectClips = [
     {
       id: "effect-1",
-      templateId: "card-overlay",
+      templateId: "emphasis-card",
       templateVersion: 1,
-      effectFamilyId: "card-overlay",
-      startingStyleId: "default",
+      effectFamilyId: "emphasis-card",
+      startingStyleId: "solid-card",
       placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 30,
       durationInFrames: 45,
-      params: createEffectFamilyInstance(family, "default", "16:9").params,
+      params: createEffectFamilyInstance(family, "solid-card", "16:9").params,
     },
   ];
   return project;
@@ -105,7 +105,7 @@ describe("基础时间轴", () => {
 
     expect(screen.getByText("主视频轨道")).toBeTruthy();
     expect(screen.getByText("特效轨道 1")).toBeTruthy();
-    expect(screen.getByText("弹入卡片")).toBeTruthy();
+    expect(screen.getByText("重点卡片")).toBeTruthy();
   });
 
   it("点击片段会发出选择事件并高亮当前片段", () => {
@@ -119,7 +119,7 @@ describe("基础时间轴", () => {
       />,
     );
 
-    const clip = screen.getByRole("button", { name: /弹入卡片/ });
+    const clip = screen.getByRole("button", { name: /重点卡片/ });
     fireEvent.click(clip);
 
     expect(onSelectClip).toHaveBeenCalledWith("effect-1");
@@ -141,7 +141,7 @@ describe("基础时间轴", () => {
       />,
     );
 
-    const clip = screen.getByRole("button", { name: /弹入卡片/ });
+    const clip = screen.getByRole("button", { name: /重点卡片/ });
     fireEvent.mouseDown(clip, { clientX: 300 });
     fireEvent.mouseMove(window, { clientX: 350 });
     fireEvent.mouseUp(window);
@@ -150,7 +150,7 @@ describe("基础时间轴", () => {
 
     expect(clampClipRange(-20, 5, 0, 90)).toEqual({ fromFrame: 0, durationInFrames: 5 });
 
-    const resizeHandle = screen.getByLabelText("调整弹入卡片结束位置");
+    const resizeHandle = screen.getByLabelText("调整重点卡片结束位置");
     fireEvent.mouseDown(resizeHandle, { clientX: 750 });
     fireEvent.mouseMove(window, { clientX: 600 });
     fireEvent.mouseUp(window);
@@ -171,7 +171,7 @@ describe("基础时间轴", () => {
       />,
     );
 
-    const clip = screen.getByRole("button", { name: /弹入卡片/ });
+    const clip = screen.getByRole("button", { name: /重点卡片/ });
     fireEvent.mouseDown(clip, { clientX: 300, button: 0 });
     fireEvent.mouseMove(window, { clientX: 350 });
 
@@ -247,7 +247,7 @@ describe("基础时间轴", () => {
       />,
     );
 
-    const clip = screen.getByRole("button", { name: /弹入卡片/ });
+    const clip = screen.getByRole("button", { name: /重点卡片/ });
     fireEvent.mouseDown(clip, { button: 0, clientX: 300 });
     fireEvent.mouseUp(window);
 

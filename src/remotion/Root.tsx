@@ -14,9 +14,9 @@ const emptyEffectRenderProps: EffectFamilyRenderProps = {
   height: 1080,
   durationInFrames: 60,
   params: {},
-  effectFamilyId: "card-overlay",
+  effectFamilyId: "emphasis-card",
   effectFamilyVersion: 1,
-  startingStyleId: "default",
+  startingStyleId: "solid-card",
   aspectRatio: "16:9",
   randomSeed: "effect-visual-verification-v1",
 };

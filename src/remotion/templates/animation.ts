@@ -76,6 +76,28 @@ function getDirectionVector(direction: string): { x: number; y: number } {
   }
 }
 
+/**
+ * 中文注释：持续阶段使用一个完整正弦周期做往返微动，阶段首尾回到原位，避免和入场/出场连接时跳变。
+ * 方向为 none 时明确保持静止；缓动只改变相位，强度只改变归一化位移幅度。
+ */
+function getSustainOffset(
+  sustain: AnimationPhaseEvaluation,
+): { x: number; y: number } {
+  if (!sustain.declared || !sustain.active || sustain.endFrame <= sustain.startFrame) {
+    return { x: 0, y: 0 };
+  }
+
+  const direction = getDirectionVector(sustain.direction);
+  if (direction.x === 0 && direction.y === 0) return { x: 0, y: 0 };
+
+  const phase = applyAnimationEasing(sustain.progress, sustain.easing) * Math.PI * 2;
+  const distance = Math.sin(phase) * sustain.intensity;
+  return {
+    x: direction.x * distance,
+    y: direction.y * distance,
+  };
+}
+
 /** 中文注释：在不保存运行时游标的前提下计算单个阶段，支持直接跳转到任意帧。 */
 function evaluatePhase(
   frame: number,
@@ -152,6 +174,8 @@ export function evaluateAnimationStages(input: {
     const direction = getDirectionVector(enter.direction);
     const distance = enter.intensity * (1 - enter.progress);
     offset = { x: direction.x * distance, y: direction.y * distance };
+  } else if (sustain.declared && frame >= sustain.startFrame && frame < sustain.endFrame) {
+    offset = getSustainOffset(sustain);
   } else if (exit.declared && frame >= exit.startFrame) {
     const direction = getDirectionVector(exit.direction);
     const distance = exit.intensity * exit.progress;

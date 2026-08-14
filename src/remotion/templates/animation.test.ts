@@ -133,6 +133,34 @@ describe("特效片段入场和出场进度", () => {
     expect(duringSustain.activeStage).toBe("sustain");
     expect(duringSustain.visibility).toBe(1);
 
+    const sustainLinear = evaluateAnimationStages({
+      frame: 13,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        sustain: { ...baseStages.sustain, direction: "left", intensity: 0.2 },
+      },
+    });
+    const sustainStronger = evaluateAnimationStages({
+      frame: 13,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        sustain: { ...baseStages.sustain, direction: "left", intensity: 0.4 },
+      },
+    });
+    const sustainEased = evaluateAnimationStages({
+      frame: 13,
+      durationInFrames: 60,
+      stages: {
+        ...baseStages,
+        sustain: { ...baseStages.sustain, direction: "left", easing: "ease-out", intensity: 0.2 },
+      },
+    });
+    expect(sustainLinear.offset.x).toBeCloseTo(-0.2, 6);
+    expect(sustainStronger.offset.x).toBeCloseTo(sustainLinear.offset.x * 2, 6);
+    expect(sustainEased.offset.x).not.toBeCloseTo(sustainLinear.offset.x, 4);
+
     const delayed = evaluateAnimationStages({
       frame: 3,
       durationInFrames: 60,

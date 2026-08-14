@@ -6,7 +6,7 @@ import type {
   EffectFamilyRenderProps,
   GradientValue,
 } from "../../domain/templates/types";
-import { BuiltInAssetImage, EffectCard, ResponsiveText } from "./primitives";
+import { BuiltInAssetImage, EffectCard, ResponsiveText, withAlpha } from "./primitives";
 import { evaluateAnimationStages } from "./animation";
 
 type ChecklistStepItem = {
@@ -112,18 +112,6 @@ const fontOptions = [
   { value: "font.system-sans", label: "系统无衬线" },
   { value: "font.system-mono", label: "系统等宽" },
 ];
-
-/** 中文注释：把十六进制颜色统一转换为带透明度的六位 RGB 颜色，兼容三位、四位和八位输入。 */
-function withAlpha(color: string, opacity: number): string {
-  const normalized = color.replace("#", "");
-  const rgb = normalized.length === 3 || normalized.length === 4
-    ? normalized.slice(0, 3).split("").map((channel) => `${channel}${channel}`).join("")
-    : normalized.slice(0, 6);
-  const alpha = Math.round(Math.min(1, Math.max(0, opacity)) * 255)
-    .toString(16)
-    .padStart(2, "0");
-  return `#${rgb}${alpha}`;
-}
 
 /** 中文注释：根据卡片外观把统一颜色参数转换为不影响文字透明度的背景样式。 */
 function resolveCardBackground(values: ChecklistStepsParams): string {

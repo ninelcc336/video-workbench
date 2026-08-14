@@ -32,15 +32,15 @@ function createProject(): EditProject {
   project.effectClips = [
     {
       id: "effect-1",
-      templateId: "card-overlay",
+      templateId: "emphasis-card",
       templateVersion: 1,
-      effectFamilyId: "card-overlay",
-      startingStyleId: "default",
+      effectFamilyId: "emphasis-card",
+      startingStyleId: "solid-card",
       placement: { type: "range" },
       trackId: "effects-1",
       fromFrame: 15,
       durationInFrames: 45,
-      params: createEffectFamilyInstance(getEffectFamily("card-overlay", 1), "default", "16:9").params,
+      params: createEffectFamilyInstance(getEffectFamily("emphasis-card", 1), "solid-card", "16:9").params,
     },
   ];
   return project;

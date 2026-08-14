@@ -1,6 +1,9 @@
 import type { EditorStore } from "../editor/editor-store";
 import type { EditProject, ExportSettings } from "../project/model";
-import { getEffectFamily } from "../templates/effect-family";
+import {
+  getEffectFamily,
+  validateEffectFamilyParams,
+} from "../templates/effect-family";
 
 /** 中文注释：预设范围决定套用时是否保留当前特效片段的内容参数。 */
 export type PresetScope = "style" | "full";
@@ -41,13 +44,17 @@ function getPresetParams(
   effectFamilyId: string,
 ): Record<string, unknown> {
   const clonedParams = cloneParams(params);
-  if (scope === "full") return clonedParams;
+  // 中文注释：完整预设也必须经过当前族 schema，确保缺失字段补默认值、未知字段不进入持久化格式。
+  const family = getEffectFamily(effectFamilyId || templateId, templateVersion);
+  const normalizedParams = validateEffectFamilyParams(family, clonedParams).params;
+  if (scope === "full") return cloneParams(normalizedParams);
 
-  const family = getEffectFamily(effectFamilyId ?? templateId, templateVersion);
   const parameterKeys = new Set(family.parameters
     .filter((parameter) => parameter.group !== "content")
     .map((parameter) => parameter.key));
-  return Object.fromEntries(Object.entries(clonedParams).filter(([key]) => parameterKeys.has(key)));
+  return Object.fromEntries(
+    Object.entries(normalizedParams).filter(([key]) => parameterKeys.has(key)),
+  );
 }
 
 /** 中文注释：创建预设时校验身份字段，并隔离调用方传入的参数对象。 */
@@ -152,10 +159,12 @@ export function applyPreset(
     // 中文注释：只有同一特效族和同一模板版本才能套用，避免把语义不同的参数写入当前片段。
     if (targetFamilyId !== presetFamilyId || target.templateVersion !== preset.templateVersion) throw new Error("预设特效族或模板版本与当前特效不兼容");
     const family = getEffectFamily(presetFamilyId, preset.templateVersion);
-    const allowedKeys = new Set(family.parameters
-      .filter((parameter) => preset.scope === "full" || parameter.group !== "content")
-      .map((parameter) => parameter.key));
-    const presetParams = Object.fromEntries(Object.entries(preset.params).filter(([key]) => allowedKeys.has(key)));
+    const normalizedPresetParams = validateEffectFamilyParams(family, preset.params).params;
+    const presetParams = Object.fromEntries(
+      family.parameters
+        .filter((parameter) => preset.scope === "full" || parameter.group !== "content")
+        .map((parameter) => [parameter.key, structuredClone(normalizedPresetParams[parameter.key])]),
+    );
     // 中文注释：样式预设只合并表现参数，完整预设才允许替换当前内容；两者都不改变片段时间范围。
     normalizedParams = preset.scope === "style"
       ? { ...cloneParams(target.params), ...cloneParams(presetParams) }

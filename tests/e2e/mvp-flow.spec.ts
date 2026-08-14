@@ -177,8 +177,8 @@ test("剪辑小白可以打开编辑项目并添加模板", async ({ page }) => 
   await expect(page.getByRole("button", { name: "导出视频" })).toBeVisible();
   await expect(page.getByText("工作区设置")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "添加弹入卡片" }).click();
-  await expect(page.getByRole("button", { name: /弹入卡片/ }).last()).toBeVisible();
+  await page.getByRole("button", { name: "添加重点卡片" }).click();
+  await expect(page.getByRole("button", { name: /重点卡片/ }).last()).toBeVisible();
   await expect(page.getByRole("heading", { name: "特效参数" })).toBeVisible();
 
   await page.getByRole("button", { name: "导出视频" }).click();
@@ -234,7 +234,7 @@ test("取消项目切换提示后返回当前编辑项目", async ({ page }) => 
   await prepareProjectLibrary(page);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "添加弹入卡片" }).click();
+  await page.getByRole("button", { name: "添加重点卡片" }).click();
   const projectSelect = page.getByRole("combobox", { name: "选择视频工作区" });
   await projectSelect.click();
   await page.getByRole("option", { name: "第二个项目" }).click();
@@ -427,9 +427,9 @@ async function completeDesktopCreationLoop(page: Page, variant: DesktopCreationV
   await page.locator('input[type="file"]').first().setInputFiles({ buffer: Buffer.from(`video ${variant.theme}`), mimeType: "video/mp4", name: `${variant.theme}闭环素材.mp4` });
   await expect(page.getByText(`${variant.theme}闭环素材.mp4`).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "添加弹入卡片" }).click();
+  await page.getByRole("button", { name: "添加重点卡片" }).click();
   await expect(page.getByRole("heading", { name: "特效参数" })).toBeVisible();
-  const textParameter = page.getByLabel("文字", { exact: true });
+  const textParameter = page.getByLabel("观点正文", { exact: true });
   await textParameter.fill(`${variant.theme}主题参数已调整`);
   await expect(textParameter).toHaveValue(`${variant.theme}主题参数已调整`);
   await expect(page.getByLabel("保存状态")).toContainText("已自动保存");

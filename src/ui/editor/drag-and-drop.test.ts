@@ -12,15 +12,15 @@ import {
 
 describe("模板拖放辅助函数", () => {
   it("把放置位置吸附为非负整数帧，并使用模板默认值", () => {
-    const family = getEffectFamily("card-overlay", 1);
-    const clip = createEffectClipFromTemplate(family, "default", -2.4);
+    const family = getEffectFamily("emphasis-card", 1);
+    const clip = createEffectClipFromTemplate(family, "solid-card", -2.4);
 
     expect(clip.fromFrame).toBe(0);
     expect(clip.durationInFrames).toBe(family.defaultDurationInFrames);
-    expect(clip.params).toEqual(createEffectFamilyInstance(family, "default", "16:9").params);
+    expect(clip.params).toEqual(createEffectFamilyInstance(family, "solid-card", "16:9").params);
     expect(clip.templateId).toBe(family.id);
     expect(clip.effectFamilyId).toBe(family.id);
-    expect(clip.startingStyleId).toBe("default");
+    expect(clip.startingStyleId).toBe("solid-card");
     expect(clip.placement).toEqual({ type: "range" });
     expect(clip.templateVersion).toBe(family.version);
     expect(clip.trackId).toBe("effects-1");
@@ -45,7 +45,7 @@ describe("模板拖放辅助函数", () => {
   });
 
   it("拖放族卡片时保留用户选择的起始样式", () => {
-    const family = getEffectFamily("card-overlay", 1);
+    const family = getEffectFamily("emphasis-card", 1);
     const values = new Map<string, string>();
     const dataTransfer = {
       effectAllowed: "",
@@ -53,12 +53,12 @@ describe("模板拖放辅助函数", () => {
       getData: (type: string) => values.get(type) ?? "",
     } as unknown as DataTransfer;
 
-    writeTemplateDragData(dataTransfer, family, "default");
+    writeTemplateDragData(dataTransfer, family, "solid-card");
 
     expect(readTemplateDragData(dataTransfer)).toEqual({
       effectFamilyId: family.id,
       effectFamilyVersion: family.version,
-      startingStyleId: "default",
+      startingStyleId: "solid-card",
     });
   });
 

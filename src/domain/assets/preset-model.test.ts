@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "../project/factories";
 import type { EffectClip } from "../project/model";
 import { createEditorStore } from "../editor/editor-store";
-import { registerEffectFamily } from "../templates/effect-family";
+import { getEffectFamily, registerEffectFamily } from "../templates/effect-family";
 import type { EffectFamilyDefinition } from "../templates/types";
 import "../templates/registry";
 import {
@@ -16,10 +16,10 @@ import {
 
 const effectClip: EffectClip = {
   id: "effect-1",
-  templateId: "card-overlay",
+  templateId: "emphasis-card",
   templateVersion: 1,
-  effectFamilyId: "card-overlay",
-  startingStyleId: "default",
+  effectFamilyId: "emphasis-card",
+  startingStyleId: "solid-card",
   placement: { type: "range" },
   trackId: "effects-1",
   fromFrame: 0,
@@ -75,26 +75,48 @@ registerEffectFamily(presetFamily);
 describe("个人预设模型", () => {
   it("只序列化模板引用、名称和深拷贝后的参数", () => {
     const params = { text: "知识点", position: { x: 0.5, y: 0.8 } };
-    const preset = createPreset("preset-1", "card-overlay", 1, "知识点卡片", params, "full", "card-overlay");
+    const preset = createPreset("preset-1", "emphasis-card", 1, "知识点卡片", params, "full", "emphasis-card");
 
     params.position.x = 0;
 
-    expect(serializePreset(preset)).toEqual({
-      effectFamilyId: "card-overlay",
-      templateId: "card-overlay",
+    const serialized = serializePreset(preset);
+    expect(serialized).toMatchObject({
+      effectFamilyId: "emphasis-card",
+      templateId: "emphasis-card",
       templateVersion: 1,
       name: "知识点卡片",
       scope: "full",
-      params: { text: "知识点", position: { x: 0.5, y: 0.8 } },
     });
-    expect(JSON.stringify(serializePreset(preset))).not.toContain("mediaId");
+    expect(Object.keys(serialized.params)).toEqual(
+      getEffectFamily("emphasis-card", 1).parameters.map((parameter) => parameter.key),
+    );
+    expect(serialized.params).toMatchObject({ text: "知识点", position: { x: 0.5, y: 0.8 } });
+    expect(JSON.stringify(serialized)).not.toContain("mediaId");
+  });
+
+  it("完整预设缺少字段时补齐当前族声明的默认参数", () => {
+    const preset = createPreset(
+      "complete-defaults",
+      presetFamily.id,
+      1,
+      "完整卡片",
+      { text: "固定文案", position: { x: 0.4, y: 0.6 } },
+      "full",
+      presetFamily.id,
+    );
+
+    expect(preset.params).toEqual({
+      text: "固定文案",
+      position: { x: 0.4, y: 0.6 },
+      color: "#111827",
+    });
   });
 
   it("通过 EditorStore 公共命令应用预设，并且不污染预设参数", () => {
-    const preset = createPreset("preset-1", "card-overlay", 1, "知识点卡片", {
+    const preset = createPreset("preset-1", "emphasis-card", 1, "知识点卡片", {
       text: "新文案",
       position: { x: 0.2, y: 0.3 },
-    }, "full", "card-overlay");
+    }, "full", "emphasis-card");
     const store = createEditorStore({
       ...createEmptyProject(),
       effectClips: [effectClip],
@@ -113,12 +135,12 @@ describe("个人预设模型", () => {
   it("预设特效族或版本不兼容时不修改当前片段，也不新增撤销历史", () => {
     const incompatiblePreset = createPreset(
       "incompatible-preset",
-      "another-effect-family",
+      presetFamily.id,
       1,
       "不兼容预设",
       { text: "不应写入" },
       "full",
-      "another-effect-family",
+      presetFamily.id,
     );
     const store = createEditorStore({
       ...createEmptyProject(),
@@ -178,16 +200,21 @@ describe("个人预设模型", () => {
   it("创建样式预设时不会持久化文字内容", () => {
     const preset = createPreset(
       "legacy-style-preset",
-      "card-overlay",
+      "emphasis-card",
       1,
       "旧版品牌样式",
-      { text: "当前文案", color: "#38bdf8", position: { x: 0.2, y: 0.8 } },
+      { text: "当前文案", cardColor: "#38bdf8", position: { x: 0.2, y: 0.8 } },
       "style",
-      "card-overlay",
+      "emphasis-card",
     );
 
     expect(preset.params).not.toHaveProperty("text");
-    expect(preset.params).toEqual({ color: "#38bdf8", position: { x: 0.2, y: 0.8 } });
+    expect(preset.params).toMatchObject({ cardColor: "#38bdf8", position: { x: 0.2, y: 0.8 } });
+    expect(Object.keys(preset.params)).toEqual(
+      getEffectFamily("emphasis-card", 1).parameters
+        .filter((parameter) => parameter.group !== "content")
+        .map((parameter) => parameter.key),
+    );
   });
 
   it("无法解析特效族时拒绝创建样式预设，避免把未知内容写入样式范围", () => {

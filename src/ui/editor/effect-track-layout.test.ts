@@ -5,10 +5,10 @@ import { getAvailableEffectTrackId, layoutEffectTracks } from "./effect-track-la
 function clip(id: string, fromFrame: number, durationInFrames: number): EffectClip {
   return {
     id,
-    templateId: "card-overlay",
+    templateId: "emphasis-card",
     templateVersion: 1,
-    effectFamilyId: "card-overlay",
-    startingStyleId: "default",
+    effectFamilyId: "emphasis-card",
+    startingStyleId: "solid-card",
     placement: { type: "range" },
     trackId: "effects-1",
     fromFrame,

@@ -4,33 +4,31 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "../../domain/project/factories";
 import type { EffectClip } from "../../domain/project/model";
-import { getEffectFamily } from "../../domain/templates/effect-family";
+import { createEffectFamilyInstance, getEffectFamily } from "../../domain/templates/effect-family";
 import "../../domain/templates/registry";
 import { CanvasSelection } from "./CanvasSelection";
 
 afterEach(cleanup);
 
+/** 中文注释：构造使用当前族声明参数的重点卡片，画布手势测试只覆盖位置和尺寸回调。 */
 function createEffectClip(): EffectClip {
-  const family = getEffectFamily("card-overlay", 1);
+  const family = getEffectFamily("emphasis-card", 1);
+  const instance = createEffectFamilyInstance(family, "solid-card", "16:9");
   return {
     id: "effect-1",
     templateId: family.id,
     templateVersion: family.version,
     effectFamilyId: family.id,
-    startingStyleId: "default",
+    startingStyleId: "solid-card",
     placement: { type: "range" },
     trackId: "effects-1",
     fromFrame: 0,
-    durationInFrames: family.defaultDurationInFrames,
+    durationInFrames: instance.durationInFrames,
     params: {
+      ...instance.params,
       text: "标题",
-      color: "#111827",
-      textColor: "#ffffff",
       position: { x: 0.5, y: 0.5 },
       size: { width: 0.4, height: 0.2 },
-      enterDirection: "left",
-      animationDuration: 18,
-      radius: 24,
     },
   };
 }

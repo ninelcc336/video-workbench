@@ -1,29 +1,24 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { createEffectRenderInput, getEffectFamily } from "../domain/templates/effect-family";
+import { createEffectFamilyInstance, createEffectRenderInput, getEffectFamily } from "../domain/templates/effect-family";
 import { EffectFrame, EffectFrameComposition } from "./EffectFrameComposition";
 
 // 中文注释：测试使用当前 v1 族验证固定帧组合不会绕过版本化查找或改写渲染输入。
-const family = getEffectFamily("card-overlay", 1);
+const family = getEffectFamily("emphasis-card", 1);
+const instance = createEffectFamilyInstance(family, "solid-card", "16:9");
 const renderProps = createEffectRenderInput({
   familyId: family.id,
   version: family.version,
-  startingStyleId: "default",
+  startingStyleId: instance.startingStyleId,
   aspectRatio: "16:9",
   frame: 24,
   fps: 30,
   width: 1920,
   height: 1080,
-  durationInFrames: family.defaultDurationInFrames,
+  durationInFrames: instance.durationInFrames,
   params: {
+    ...instance.params,
     text: "共享固定帧",
-    color: "#111827",
-    textColor: "#ffffff",
-    position: { x: 0.5, y: 0.72 },
-    size: { width: 0.72, height: 0.14 },
-    enterDirection: "left",
-    animationDuration: 18,
-    radius: 24,
   },
   randomSeed: "visual-test-seed",
 }).renderProps;
@@ -34,7 +29,7 @@ describe("固定帧共享组合", () => {
     const remotionMarkup = renderToStaticMarkup(<EffectFrameComposition renderProps={renderProps} />);
 
     expect(browserMarkup).toContain("data-effect-frame=\"true\"");
-    expect(browserMarkup).toContain("data-template-id=\"card-overlay\"");
+    expect(browserMarkup).toContain("data-template-id=\"emphasis-card\"");
     expect(remotionMarkup).toContain("data-effect-frame=\"true\"");
     expect(remotionMarkup).toContain("共享固定帧");
   });
