@@ -25,8 +25,18 @@ describe("特效族注册表", () => {
         expect.objectContaining({ id: "emphasis-card", category: "information-overlay" }),
         expect.objectContaining({ id: "quote-comment", category: "information-overlay" }),
         expect.objectContaining({ id: "tag-status", category: "information-overlay" }),
+        expect.objectContaining({ id: "lower-third", category: "information-overlay" }),
+        expect.objectContaining({ id: "data-number", category: "information-overlay" }),
+        expect.objectContaining({ id: "comparison-conclusion", category: "information-overlay" }),
       ]),
     );
+  });
+
+  it("信息叠加目录达到当前阶段的八个特效族和二十二个起始样式", () => {
+    const families = listEffectFamilies({ category: "information-overlay" });
+
+    expect(families).toHaveLength(8);
+    expect(families.reduce((count, family) => count + family.startingStyles.length, 0)).toBe(22);
   });
 
   it("支持按分类过滤当前特效族摘要", () => {

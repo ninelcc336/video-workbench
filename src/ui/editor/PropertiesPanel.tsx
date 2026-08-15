@@ -362,8 +362,9 @@ function buildPanelDiagnostics(
 
   const colorParameters = parameters.filter((parameter) => parameter.type === "color");
   const foreground = colorParameters.find((parameter) => /text|foreground|label|title/iu.test(parameter.key));
+  // 中文注释：新信息族统一使用 surfaceColor 表示背景，和旧族命名一起参与通用对比度诊断。
   const background = colorParameters.find((parameter) => (
-    parameter.key !== foreground?.key && /background|panel|card|fill/iu.test(parameter.key)
+    parameter.key !== foreground?.key && /background|panel|card|fill|surface/iu.test(parameter.key)
   ));
   if (foreground && background) {
     const foregroundValue = normalized.values[foreground.key];

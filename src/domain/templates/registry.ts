@@ -9,6 +9,11 @@ import {
   TitleLayer,
 } from "../../remotion/templates/InformationFamilies";
 import {
+  ComparisonConclusion,
+  DataNumber,
+  LowerThird,
+} from "../../remotion/templates/AdditionalInformationFamilies";
+import {
   getEffectFamily,
   listEffectFamilies,
   registerEffectFamily,
@@ -23,5 +28,8 @@ registerEffectFamily(TitleLayer.definition);
 registerEffectFamily(EmphasisCard.definition);
 registerEffectFamily(QuoteComment.definition);
 registerEffectFamily(TagStatus.definition);
+registerEffectFamily(LowerThird.definition);
+registerEffectFamily(DataNumber.definition);
+registerEffectFamily(ComparisonConclusion.definition);
 
 export { getEffectFamily, listEffectFamilies, registerEffectFamily };

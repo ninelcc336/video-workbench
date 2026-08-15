@@ -58,6 +58,29 @@ function createDirectionalTransitionClip(): EffectClip {
   };
 }
 
+/** 中文注释：构造新增下三分之一信息条，验证信息族的 surfaceColor 能接入通用面板诊断。 */
+function createLowerThirdClip(): EffectClip {
+  const family = getEffectFamily("lower-third", 1);
+  const instance = createEffectFamilyInstance(family, "person-identity", "16:9");
+  return {
+    id: "lower-third-effect-1",
+    templateId: family.id,
+    templateVersion: family.version,
+    effectFamilyId: family.id,
+    startingStyleId: instance.startingStyleId,
+    placement: { type: "range" },
+    trackId: "effects-1",
+    fromFrame: 0,
+    durationInFrames: instance.durationInFrames,
+    params: {
+      ...instance.params,
+      surface: "solid",
+      surfaceColor: "#ffffff",
+      textColor: "#ffffff",
+    },
+  };
+}
+
 const structuredPropertiesFamily: EffectFamilyDefinition = {
   id: "properties-panel-fixture",
   version: 1,
@@ -525,6 +548,14 @@ describe("特效参数面板", () => {
     expect(screen.getByText(/渲染负载较高/)).toBeTruthy();
     expect(screen.getByText(/对比度/)).toBeTruthy();
     expect(screen.getByText(/未知参数/)).toBeTruthy();
+  });
+
+  it("识别信息族的 surfaceColor 并显示低对比非阻断警告", () => {
+    render(<PropertiesPanel project={createEmptyProject()} selectedClip={createLowerThirdClip()} />);
+
+    expect(screen.getByRole("status", { name: "特效参数警告" })).toBeTruthy();
+    expect(screen.getByText(/对比度/)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("显示真实转场源素材尾帧不足的非阻断警告", () => {
