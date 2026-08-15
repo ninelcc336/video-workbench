@@ -17,10 +17,12 @@ describe("特效族注册表", () => {
     // 中文注释：目录只暴露当前特效族，首次发布前不再混入旧模板兼容条目。
     expect(listEffectFamilies()).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "bubble-decoration", category: "decorative-animation" }),
         expect.objectContaining({ id: "directional-transition", category: "transition" }),
         expect.objectContaining({ id: "checklist-steps", category: "information-overlay" }),
         expect.objectContaining({ id: "hand-drawn-emphasis", category: "decorative-animation" }),
+        expect.objectContaining({ id: "arrow-guidance", category: "decorative-animation" }),
+        expect.objectContaining({ id: "focus-scan", category: "decorative-animation" }),
+        expect.objectContaining({ id: "geometric-particles", category: "decorative-animation" }),
         expect.objectContaining({ id: "title-layer", category: "information-overlay" }),
         expect.objectContaining({ id: "emphasis-card", category: "information-overlay" }),
         expect.objectContaining({ id: "quote-comment", category: "information-overlay" }),
@@ -42,10 +44,12 @@ describe("特效族注册表", () => {
   it("支持按分类过滤当前特效族摘要", () => {
     const families = listEffectFamilies({ category: "decorative-animation" });
 
-    expect(families).toHaveLength(2);
+    expect(families).toHaveLength(4);
     expect(families).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "bubble-decoration" }),
       expect.objectContaining({ id: "hand-drawn-emphasis" }),
+      expect.objectContaining({ id: "arrow-guidance" }),
+      expect.objectContaining({ id: "focus-scan" }),
+      expect.objectContaining({ id: "geometric-particles" }),
     ]));
   });
 

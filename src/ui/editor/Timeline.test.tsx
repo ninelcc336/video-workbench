@@ -272,9 +272,9 @@ describe("基础时间轴", () => {
 
   it("接收模板拖放并把时间轴位置换算成特效起始帧", () => {
     const onDropTemplate = vi.fn();
-    const template = getEffectFamily("bubble-decoration", 1);
+    const template = getEffectFamily("geometric-particles", 1);
     const values = new Map<string, string>([
-      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "default" })],
+      [TEMPLATE_DRAG_MIME, JSON.stringify({ effectFamilyId: template.id, effectFamilyVersion: template.version, startingStyleId: "floating-bubbles" })],
     ]);
     const dataTransfer = {
       dropEffect: "none",
@@ -307,7 +307,7 @@ describe("基础时间轴", () => {
     Object.defineProperty(dropEvent, "clientX", { value: 350 });
     fireEvent(effectTrack, dropEvent);
 
-    expect(onDropTemplate).toHaveBeenCalledWith(template, "default", 25);
+    expect(onDropTemplate).toHaveBeenCalledWith(template, "floating-bubbles", 25);
   });
 
   it("非法位置拖入片段转场时只提示，不把它创建成普通范围特效", () => {

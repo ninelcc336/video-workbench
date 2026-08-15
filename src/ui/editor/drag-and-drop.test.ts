@@ -27,7 +27,7 @@ describe("模板拖放辅助函数", () => {
   });
 
   it("将拖放数据往返为模板身份", () => {
-    const family = getEffectFamily("bubble-decoration", 1);
+    const family = getEffectFamily("geometric-particles", 1);
     const values = new Map<string, string>();
     const dataTransfer = {
       effectAllowed: "",
@@ -35,12 +35,12 @@ describe("模板拖放辅助函数", () => {
       getData: (type: string) => values.get(type) ?? "",
     } as unknown as DataTransfer;
 
-    writeTemplateDragData(dataTransfer, family, "default");
+    writeTemplateDragData(dataTransfer, family, "floating-bubbles");
 
     expect(readTemplateDragData(dataTransfer)).toEqual({
       effectFamilyId: family.id,
       effectFamilyVersion: family.version,
-      startingStyleId: "default",
+      startingStyleId: "floating-bubbles",
     });
   });
 

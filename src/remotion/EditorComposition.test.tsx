@@ -126,10 +126,10 @@ describe("共享 Remotion 编辑组合", () => {
     expect(effectSequence.props.style).toMatchObject({ zIndex: 1 });
   });
 
-  it("通过真实注册表为卡片和气泡生成有效特效渲染输入", () => {
+  it("通过真实注册表为卡片和几何点缀生成有效特效渲染输入", () => {
     const project = createProject();
-    const bubbleFamily = getEffectFamily("bubble-decoration", 1);
-    const bubbleInstance = createEffectFamilyInstance(bubbleFamily, "default", "16:9");
+    const bubbleFamily = getEffectFamily("geometric-particles", 1);
+    const bubbleInstance = createEffectFamilyInstance(bubbleFamily, "floating-bubbles", "16:9");
     const clips = [
       project.effectClips[0],
       {
@@ -137,7 +137,7 @@ describe("共享 Remotion 编辑组合", () => {
         templateId: bubbleFamily.id,
         templateVersion: bubbleFamily.version,
         effectFamilyId: bubbleFamily.id,
-        startingStyleId: "default",
+        startingStyleId: "floating-bubbles",
         placement: { type: "range" as const },
         trackId: "effects-1",
         fromFrame: 10,

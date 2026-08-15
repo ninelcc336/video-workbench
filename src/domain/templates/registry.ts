@@ -1,4 +1,8 @@
-import { BubbleDecoration } from "../../remotion/templates/BubbleDecoration";
+import {
+  ArrowGuidance,
+  FocusScan,
+  GeometricParticles,
+} from "../../remotion/templates/AdditionalDecorativeFamilies";
 import { DirectionalTransition } from "../../remotion/templates/DirectionalTransition";
 import { ChecklistSteps } from "../../remotion/templates/ChecklistSteps";
 import { HandDrawnEmphasis } from "../../remotion/templates/HandDrawnEmphasis";
@@ -20,10 +24,12 @@ import {
 } from "./effect-family";
 
 /** 中文注释：内置目录只注册当前特效族声明；不存在旧模板注册表、适配器或隐藏版本。 */
-registerEffectFamily(BubbleDecoration.definition);
 registerEffectFamily(DirectionalTransition.definition);
 registerEffectFamily(ChecklistSteps.definition);
 registerEffectFamily(HandDrawnEmphasis.definition);
+registerEffectFamily(ArrowGuidance.definition);
+registerEffectFamily(FocusScan.definition);
+registerEffectFamily(GeometricParticles.definition);
 registerEffectFamily(TitleLayer.definition);
 registerEffectFamily(EmphasisCard.definition);
 registerEffectFamily(QuoteComment.definition);
