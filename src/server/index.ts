@@ -7,7 +7,8 @@ import { createVideoWorkspaceRouter } from "./workspace/video-workspace-routes";
 import { WorkspaceError } from "./workspace/workspace-paths";
 
 const app = express();
-const port = Number(process.env.PORT ?? 4173);
+// 中文注释：5173 留给 Vite 前端，后端默认使用未被 Windows 端口排除范围覆盖的 5174。
+const port = Number(process.env.PORT ?? 5174);
 const libraryRoot = getFixedProjectLibraryRoot();
 const workspace = new VideoWorkspaceAdapter(libraryRoot);
 let workspaceInitializationError: WorkspaceError | null = null;
